@@ -24,3 +24,8 @@ migrations, single-user auth).
 Read `BUILD-BRIEF.md` in full, read `handoff/HANDOFF.md`, then execute the next
 phase. Each phase must end runnable. Never commit secrets; `.env*` is
 gitignored. Typecheck with `npx tsc --noEmit` before pushing.
+
+Sovereign means sovereign: the app runs on the user's own Supabase, Vercel,
+and Anthropic key — never provision shared/org infrastructure on their behalf.
+Log every manual or confusing setup step in **`SETUP-FRICTION.md`**; that file
+is the spec for the Phase 6 onboarding concierge.
