@@ -180,4 +180,100 @@
     font-family: var(--font-serif);
     font-style: italic;
   }
+
+  /* Chief's long-form prose in the conversation: still the serif voice, but
+     UPRIGHT — italic is an accent for one-liners (the bar, the inbox read),
+     not for paragraphs. Also styles the markdown Chief writes. */
+  .chief-prose {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    line-height: 1.55;
+  }
+  .chief-prose p,
+  .chief-prose ul,
+  .chief-prose ol,
+  .chief-prose blockquote,
+  .chief-prose pre {
+    margin: 0 0 0.7em;
+  }
+  .chief-prose > :last-child {
+    margin-bottom: 0;
+  }
+  .chief-prose strong {
+    font-weight: 600;
+  }
+  .chief-prose h1,
+  .chief-prose h2,
+  .chief-prose h3,
+  .chief-prose h4 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0.9em 0 0.35em;
+  }
+  /* Tailwind preflight strips list markers; restore them. */
+  .chief-prose ul {
+    list-style: disc;
+  }
+  .chief-prose ol {
+    list-style: decimal;
+  }
+  .chief-prose ul,
+  .chief-prose ol {
+    padding-left: 1.25em;
+  }
+  .chief-prose li {
+    margin-bottom: 0.3em;
+  }
+  .chief-prose a {
+    color: var(--teal);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .chief-prose code {
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    background: var(--raised);
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+  }
+  .chief-prose pre {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.5;
+    background: var(--raised);
+    border-radius: var(--radius-control);
+    padding: 10px 12px;
+    overflow-x: auto;
+  }
+  .chief-prose pre code {
+    background: none;
+    padding: 0;
+  }
+  .chief-prose blockquote {
+    border-left: 2px solid var(--teal-border);
+    padding-left: 12px;
+    color: var(--ink-2);
+  }
+  .chief-prose hr {
+    border: none;
+    border-top: 1px solid var(--hairline);
+    margin: 1em 0;
+  }
+
+  /* Tables Chief writes scroll inside the bubble, never the page. */
+  .chief-prose table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    margin: 0 0 0.7em;
+  }
+  .chief-prose th,
+  .chief-prose td {
+    border: 1px solid var(--hairline);
+    padding: 5px 9px;
+    text-align: left;
+  }
 }

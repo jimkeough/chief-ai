@@ -7,6 +7,8 @@
 // turn that produced them.
 
 import { useEffect, useRef, useState } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useChief } from "./ChiefProvider";
 import ProposalGroup from "./ProposalCards";
 import ChiefMonogram from "./ChiefMonogram";
@@ -68,13 +70,16 @@ export default function ChiefConversation() {
                   {(m.content || !m.proposals) && (
                     <div className="flex items-start gap-3">
                       <ChiefMonogram size={24} className="mt-1 shrink-0" />
-                      <div className="chief-voice min-w-0 flex-1 whitespace-pre-wrap text-[17px] leading-relaxed text-ink">
-                        {m.content ||
-                          (streaming && i === messages.length - 1 ? (
-                            <span className="text-ink-3">…</span>
-                          ) : (
-                            ""
-                          ))}
+                      <div className="chief-prose min-w-0 flex-1 text-ink">
+                        {m.content ? (
+                          <Markdown remarkPlugins={[remarkGfm]}>
+                            {m.content}
+                          </Markdown>
+                        ) : streaming && i === messages.length - 1 ? (
+                          <span className="text-ink-3">…</span>
+                        ) : (
+                          ""
+                        )}
                       </div>
                     </div>
                   )}
