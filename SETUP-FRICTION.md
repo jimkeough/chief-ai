@@ -9,6 +9,27 @@ including anything Jim hits deploying his own instance.
 Format per entry: what you have to do → why it's friction → what the concierge
 should do instead.
 
+## The day-0 gap (design principle, not a step)
+
+User #2 arrives at the GitHub repo with no Claude Code session and nobody
+walking them through it. A README full of steps is not onboarding — nobody
+reads past the first button. The rule that falls out:
+
+> **Everything before the app's first render must collapse into a "Deploy to
+> Vercel" button; everything after first render belongs to the in-app
+> concierge. Nothing may live in between.**
+
+Consequences for Phase 6:
+- README's quick start becomes ONE deploy button (Vercel deploy-button flow
+  clones the repo into the user's GitHub — no manual fork — prompts for env
+  vars, and can create the Supabase project + inject keys via the
+  Vercel×Supabase integration). That absorbs entries 1, 4, and 5 below.
+- The concierge must be reachable **pre-auth**: on boot the app detects
+  "setup incomplete" (missing env / empty schema / zero users) and renders
+  the setup flow instead of a dead login screen. First render IS onboarding.
+- Claude Code is the builder's tool; the concierge is the user's tool. The
+  manual walkthrough below is the dry-run that writes the concierge's script.
+
 ## Phase 1 — Supabase + first sign-in
 
 ### 1. Create a Supabase project
@@ -76,6 +97,18 @@ should do instead.
   don't know a PWA is installable at all.
 - **Concierge:** A one-time, dismissible install hint shown on first mobile
   visit, with per-platform instructions.
+
+### 7. Nothing tells you what order to do things in
+- **Manual:** Jim's first instinct was to preview the site before Supabase
+  existed. Reasonable — but the app can't render past login without a
+  database and a user, so the real order (Supabase → migrate → create user →
+  deploy → open site) is invisible until someone tells you.
+- **Friction:** The steps live in three different products (GitHub, Supabase,
+  Vercel) and no one of them knows about the others. There is no progress
+  indicator for "setting up Chief" as a whole.
+- **Concierge:** The deploy-button + pre-auth setup flow makes ordering moot:
+  deploy first is the only possible entry point, and the app sequences
+  everything else itself with a visible checklist.
 
 ## Phase 2+ (add entries as they appear)
 
