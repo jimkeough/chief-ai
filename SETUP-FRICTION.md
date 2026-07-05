@@ -89,6 +89,16 @@ Claude-guided.
   orgs are containers it can see — Chief gets its own free org, separate
   from any work orgs you belong to.*
 
+### 1b. Helper tools can't reach the sovereign org (by design)
+- **Observed:** Claude's Supabase MCP connection (authorized by the work
+  account) cannot see the personal "Jim AI" org — so it couldn't run the
+  migration on the user's behalf, even mid-conversation.
+- **Insight, not a bug:** no outside assistant's credentials can touch the
+  user's sovereign instance. This is exactly why onboarding automation must
+  run AS the user — via the deploy button (their OAuth grants) and the in-app
+  concierge (their API key, their session) — never as a helper with its own
+  access. The concierge design is validated by its absence here.
+
 ### 2. Apply the migrations
 - **Manual:** Open the dashboard SQL editor and paste each file from
   `supabase/migrations/` in filename order (or install the Supabase CLI, log
