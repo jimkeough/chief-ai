@@ -203,6 +203,18 @@ Layered, most-verifiable first:
 4. Credibility furniture: SECURITY.md, pinned lockfile, public CodeQL +
    secret scanning.
 
+## Walkthrough #1 result (2026-07-05)
+
+Jim completed the full manual path on a phone — Supabase org + project +
+migration + auth user, keys to Vercel, deploy, sign-in — in roughly an hour
+of elapsed time WITH an expert guide answering every question in real time.
+That guide is exactly what user #2 won't have; the funnel (deploy button →
+API key → concierge) replaces it. Detailed debrief deferred by decision:
+**Test #2 is the one that matters** — Jim re-runs as user #2 through the
+deploy-button funnel once the landing site exists (provisioning pass), and
+again after Phase 6 (full concierge pass). Entries above were logged live
+and stand as the spec.
+
 ## Phase 2+ (add entries as they appear)
 
 *(nothing yet)*
