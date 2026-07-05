@@ -30,6 +30,34 @@ Consequences for Phase 6:
 - Claude Code is the builder's tool; the concierge is the user's tool. The
   manual walkthrough below is the dry-run that writes the concierge's script.
 
+### The refined funnel (v2 — Jim's corrections)
+
+1. **Landing site** (static brochure, separate from the app): what Chief is +
+   one Setup button + the API-key guide. It must stay static — the moment it
+   collects keys or provisions on the user's behalf we've built a hosted
+   service and broken the sovereign model. All automation lives in the
+   button's parameters and in the user's own deployed app.
+2. **The Setup button** is a parameterized Vercel deploy-button URL carrying
+   the Supabase integration: one authorization creates the GitHub copy, the
+   Vercel project, the Supabase project, and wires the env — automatically,
+   all on the user's own accounts.
+3. **First render = "paste your Anthropic API key."** The ONE dumb screen.
+   Claude is not removed from onboarding — Claude IS the concierge; this
+   screen is what unlocks it, so it comes first. Validate the key live with a
+   cheap ping. Design warning: acquiring the key (console.anthropic.com,
+   billing, credit card) is the most hostile step in the funnel and Claude
+   can't help until the key exists — this screen must be the best-crafted
+   static UI in the app: exact clicks, screenshots, "expect to add a payment
+   method," instant paste-box validation.
+4. **From screen 2 on, onboarding is a conversation.** Claude runs the
+   migrations, creates the auth account, connects Gmail, scrapes the user's
+   site, interviews for about-me/about-company — the setup endpoints ported
+   in Phase 6 become its tools.
+
+Net: exactly TWO manual human moments in the whole funnel — authorize the
+deploy button, and fetch an API key. Everything else is automated or
+Claude-guided.
+
 ## Phase 1 — Supabase + first sign-in
 
 ### 1. Create a Supabase project
