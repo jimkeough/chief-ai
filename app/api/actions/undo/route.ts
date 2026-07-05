@@ -11,6 +11,7 @@ import { createJournalEntry } from "@/lib/journal";
 import { UNDO_KINDS, type UndoDescriptor } from "@/lib/undo";
 import { deleteKbDocument, updateKbDocument } from "@/lib/kb/store";
 import { deleteContact } from "@/lib/contacts";
+import { gmailMcpServer, unarchiveThread } from "@/lib/gmail";
 import {
   deleteTask,
   updateTask,
@@ -222,6 +223,19 @@ export async function POST(req: Request) {
 
     if (undo.kind === "delete_contact") {
       await deleteContact(String(undo.id ?? ""));
+      await journal(label);
+      return Response.json({ ok: true, result: label });
+    }
+
+    if (undo.kind === "unarchive_thread") {
+      const server = await gmailMcpServer();
+      if (!server) {
+        return Response.json(
+          { ok: false, error: "Gmail is not connected." },
+          { status: 503 },
+        );
+      }
+      await unarchiveThread(server, String(undo.thread_id ?? ""));
       await journal(label);
       return Response.json({ ok: true, result: label });
     }

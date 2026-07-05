@@ -230,3 +230,27 @@ friendly in-app screen ("paste your key here" → stored where? Vercel env
 needs a redeploy, so v1 funnel likely wants the key entered in-app and held
 in the DB instead of env — decide in Phase 6). Until then it's a raw Vercel
 env-var errand.
+
+### 9. Connecting Gmail is the heaviest errand yet (2026-07-05, Phase 4)
+The inbox uses Google's OFFICIAL Gmail remote MCP server
+(gmailmcp.googleapis.com) — the sovereign trade is that each user brings
+their own Google Cloud OAuth client. Manual steps: create a GCloud project →
+enable the Gmail API **and** the Gmail MCP API → configure the OAuth consent
+screen (Branding → Audience → add yourself as a test user if External) →
+Data Access → add scopes gmail.modify + gmail.compose + gmail.send → create
+a Web-application OAuth client with redirect URI
+`https://<your-app>/api/google/callback` → paste client ID/secret into
+Vercel env (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`) → redeploy → tap
+**Connect Gmail** on the Inbox screen and approve.
+That's ~6 console screens of pure friction, worse than Supabase. It's also
+inherently un-collapsible into the Deploy button (Google requires the user's
+own consent screen for these scopes). **Funnel note:** this is the
+concierge's second big set piece — Chief should walk the user through the
+GCloud console step by step with deep links, then verify the connection
+itself. Also: Google marks unverified external apps with a scare screen
+("Google hasn't verified this app") — the concierge must warn the user it's
+THEIR OWN app so the screen is expected.
+**Design note:** the official server has NO send tool (drafts only). Jim
+chose real send, so the app's one send path is a direct Gmail REST call in
+the executor behind the slide-to-send card — the gmail.send scope exists for
+exactly one function call.

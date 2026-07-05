@@ -31,12 +31,14 @@ export type WriteAction = {
    *  - "kb": save a fact or standing instruction to Memory (the KB).
    *  - "contacts": save a person to the contacts table.
    *  - "projects": create/update a project or its current-state record.
+   *  - "gmail": the inbox actions — archive (label change via the official
+   *    Gmail MCP server) and the ONE send path (direct Gmail REST call).
    *
    * Connector (brokered MCP) writes are NOT registered here — they flow
    * through the broker and carry their own `server` on the proposal. Curated
    * polish for specific connector tools lives in lib/tool-enrichments.ts.
    */
-  via: "tasks" | "kb" | "contacts" | "projects";
+  via: "tasks" | "kb" | "contacts" | "projects" | "gmail";
   /** Informational app/source label for the action. */
   app: string;
   tier: ActionTier;
@@ -415,6 +417,69 @@ export const WRITE_ACTIONS: WriteAction[] = [
       return parts.length
         ? parts.join("\n\n")
         : "Update current state (no fields specified)";
+    },
+  },
+
+  // --- Inbox actions (Gmail) -------------------------------------------------
+  // The archive is a label change through the official Gmail MCP server —
+  // reversible, standard tier. The reply is the app's FIRST irreversible
+  // action: an actual send (direct Gmail REST call in the executor), so it's
+  // red tier — the copper card with the exact payload and slide-to-send,
+  // never batched, never one-tap.
+  {
+    key: "archive_email",
+    via: "gmail",
+    app: "gmail",
+    tier: "yellow",
+    label: "Archive email",
+    description:
+      "Propose archiving an email thread — it leaves the inbox (the INBOX label is removed; reversible). This does NOT archive immediately; it shows an Approve/Dismiss card. Pass the `thread_id` from the inbox page context. Propose it when the email needs no further action (an FYI, a notification, or once a reply has been sent).",
+    input_schema: {
+      type: "object",
+      properties: {
+        thread_id: str("The Gmail thread id (from the inbox page context)."),
+        subject: str("The email's subject, for the card label."),
+      },
+      required: ["thread_id"],
+    },
+    preview: (a) =>
+      `Archive${a.subject ? `: ${String(a.subject)}` : " this email"} — removes it from the inbox (reversible).`,
+  },
+  {
+    key: "reply_email",
+    via: "gmail",
+    app: "gmail",
+    tier: "red",
+    label: "Send reply",
+    description:
+      "Propose SENDING a reply to an email thread through the user's Gmail. This is IRREVERSIBLE once approved — the user confirms with a slide gesture, and the email actually sends. Write the complete reply body, ready to send (appropriate greeting and sign-off, NO placeholders). Pass the `thread_id` and reply to the people already on the thread (`to` = the sender of the message being answered; keep the original subject with a Re: prefix). Use it only when the user clearly wants to send a reply.",
+    input_schema: {
+      type: "object",
+      properties: {
+        thread_id: str("The Gmail thread id (from the inbox page context)."),
+        to: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Recipient email addresses — normally just the sender being replied to. Plain addresses only.",
+        },
+        cc: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional CC addresses (plain addresses only).",
+        },
+        subject: str('The subject, normally the original prefixed with "Re: ".'),
+        body: str("Full reply body, ready to send. No placeholders."),
+      },
+      required: ["thread_id", "to", "subject", "body"],
+    },
+    preview: (a) => {
+      const to = Array.isArray(a.to) ? (a.to as unknown[]).map(String).join(", ") : "";
+      const cc =
+        Array.isArray(a.cc) && a.cc.length
+          ? `\nCc: ${(a.cc as unknown[]).map(String).join(", ")}`
+          : "";
+      return `To: ${to}${cc}\nSubject: ${String(a.subject ?? "")}\n\n${String(a.body ?? "")}`;
     },
   },
 ];
