@@ -232,6 +232,15 @@ export default function ConfigClient() {
   ) => {
     setTriggerBusy(componentId);
     setTriggerError(null);
+    // Optimistic: show ON immediately with a temporary id; the deploy
+    // round-trip (Pipedream) can take several seconds, and we don't want the
+    // button to sit on a busy dash until a manual refresh.
+    const tempId = `pending:${componentId}`;
+    setTriggerData((prev) =>
+      prev
+        ? { ...prev, deployed: [...prev.deployed, { id: tempId, componentId, name }] }
+        : prev,
+    );
     const res = await fetch("/api/triggers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -243,14 +252,26 @@ export default function ConfigClient() {
     };
     setTriggerBusy(null);
     if (!res || !res.ok || body.ok === false) {
+      // Revert the optimistic entry and surface why.
+      setTriggerData((prev) =>
+        prev
+          ? { ...prev, deployed: prev.deployed.filter((d) => d.id !== tempId) }
+          : prev,
+      );
       setTriggerError(body.error || "Couldn't turn on this notification.");
+      return;
     }
     await loadTriggersFresh(app);
   };
 
   const removeTrigger = async (app: string, id: string) => {
+    const removed = triggerData?.deployed.find((d) => d.id === id) ?? null;
     setTriggerBusy(id);
     setTriggerError(null);
+    // Optimistic: drop it now so the button flips to OFF instantly.
+    setTriggerData((prev) =>
+      prev ? { ...prev, deployed: prev.deployed.filter((d) => d.id !== id) } : prev,
+    );
     const res = await fetch(`/api/triggers?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
     }).catch(() => null);
@@ -260,7 +281,14 @@ export default function ConfigClient() {
     };
     setTriggerBusy(null);
     if (!res || !res.ok || body.ok === false) {
+      // Put it back and surface why.
+      setTriggerData((prev) =>
+        prev && removed && !prev.deployed.some((d) => d.id === removed.id)
+          ? { ...prev, deployed: [...prev.deployed, removed] }
+          : prev,
+      );
       setTriggerError(body.error || "Couldn't turn off this notification.");
+      return;
     }
     await loadTriggersFresh(app);
   };
@@ -269,10 +297,13 @@ export default function ConfigClient() {
     const res = await fetch(`/api/triggers?app=${encodeURIComponent(app)}`).catch(
       () => null,
     );
-    const body = (await res?.json().catch(() => ({}))) as {
+    // Never clobber optimistic state on a failed/again-in-flight refetch.
+    if (!res || !res.ok) return;
+    const body = (await res.json().catch(() => null)) as {
       components?: { id: string; name: string; description?: string }[];
       deployed?: { id: string; componentId: string | null; name: string | null }[];
-    };
+    } | null;
+    if (!body) return;
     setTriggerData({
       components: body.components ?? [],
       deployed: body.deployed ?? [],
@@ -516,11 +547,7 @@ export default function ConfigClient() {
                                     : { borderColor: "var(--hairline)", color: "var(--ink-3)" }
                                 }
                               >
-                                {triggerBusy === c.id || triggerBusy === on?.id
-                                  ? "…"
-                                  : on
-                                    ? "ON"
-                                    : "OFF"}
+                                {on ? "ON" : "OFF"}
                               </button>
                             </div>
                           );
