@@ -9,6 +9,7 @@ import {
   listTriggerComponents,
   deployTrigger,
   deleteConnectTrigger,
+  listConnectAccounts,
 } from "@/lib/chief-connect";
 import { listTriggers, saveTrigger, deleteTriggerRow } from "@/lib/events";
 
@@ -48,10 +49,35 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: "app and componentId required" }, { status: 400 });
   }
   try {
+    // App-based sources are deployed on behalf of the user's connected
+    // account, and Pipedream REQUIRES that account in configured_props (keyed
+    // by the app's prop name, which for single-app triggers is the app slug):
+    //   configured_props: { gmail: { authProvisionId: "apn_…" } }
+    // Without it the deploy 400s — so resolve the account first and fail with a
+    // clear message if the app isn't connected yet.
+    const appSlug = app.trim();
+    const accounts = await listConnectAccounts();
+    const account =
+      accounts.find((a) => a.app === appSlug && a.healthy) ??
+      accounts.find((a) => a.app === appSlug);
+    if (!account) {
+      return Response.json(
+        {
+          ok: false,
+          error: `Connect your ${appSlug} account before turning on notifications.`,
+        },
+        { status: 400 },
+      );
+    }
+
     const token = randomBytes(24).toString("hex");
     const origin = new URL(req.url).origin;
     const webhookUrl = `${origin}/api/events/pipedream?t=${token}`;
-    const deployed = await deployTrigger({ id: componentId.trim(), webhookUrl });
+    const deployed = await deployTrigger({
+      id: componentId.trim(),
+      webhookUrl,
+      configuredProps: { [appSlug]: { authProvisionId: account.id } },
+    });
     await saveTrigger(authed.userId, {
       id: deployed.id,
       app: app.trim(),

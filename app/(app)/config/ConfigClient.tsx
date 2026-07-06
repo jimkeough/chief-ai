@@ -200,6 +200,7 @@ export default function ConfigClient() {
     deployed: { id: string; componentId: string | null; name: string | null }[];
   } | null>(null);
   const [triggerBusy, setTriggerBusy] = useState<string | null>(null);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
 
   const loadTriggers = async (app: string) => {
     if (triggersFor === app) {
@@ -209,6 +210,7 @@ export default function ConfigClient() {
     }
     setTriggersFor(app);
     setTriggerData(null);
+    setTriggerError(null);
     const res = await fetch(`/api/triggers?app=${encodeURIComponent(app)}`).catch(
       () => null,
     );
@@ -229,21 +231,37 @@ export default function ConfigClient() {
     name: string,
   ) => {
     setTriggerBusy(componentId);
-    await fetch("/api/triggers", {
+    setTriggerError(null);
+    const res = await fetch("/api/triggers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ app, componentId, name }),
-    }).catch(() => {});
+    }).catch(() => null);
+    const body = (await res?.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+    };
     setTriggerBusy(null);
+    if (!res || !res.ok || body.ok === false) {
+      setTriggerError(body.error || "Couldn't turn on this notification.");
+    }
     await loadTriggersFresh(app);
   };
 
   const removeTrigger = async (app: string, id: string) => {
     setTriggerBusy(id);
-    await fetch(`/api/triggers?id=${encodeURIComponent(id)}`, {
+    setTriggerError(null);
+    const res = await fetch(`/api/triggers?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
-    }).catch(() => {});
+    }).catch(() => null);
+    const body = (await res?.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+    };
     setTriggerBusy(null);
+    if (!res || !res.ok || body.ok === false) {
+      setTriggerError(body.error || "Couldn't turn off this notification.");
+    }
     await loadTriggersFresh(app);
   };
 
@@ -448,6 +466,14 @@ export default function ConfigClient() {
                         <div className="font-mono text-[10px] tracking-[0.1em] text-ink-3">
                           NOTIFY ME WHEN…
                         </div>
+                        {triggerError && (
+                          <div
+                            className="text-[12px]"
+                            style={{ color: "var(--copper, #b4530e)" }}
+                          >
+                            {triggerError}
+                          </div>
+                        )}
                         {triggerData === null && (
                           <div className="text-[13px] text-ink-3">Loading…</div>
                         )}
