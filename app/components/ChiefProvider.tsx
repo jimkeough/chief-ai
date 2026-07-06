@@ -44,10 +44,14 @@ export type ProposalItem = {
   undo?: UndoDescriptor | null;
 };
 
+/** A Chief-suggested app connection, rendered as a "Connect X" card. */
+export type ConnectSuggestion = { app: string; name: string; reason: string };
+
 export type ChiefMessage = {
   role: "user" | "assistant";
   content: string;
   proposals?: ProposalItem[];
+  connect?: ConnectSuggestion[];
 };
 
 type ChiefContextValue = {
@@ -201,25 +205,31 @@ export default function ChiefProvider({
         const finalText = (cut === -1 ? buffer : buffer.slice(0, cut)).trim();
         historyRef.current = [
           ...historyRef.current,
-          { role: "assistant", content: finalText || "(proposals below)" },
+          { role: "assistant", content: finalText || "(cards below)" },
         ];
 
         if (cut !== -1) {
           try {
             const blob = JSON.parse(buffer.slice(cut + 1)) as {
               proposals?: ProposedAction[];
+              connect?: ConnectSuggestion[];
             };
             const items: ProposalItem[] = (blob.proposals ?? []).map((p) => ({
               uid: nextUid(),
               proposal: p,
               status: "proposed",
             }));
-            if (items.length > 0) {
+            const connect = blob.connect ?? [];
+            if (items.length > 0 || connect.length > 0) {
               setMessages((msgs) => {
                 const out = [...msgs];
                 const last = out[out.length - 1];
                 if (last?.role === "assistant") {
-                  out[out.length - 1] = { ...last, proposals: items };
+                  out[out.length - 1] = {
+                    ...last,
+                    ...(items.length > 0 ? { proposals: items } : {}),
+                    ...(connect.length > 0 ? { connect } : {}),
+                  };
                 }
                 return out;
               });

@@ -9,9 +9,76 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useChief } from "./ChiefProvider";
+import { useChief, type ConnectSuggestion } from "./ChiefProvider";
 import ProposalGroup from "./ProposalCards";
 import ChiefMonogram from "./ChiefMonogram";
+
+// A "Connect X" card Chief offers mid-chat when the request needs an app the
+// user hasn't linked. Tapping enables the app and opens the hosted OAuth flow
+// in a new tab; the user connects, then re-asks. Connecting is inherently
+// user-approved (the OAuth screen is the approval), so this isn't the gated
+// write path — but it still only ever happens on an explicit tap.
+function ConnectCard({ suggestion }: { suggestion: ConnectSuggestion }) {
+  const [state, setState] = useState<"idle" | "opening" | "opened" | "error">(
+    "idle",
+  );
+  const connect = async () => {
+    if (state === "opening") return;
+    setState("opening");
+    try {
+      const res = await fetch("/api/connect/apps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: suggestion.app }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        url?: string;
+      };
+      if (body.ok && body.url) {
+        window.open(body.url, "_blank", "noopener");
+        setState("opened");
+      } else {
+        setState("error");
+      }
+    } catch {
+      setState("error");
+    }
+  };
+  return (
+    <div
+      className="rounded-card border p-3.5"
+      style={{ background: "var(--surface)", borderColor: "var(--teal-border)" }}
+    >
+      <div className="mb-1 font-mono text-[11px] tracking-[0.1em] text-teal">
+        CONNECT {suggestion.name.toUpperCase()}
+      </div>
+      {suggestion.reason && (
+        <div className="mb-3 text-[15px] leading-snug text-ink">
+          {suggestion.reason}
+        </div>
+      )}
+      {state === "opened" ? (
+        <div className="text-[14px] text-ink-2">
+          Authorize in the new tab, then ask me again.
+        </div>
+      ) : (
+        <button
+          onClick={() => void connect()}
+          disabled={state === "opening"}
+          className="flex h-12 w-full items-center justify-center rounded-control text-[15px] font-semibold disabled:opacity-60"
+          style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+        >
+          {state === "opening"
+            ? "Opening…"
+            : state === "error"
+              ? "Try again"
+              : `Connect ${suggestion.name} →`}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function ChiefConversation() {
   const { messages, streaming, send, approve, dismiss, restore, undo } =
@@ -67,7 +134,7 @@ export default function ChiefConversation() {
                 </div>
               ) : (
                 <div key={i} className="flex flex-col gap-2.5">
-                  {(m.content || !m.proposals) && (
+                  {(m.content || (!m.proposals && !m.connect)) && (
                     <div className="flex items-start gap-3">
                       <ChiefMonogram size={24} className="mt-1 shrink-0" />
                       <div className="chief-prose min-w-0 flex-1 text-ink">
@@ -86,6 +153,13 @@ export default function ChiefConversation() {
                   {m.proposals && m.proposals.length > 0 && (
                     <div className="pl-9">
                       <ProposalGroup items={m.proposals} handlers={handlers} />
+                    </div>
+                  )}
+                  {m.connect && m.connect.length > 0 && (
+                    <div className="flex flex-col gap-2 pl-9">
+                      {m.connect.map((c) => (
+                        <ConnectCard key={c.app} suggestion={c} />
+                      ))}
                     </div>
                   )}
                 </div>

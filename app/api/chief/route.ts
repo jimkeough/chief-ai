@@ -33,6 +33,35 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const MAX_TURNS = 6;
 
+/** A Chief-suggested app connection, emitted alongside proposals. Not a gated
+ *  write — connecting is inherently user-approved (the hosted OAuth screen IS
+ *  the approval) — but it ends the turn and renders as a card. */
+export type ConnectSuggestion = { app: string; name: string; reason: string };
+
+// Client tool Chief calls when the user needs an app that isn't connected yet
+// (only attached when Chief Connect is configured, and never on untrusted
+// turns). Intercepted like a proposal; never "executed" server-side.
+const SUGGEST_CONNECTION_TOOL: Anthropic.Tool = {
+  name: "suggest_connection",
+  description:
+    "Offer the user a one-tap card to CONNECT an app they haven't linked yet (managed OAuth via Chief Connect), when what they're asking for needs it — e.g. they mention their Asana/Notion/Slack/calendar and no such connection exists in your context. Pass the app's Pipedream slug (lowercase, underscores: gmail, google_calendar, google_drive, asana, notion, slack, github, linear, trello, todoist, hubspot, jira, zoom, dropbox). Use it at most once per turn, only when the connection would genuinely serve the request, and say in one short sentence what you'll do once it's connected.",
+  input_schema: {
+    type: "object",
+    properties: {
+      app: {
+        type: "string",
+        description: "Pipedream app slug, e.g. \"asana\" or \"google_calendar\".",
+      },
+      name: { type: "string", description: "Display name, e.g. \"Asana\"." },
+      reason: {
+        type: "string",
+        description: "One short line: why connecting helps right now.",
+      },
+    },
+    required: ["app", "name", "reason"],
+  },
+};
+
 // POST /api/chief -> stream Chief's reply over the user's whole workspace,
 // grounded in what they're currently looking at (the page context).
 //
@@ -82,15 +111,18 @@ export async function POST(req: Request) {
   // other connector's). A user-configured server named "gmail" would collide,
   // so the built-in wins.
   let brokerServers: McpServerConfig[] = [];
+  let connectAvailable = false;
   if (!untrustedTurn) {
     brokerServers = (await getMcpServers()).filter((s) => s.name !== "gmail");
     const gmail = await (await import("@/lib/gmail")).gmailMcpServer().catch(() => null);
     if (gmail) brokerServers.push(gmail);
     // Chief Connect (the optional hub): same broker treatment as everything
     // else. User-configured servers win on a name collision.
-    const connect = await (await import("@/lib/chief-connect"))
-      .getConnectServers()
-      .catch(() => []);
+    const chiefConnect = await import("@/lib/chief-connect");
+    connectAvailable = Boolean(
+      await chiefConnect.getConnectConfig().catch(() => null),
+    );
+    const connect = await chiefConnect.getConnectServers().catch(() => []);
     const taken = new Set(brokerServers.map((s) => s.name));
     brokerServers.push(...connect.filter((s) => !taken.has(s.name)));
   }
@@ -197,6 +229,7 @@ export async function POST(req: Request) {
     gatedServerNames,
     page: page ?? null,
     connectorsWithheld: untrustedTurn,
+    connectAvailable,
   });
 
   // Chief's write tools (only when writes are enabled), its read-back tools
@@ -215,11 +248,16 @@ export async function POST(req: Request) {
           { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 },
         ] as unknown as Anthropic.Tool[])
       : [];
+  // The connect-suggestion tool: only when Chief Connect is configured (there's
+  // somewhere to connect through) and not on an untrusted turn.
+  const connectTools =
+    connectAvailable && !untrustedTurn ? [SUGGEST_CONNECTION_TOOL] : [];
   const clientTools = [
     ...serverTools,
     ...writeTools,
     ...CHIEF_READ_TOOLS,
     ...KB_TOOLS,
+    ...connectTools,
     ...brokerToolDefs,
   ];
   const runKbTool = makeKbToolRunner();
@@ -290,9 +328,22 @@ export async function POST(req: Request) {
           // become proposals (never executed here); reads run now and feed
           // their results back. Unknown names are default-denied.
           const proposals: ProposedAction[] = [];
+          const connectSuggestions: ConnectSuggestion[] = [];
           const results: Anthropic.ToolResultBlockParam[] = [];
           for (const block of toolUses) {
             const argsObj = (block.input ?? {}) as Record<string, unknown>;
+            // Connect suggestion -> a "Connect X" card (not a gated write).
+            if (block.name === "suggest_connection") {
+              const app = String(argsObj.app ?? "").trim().toLowerCase();
+              if (app) {
+                connectSuggestions.push({
+                  app,
+                  name: String(argsObj.name ?? app).trim() || app,
+                  reason: String(argsObj.reason ?? "").trim(),
+                });
+              }
+              continue;
+            }
             // Static registered write action -> proposal.
             if (getWriteAction(block.name)) {
               // A no-op update (only an id, nothing to change) isn't worth an
@@ -393,10 +444,10 @@ export async function POST(req: Request) {
             });
           }
 
-          // A proposed write ends the turn: emit the proposals blob for the UI
-          // to render as approve/dismiss cards. Nothing runs until the user
-          // approves (which hits /api/actions/execute).
-          if (proposals.length > 0) {
+          // A proposed write OR a connect suggestion ends the turn: emit the
+          // trailing blob for the UI to render as cards. Nothing runs until the
+          // user acts (approve → /api/actions/execute; connect → OAuth).
+          if (proposals.length > 0 || connectSuggestions.length > 0) {
             // Lead project cards with the project name (args carry only its id).
             // Resolve names only when a project-update proposal is present, so
             // normal turns don't pay for an extra query.
@@ -414,7 +465,10 @@ export async function POST(req: Request) {
               named = nameProjectProposals(proposals, () => undefined);
             }
             controller.enqueue(
-              encoder.encode(PROPOSALS_MARKER + JSON.stringify({ proposals: named })),
+              encoder.encode(
+                PROPOSALS_MARKER +
+                  JSON.stringify({ proposals: named, connect: connectSuggestions }),
+              ),
             );
             break;
           }
