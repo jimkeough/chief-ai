@@ -189,6 +189,7 @@ export async function POST(req: Request) {
     connectedApps,
     gatedServerNames,
     page: page ?? null,
+    connectorsWithheld: untrustedTurn,
   });
 
   // Chief's write tools (only when writes are enabled), its read-back tools

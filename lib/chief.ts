@@ -337,11 +337,15 @@ export async function buildChiefSystemPrompt({
   connectedApps = [],
   gatedServerNames = [],
   page = null,
+  connectorsWithheld = false,
 }: {
   canPropose?: boolean;
   connectedApps?: string[];
   gatedServerNames?: string[];
   page?: ChiefPageContext | null;
+  /** True when this turn's page context contains external content (an email),
+   *  so connector/web tools were deliberately not attached. */
+  connectorsWithheld?: boolean;
 } = {}): Promise<string> {
   const [tasks, projects, instructions, kbDocs, contacts] = await Promise.all([
     listTasks().catch(() => [] as Task[]),
@@ -400,6 +404,13 @@ export async function buildChiefSystemPrompt({
       );
     }
     sections.push("");
+  }
+
+  if (connectorsWithheld) {
+    sections.push(
+      "SECURITY NOTE — connector tools are withheld on THIS turn: the page context contains external content (an email), and reads with model-chosen arguments alongside untrusted text are an exfiltration channel, so the app deliberately did not attach connected-app or web tools. The user's connections are fine. If they ask you to check a connected app (Asana, Calendar, …), explain this in one friendly sentence and tell them to ask again from the Chief tab or Home screen, where their connectors are available.",
+      "",
+    );
   }
 
   if (instructions) sections.push(instructions, "");
