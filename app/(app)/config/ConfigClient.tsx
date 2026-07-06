@@ -193,6 +193,74 @@ export default function ConfigClient() {
     }).catch(() => {});
   };
 
+  // --- Proactive triggers ("Notify me when…") -------------------------------
+  const [triggersFor, setTriggersFor] = useState<string | null>(null);
+  const [triggerData, setTriggerData] = useState<{
+    components: { id: string; name: string; description?: string }[];
+    deployed: { id: string; componentId: string | null; name: string | null }[];
+  } | null>(null);
+  const [triggerBusy, setTriggerBusy] = useState<string | null>(null);
+
+  const loadTriggers = async (app: string) => {
+    if (triggersFor === app) {
+      setTriggersFor(null);
+      setTriggerData(null);
+      return;
+    }
+    setTriggersFor(app);
+    setTriggerData(null);
+    const res = await fetch(`/api/triggers?app=${encodeURIComponent(app)}`).catch(
+      () => null,
+    );
+    const body = (await res?.json().catch(() => ({}))) as {
+      ok?: boolean;
+      components?: { id: string; name: string; description?: string }[];
+      deployed?: { id: string; componentId: string | null; name: string | null }[];
+    };
+    setTriggerData({
+      components: body.components ?? [],
+      deployed: body.deployed ?? [],
+    });
+  };
+
+  const deployTrigger = async (
+    app: string,
+    componentId: string,
+    name: string,
+  ) => {
+    setTriggerBusy(componentId);
+    await fetch("/api/triggers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ app, componentId, name }),
+    }).catch(() => {});
+    setTriggerBusy(null);
+    await loadTriggersFresh(app);
+  };
+
+  const removeTrigger = async (app: string, id: string) => {
+    setTriggerBusy(id);
+    await fetch(`/api/triggers?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).catch(() => {});
+    setTriggerBusy(null);
+    await loadTriggersFresh(app);
+  };
+
+  const loadTriggersFresh = async (app: string) => {
+    const res = await fetch(`/api/triggers?app=${encodeURIComponent(app)}`).catch(
+      () => null,
+    );
+    const body = (await res?.json().catch(() => ({}))) as {
+      components?: { id: string; name: string; description?: string }[];
+      deployed?: { id: string; componentId: string | null; name: string | null }[];
+    };
+    setTriggerData({
+      components: body.components ?? [],
+      deployed: body.deployed ?? [],
+    });
+  };
+
   const openConnectLink = async (app: string) => {
     const res = await fetch("/api/connect/link", {
       method: "POST",
@@ -357,15 +425,82 @@ export default function ConfigClient() {
                         onClick={() => void loadTools(serverName)}
                         className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-teal"
                       >
-                        {expanded ? "HIDE TOOLS" : "TOOLS"}
+                        {expanded ? "HIDE" : "TOOLS"}
+                      </button>
+                      <button
+                        onClick={() => void loadTriggers(a.app)}
+                        className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-teal"
+                      >
+                        {triggersFor === a.app ? "HIDE" : "NOTIFY"}
                       </button>
                       <button
                         onClick={() => void disconnectAccount(a.id)}
                         className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-ink-3"
                       >
-                        DISCONNECT
+                        OFF
                       </button>
                     </div>
+                    {triggersFor === a.app && (
+                      <div
+                        className="flex flex-col gap-2 rounded-control border p-3"
+                        style={{ borderColor: "var(--hairline)" }}
+                      >
+                        <div className="font-mono text-[10px] tracking-[0.1em] text-ink-3">
+                          NOTIFY ME WHEN…
+                        </div>
+                        {triggerData === null && (
+                          <div className="text-[13px] text-ink-3">Loading…</div>
+                        )}
+                        {triggerData?.components.length === 0 && (
+                          <div className="text-[13px] text-ink-3">
+                            No event triggers for this app.
+                          </div>
+                        )}
+                        {triggerData?.components.map((c) => {
+                          const on = triggerData.deployed.find(
+                            (d) => d.componentId === c.id,
+                          );
+                          return (
+                            <div key={c.id} className="flex items-center gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-[13.5px] text-ink">
+                                  {c.name}
+                                </div>
+                                {c.description && (
+                                  <div className="truncate text-[11.5px] text-ink-3">
+                                    {c.description}
+                                  </div>
+                                )}
+                              </div>
+                              <button
+                                onClick={() =>
+                                  on
+                                    ? void removeTrigger(a.app, on.id)
+                                    : void deployTrigger(a.app, c.id, c.name)
+                                }
+                                disabled={triggerBusy === c.id || triggerBusy === on?.id}
+                                className="shrink-0 rounded-chip border px-2.5 py-1 font-mono text-[10px] tracking-[0.06em] disabled:opacity-50"
+                                style={
+                                  on
+                                    ? {
+                                        background: "var(--teal-fill)",
+                                        color: "var(--teal-on-fill)",
+                                        borderColor: "transparent",
+                                      }
+                                    : { borderColor: "var(--hairline)", color: "var(--ink-3)" }
+                                }
+                              >
+                                {triggerBusy === c.id || triggerBusy === on?.id
+                                  ? "…"
+                                  : on
+                                    ? "ON"
+                                    : "OFF"}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     {expanded && (
                       <div
                         className="flex flex-col gap-2 rounded-control border p-3"

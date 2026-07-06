@@ -31,6 +31,13 @@ type WaitingRow = {
   state: "moved" | "quiet" | "aging";
   days: number;
 };
+
+type AwayEvent = {
+  id: string;
+  app: string | null;
+  summary: string | null;
+  proposal: { key: string; label: string; preview: string; args: Record<string, unknown> } | null;
+};
 type HomeResponse = {
   narrative: string;
   top: TopRow[];
@@ -88,7 +95,41 @@ export default function HomeClient({ initial }: { initial: string }) {
       .then((r) => (r.ok ? r.json() : null))
       .then((d: HomeResponse | null) => d && setData(d))
       .catch(() => {});
+    void fetch("/api/events/list")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { events?: AwayEvent[] } | null) => d?.events && setAway(d.events))
+      .catch(() => {});
   }, []);
+
+  // Proactive events that arrived while away (Proactive Chief). Each is a
+  // one-line summary; some carry a standard-tier proposal to approve in place.
+  const [away, setAway] = useState<AwayEvent[]>([]);
+  const dropAway = (id: string) => setAway((xs) => xs.filter((e) => e.id !== id));
+  const resolveAway = async (
+    id: string,
+    status: "acted" | "dismissed",
+  ) => {
+    dropAway(id);
+    await fetch("/api/events/dismiss", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    }).catch(() => {});
+  };
+  const approveAway = async (e: AwayEvent) => {
+    if (!e.proposal) return;
+    dropAway(e.id);
+    await fetch("/api/actions/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: e.proposal.key, args: e.proposal.args }),
+    }).catch(() => {});
+    await fetch("/api/events/dismiss", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: e.id, status: "acted" }),
+    }).catch(() => {});
+  };
 
   // Pending proposals from the shared Chief conversation — approvable right
   // here on Home.
@@ -155,6 +196,72 @@ export default function HomeClient({ initial }: { initial: string }) {
           </button>
         </div>
       ) : null}
+
+      {/* Since you were away — proactive events (Proactive Chief) */}
+      {away.length > 0 && (
+        <div className="flex flex-col gap-2.5">
+          <div className="font-mono text-[11px] tracking-[0.12em] text-ink-3">
+            SINCE YOU WERE AWAY · {away.length}
+          </div>
+          {away.map((e) => (
+            <div
+              key={e.id}
+              className="flex flex-col gap-3 rounded-card border p-3.5"
+              style={{
+                background: "var(--surface)",
+                borderColor: e.proposal ? "var(--teal-border)" : "var(--hairline)",
+              }}
+            >
+              <div className="flex items-start gap-2.5">
+                <div className="chief-voice min-w-0 flex-1 text-[15.5px] leading-snug text-ink">
+                  {e.summary}
+                </div>
+                {e.app && (
+                  <span className="shrink-0 font-mono text-[10px] tracking-[0.08em] text-ink-3">
+                    {e.app.toUpperCase()}
+                  </span>
+                )}
+              </div>
+              {e.proposal ? (
+                <>
+                  <div
+                    className="rounded-control px-3 py-2 text-[13.5px] leading-snug text-ink-2"
+                    style={{ background: "var(--raised)" }}
+                  >
+                    <span className="font-mono text-[10px] tracking-[0.1em] text-teal">
+                      {e.proposal.label.toUpperCase()}
+                    </span>
+                    <div className="mt-1 whitespace-pre-wrap">{e.proposal.preview}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => void approveAway(e)}
+                      className="flex h-11 flex-[1.6] items-center justify-center rounded-control text-[15px] font-semibold"
+                      style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => void resolveAway(e.id, "dismissed")}
+                      className="h-11 flex-1 rounded-control border text-[15px] text-ink-2"
+                      style={{ borderColor: "var(--hairline)" }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button
+                  onClick={() => void resolveAway(e.id, "dismissed")}
+                  className="self-end font-mono text-[11px] tracking-[0.06em] text-ink-3"
+                >
+                  GOT IT
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Top N */}
       {data && data.top.length > 0 && (
