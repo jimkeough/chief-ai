@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useChief, SETUP_INTERVIEW_PROMPT } from "@/app/components/ChiefProvider";
 
 type SettingDef = {
   key: string;
@@ -78,6 +79,7 @@ function Dot({ ok }: { ok: boolean }) {
 }
 
 export default function ConfigClient() {
+  const { openAndSend } = useChief();
   const [status, setStatus] = useState<Status | null>(null);
   const [defs, setDefs] = useState<SettingDef[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -185,28 +187,41 @@ export default function ConfigClient() {
         </Link>
       </div>
 
-      {/* Setup checklist — shown until everything's wired. */}
-      {status && !setupDone && (
-        <Section label="SETUP">
-          <div className={card} style={cardStyle}>
-            {setupItems.map((i) => (
-              <div key={i.label} className="flex items-center gap-3">
-                <Dot ok={i.ok} />
-                <div className="flex-1 text-[14.5px] text-ink">{i.label}</div>
-                {!i.ok && i.href && (
-                  <Link href={i.href} className="text-[13px] font-semibold text-teal">
-                    connect →
-                  </Link>
-                )}
-              </div>
-            ))}
-            <p className="text-[13px] leading-relaxed text-ink-2">
-              Ask Chief for help with any of these — it knows what&apos;s missing and
-              will walk you through it.
-            </p>
-          </div>
-        </Section>
-      )}
+      {/* Setup: the on-demand concierge, plus the checklist until it's done. */}
+      <Section label="SETUP">
+        <div className={card} style={cardStyle}>
+          {status && !setupDone && (
+            <>
+              {setupItems.map((i) => (
+                <div key={i.label} className="flex items-center gap-3">
+                  <Dot ok={i.ok} />
+                  <div className="flex-1 text-[14.5px] text-ink">{i.label}</div>
+                  {!i.ok && i.href && (
+                    <Link href={i.href} className="text-[13px] font-semibold text-teal">
+                      connect →
+                    </Link>
+                  )}
+                </div>
+              ))}
+              <div className="h-px" style={{ background: "var(--hairline)" }} />
+            </>
+          )}
+          <button
+            onClick={() => openAndSend(SETUP_INTERVIEW_PROMPT)}
+            className="flex h-12 items-center justify-center gap-2 rounded-control text-[15px] font-semibold"
+            style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+          >
+            <span className="font-serif text-[17px] italic">C</span>
+            Set up with Chief
+          </button>
+          <p className="text-[13px] leading-relaxed text-ink-2">
+            A short interview — Chief asks about your work one question at a
+            time and proposes the projects, tasks, contacts, and rules to
+            capture it. Run it any time; everything it suggests still needs
+            your approval.
+          </p>
+        </div>
+      </Section>
 
       {/* Connections */}
       <Section label="CONNECTIONS">

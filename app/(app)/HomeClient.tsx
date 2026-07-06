@@ -7,7 +7,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useChief, type ProposalItem } from "@/app/components/ChiefProvider";
+import {
+  useChief,
+  SETUP_INTERVIEW_PROMPT,
+  type ProposalItem,
+} from "@/app/components/ChiefProvider";
 import ChiefPageSnapshot from "@/app/components/ChiefPageSnapshot";
 import ProposalGroup from "@/app/components/ProposalCards";
 
@@ -137,12 +141,18 @@ export default function HomeClient({ initial }: { initial: string }) {
       ) : data.narrative ? (
         <Narrative text={data.narrative} />
       ) : data.top.length === 0 ? (
-        <div className="font-serif text-[20px] leading-[1.4] text-ink">
-          Nothing on the board yet. Add tasks — or{" "}
-          <button className="text-teal underline underline-offset-2" onClick={() => chief.setOpen(true)}>
-            ask Chief
-          </button>{" "}
-          where to start.
+        <div className="flex flex-col gap-4">
+          <div className="font-serif text-[20px] leading-[1.4] text-ink">
+            Nothing on the board yet.
+          </div>
+          <button
+            onClick={() => chief.openAndSend(SETUP_INTERVIEW_PROMPT)}
+            className="flex h-[52px] items-center justify-center gap-2 rounded-card text-[16px] font-semibold"
+            style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+          >
+            <span className="font-serif text-[17px] italic">C</span>
+            Set up with Chief
+          </button>
         </div>
       ) : null}
 

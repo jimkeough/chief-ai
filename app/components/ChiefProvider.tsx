@@ -59,12 +59,20 @@ type ChiefContextValue = {
   streaming: boolean;
   pendingCount: number;
   send: (text: string) => Promise<void>;
+  /** Open the sheet and immediately send a preset message (no-op if a reply
+   *  is already streaming — the sheet still opens). */
+  openAndSend: (text: string) => void;
   approve: (uid: string, mergeTargetId?: string) => Promise<void>;
   dismiss: (uid: string) => void;
   restore: (uid: string) => void;
   undo: (uid: string) => Promise<void>;
   clear: () => void;
 };
+
+/** The on-demand concierge opener: works on any workspace, not just an empty
+ *  one — the message itself carries the interview instructions. */
+export const SETUP_INTERVIEW_PROMPT =
+  "Interview me about my work — one question at a time — and as real structure emerges, propose the projects, tasks, contacts, and standing instructions to capture it. Start by asking what I do and what's on my plate right now.";
 
 const ChiefCtx = createContext<ChiefContextValue | null>(null);
 
@@ -240,6 +248,14 @@ export default function ChiefProvider({
     [effectivePage, streaming],
   );
 
+  const openAndSend = useCallback(
+    (text: string) => {
+      setOpen(true);
+      if (!streaming) void send(text);
+    },
+    [send, streaming],
+  );
+
   const approve = useCallback(
     async (uid: string, mergeTargetId?: string) => {
       const item = findProposal(uid);
@@ -346,6 +362,7 @@ export default function ChiefProvider({
       streaming,
       pendingCount,
       send,
+      openAndSend,
       approve,
       dismiss,
       restore,
@@ -359,6 +376,7 @@ export default function ChiefProvider({
       streaming,
       pendingCount,
       send,
+      openAndSend,
       approve,
       dismiss,
       restore,
