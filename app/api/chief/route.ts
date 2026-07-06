@@ -5,6 +5,7 @@ import { buildChiefSystemPrompt, type ChiefPageContext } from "@/lib/chief";
 import { getMcpServers, type McpServerConfig } from "@/lib/mcp";
 import { listMcpTools, callMcpTool, type McpToolDef } from "@/lib/mcp-broker";
 import { findEnrichment, applyEnrichment } from "@/lib/tool-enrichments";
+import { getToolOverrides, effectiveMode } from "@/lib/tool-overrides";
 import { recordCommunication } from "@/lib/communications";
 import {
   PROPOSALS_MARKER,
@@ -120,6 +121,10 @@ export async function POST(req: Request) {
       ),
     );
     type Entry = { server: McpServerConfig; def: McpToolDef };
+    // The user's per-tool dial: off = never attached; ask = a read demoted to
+    // the approval card; auto = default for annotated reads only. Writes can
+    // never come out auto (effectiveMode re-derives from live annotations).
+    const overrides = await getToolOverrides().catch(() => ({} as import("@/lib/tool-overrides").ToolOverrides));
     const readQ: Entry[][] = [];
     const writeQ: Entry[][] = [];
     for (const { s, defs } of perServer) {
@@ -127,10 +132,12 @@ export async function POST(req: Request) {
       const writes: Entry[] = [];
       for (const def of defs) {
         if (taken.has(def.name)) continue;
+        const mode = effectiveMode(def.readOnly, overrides[s.name]?.[def.name]);
+        if (mode === "off") continue;
         taken.add(def.name);
         const enrichment = findEnrichment(s, def.name);
         const enriched = applyEnrichment(def, enrichment);
-        if (def.readOnly) {
+        if (mode === "auto") {
           reads.push({ server: s, def: enriched });
         } else if (actionsEnabled) {
           // Pin curated (enriched) writes — attach now, exempt from the

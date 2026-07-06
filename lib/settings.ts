@@ -20,7 +20,8 @@ export type SettingKey =
   | "mcp.servers"
   | "connect.service_url"
   | "connect.api_key"
-  | "connect.apps";
+  | "connect.apps"
+  | "connect.tool_overrides";
 
 export type SettingDef = {
   key: SettingKey;
@@ -141,10 +142,19 @@ export const SETTING_DEFS: SettingDef[] = [
     key: "connect.apps",
     label: "Chief Connect — apps",
     description:
-      "Comma-separated Pipedream app slugs to offer (e.g. gmail, google_calendar, notion, slack).",
+      "Comma-separated Pipedream app slugs to offer (e.g. gmail, google_calendar, notion, slack). The Connections search adds to this automatically.",
     default: "gmail, google_calendar",
     singleLine: true,
     placeholder: "gmail, google_calendar",
+  },
+  {
+    key: "connect.tool_overrides",
+    label: "Connectors — per-tool modes (managed)",
+    description:
+      "JSON managed by the tool list under Connections (auto/ask/off per tool). Reads can be auto; writes are always ask or off. Edit by hand only if you know what you're doing.",
+    default: "",
+    rows: 3,
+    placeholder: '{"pipedream-asana": {"create-task": "off"}}',
   },
 ];
 

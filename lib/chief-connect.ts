@@ -12,7 +12,7 @@
 // client, direct MCP URL), so this whole layer is ejectable. Blank settings =
 // the layer is off and the app is exactly as sovereign as before.
 
-import { getAppSettings } from "@/lib/settings";
+import { getAppSettings, saveAppSettings } from "@/lib/settings";
 import type { McpServerConfig } from "@/lib/mcp";
 
 const MCP_BASE = "https://remote.mcp.pipedream.net/v3";
@@ -104,6 +104,41 @@ export async function getConnectLink(app?: string): Promise<string> {
   );
   if (!data.connectLinkUrl) throw new Error("No connect link returned.");
   return app ? `${data.connectLinkUrl}&app=${encodeURIComponent(app)}` : data.connectLinkUrl;
+}
+
+export type CatalogApp = {
+  slug: string;
+  name: string;
+  description?: string;
+  img?: string;
+};
+
+/** Search Pipedream's app catalog by name, via the Connect service. */
+export async function searchConnectApps(q: string): Promise<CatalogApp[]> {
+  const config = await getConnectConfig();
+  if (!config || !q.trim()) return [];
+  const data = await serviceFetch<{ apps: CatalogApp[] }>(config, "/api/apps", {
+    q: q.trim(),
+  });
+  return data.apps ?? [];
+}
+
+/** Add an app slug to the enabled list (idempotent). */
+export async function addConnectApp(
+  userId: string,
+  slug: string,
+): Promise<void> {
+  const clean = slug.trim().toLowerCase();
+  if (!clean) return;
+  const settings = await getAppSettings();
+  const apps = settings["connect.apps"]
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (!apps.includes(clean)) {
+    apps.push(clean);
+    await saveAppSettings({ "connect.apps": apps.join(", ") }, userId);
+  }
 }
 
 export async function disconnectConnectAccount(accountId: string): Promise<void> {
