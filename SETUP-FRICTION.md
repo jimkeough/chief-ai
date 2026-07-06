@@ -280,3 +280,24 @@ Options, in order of fit:
    provider-agnostic (Outlook/Fastmail/iCloud via the advanced host fields).
    OAuth stays as the scoped path. The GCloud errand (entry 9) is now
    OPTIONAL, which shrinks the concierge's hardest set piece to a nice-to-have.
+
+### 10. THE STRATEGY DECISION: hybrid — sovereign core, brokered edges (Jim, 2026-07-06)
+Jim chose the middle ground between full sovereignty and full SaaS:
+- **Infra stays sovereign and collapses to one click**: the README Deploy
+  button now bundles the Supabase Vercel-Marketplace product — clone repo →
+  Vercel project → Supabase auto-provisioned on the user's account with
+  migrations run and env vars injected → one prompt for the Anthropic key.
+  Remaining manual steps: create the login user (Supabase → Auth → Add user)
+  and connect email (paste an app password). That's the whole funnel.
+- **Connectors get an optional PAID hub — "Chief Connect"**: an operator-run
+  token service (connect-service/, standalone deploy) holding the Pipedream
+  Connect credentials; user deployments hold only a subscription key. 2-click
+  OAuth for Gmail/Calendar/Notion/etc. through Pipedream's verified clients
+  (~$150/mo for 100 users, ~$2/user after → a ~$5/mo subscription covers it).
+- **Trust ledger formalized in TRUST.md**: what the hub can see (connected-app
+  list + Pipedream-managed tokens), what it never sees (DB, keys, mail,
+  approvals), and the eject path (every connector has a sovereign twin;
+  blanking two settings removes the layer).
+- MVP security note: Pipedream access tokens are project-scoped; isolation
+  rests on unguessable per-customer externalUserIds. Hardening path: proxy
+  MCP calls through the service. Documented in connect-service/README.

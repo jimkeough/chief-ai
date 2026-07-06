@@ -17,7 +17,10 @@ export type SettingKey =
   | "actions.enabled"
   | "web.fetch_enabled"
   | "connectors.max_chief_tools"
-  | "mcp.servers";
+  | "mcp.servers"
+  | "connect.service_url"
+  | "connect.api_key"
+  | "connect.apps";
 
 export type SettingDef = {
   key: SettingKey;
@@ -111,6 +114,37 @@ export const SETTING_DEFS: SettingDef[] = [
     default: "",
     rows: 6,
     placeholder: '[{"name": "…", "url": "https://…"}]',
+  },
+  // --- Chief Connect (optional paid connector hub) --------------------------
+  // The 2-click alternative to configuring servers by hand: a small operator-
+  // run service (see connect-service/) brokers Pipedream Connect's managed
+  // OAuth. Leave blank to stay fully sovereign — every connector has a DIY
+  // twin (app password, own OAuth client, direct MCP URL above).
+  {
+    key: "connect.service_url",
+    label: "Chief Connect — service URL",
+    description:
+      "The Chief Connect service you subscribe to (e.g. https://connect.example.com). Blank = off.",
+    default: "",
+    singleLine: true,
+    placeholder: "https://…",
+  },
+  {
+    key: "connect.api_key",
+    label: "Chief Connect — API key",
+    description: "The key issued with your Chief Connect subscription.",
+    default: "",
+    singleLine: true,
+    placeholder: "ck_…",
+  },
+  {
+    key: "connect.apps",
+    label: "Chief Connect — apps",
+    description:
+      "Comma-separated Pipedream app slugs to offer (e.g. gmail, google_calendar, notion, slack).",
+    default: "gmail, google_calendar",
+    singleLine: true,
+    placeholder: "gmail, google_calendar",
   },
 ];
 

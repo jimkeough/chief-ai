@@ -105,6 +105,13 @@ export async function POST(req: Request) {
     if (!cfg && server === "gmail") {
       cfg = (await gmailMcpServer().catch(() => null)) ?? undefined;
     }
+    if (!cfg && server.startsWith("pipedream-")) {
+      // Chief Connect servers resolve fresh so the bearer token is current.
+      const { getConnectServers } = await import("@/lib/chief-connect");
+      cfg = (await getConnectServers().catch(() => [])).find(
+        (s) => s.name === server,
+      );
+    }
     if (!cfg || !key) {
       return Response.json(
         { ok: false, error: "Unknown or not-permitted server." },

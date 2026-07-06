@@ -36,6 +36,13 @@ type Status = {
 
 type KbDoc = { id: string; title: string; updated_at: string };
 
+type ConnectStatus = {
+  configured: boolean;
+  apps?: string[];
+  accounts?: { id: string; app: string; name?: string; healthy: boolean }[];
+  error?: string;
+};
+
 const card =
   "flex flex-col gap-3 rounded-card border p-4";
 const cardStyle = {
@@ -79,13 +86,15 @@ export default function ConfigClient() {
   const [instructions, setInstructions] = useState<KbDoc[]>([]);
   const [memory, setMemory] = useState<KbDoc[]>([]);
   const [newRule, setNewRule] = useState("");
+  const [connect, setConnect] = useState<ConnectStatus | null>(null);
 
   const refresh = useCallback(async () => {
-    const [s, st, ins, mem] = await Promise.all([
+    const [s, st, ins, mem, con] = await Promise.all([
       fetch("/api/settings").then((r) => r.json()).catch(() => null),
       fetch("/api/config/status").then((r) => r.json()).catch(() => null),
       fetch("/api/kb?kind=instruction").then((r) => r.json()).catch(() => null),
       fetch("/api/kb?kind=fact").then((r) => r.json()).catch(() => null),
+      fetch("/api/connect").then((r) => r.json()).catch(() => null),
     ]);
     if (s) {
       setDefs(s.defs ?? []);
@@ -94,7 +103,27 @@ export default function ConfigClient() {
     if (st) setStatus(st as Status);
     if (ins) setInstructions((ins.documents ?? []) as KbDoc[]);
     if (mem) setMemory(((mem.documents ?? []) as KbDoc[]).slice(0, 20));
+    if (con) setConnect(con as ConnectStatus);
   }, []);
+
+  const openConnectLink = async (app: string) => {
+    const res = await fetch("/api/connect/link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ app }),
+    }).catch(() => null);
+    const body = (await res?.json().catch(() => ({}))) as { ok?: boolean; url?: string };
+    if (body?.ok && body.url) window.open(body.url, "_blank", "noopener");
+  };
+
+  const disconnectAccount = async (accountId: string) => {
+    await fetch("/api/connect/disconnect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId }),
+    }).catch(() => {});
+    await refresh();
+  };
 
   useEffect(() => {
     void refresh();
@@ -197,12 +226,70 @@ export default function ConfigClient() {
             </Link>
           </div>
           <div className="h-px" style={{ background: "var(--hairline)" }} />
-          <p className="text-[13px] leading-relaxed text-ink-2">
-            Remote MCP connectors (calendar, tickets, …) are configured in the
-            <span className="font-mono text-[12px]"> Connectors — MCP servers </span>
-            setting below. Reads run freely; anything that writes becomes an
-            approval card.
-          </p>
+
+          {/* Chief Connect: the optional hub. Falls back to the DIY note. */}
+          {connect?.configured ? (
+            <div className="flex flex-col gap-2.5">
+              <div className="font-mono text-[10px] tracking-[0.1em] text-teal">
+                CHIEF CONNECT
+              </div>
+              {connect.error && (
+                <div className="text-[13px]" style={{ color: "var(--danger)" }}>
+                  {connect.error}
+                </div>
+              )}
+              {(connect.accounts ?? []).map((a) => (
+                <div key={a.id} className="flex items-center gap-3">
+                  <Dot ok={a.healthy} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14.5px] text-ink">{a.app}</div>
+                    {a.name && (
+                      <div className="truncate font-mono text-[11px] text-ink-3">
+                        {a.name}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => void disconnectAccount(a.id)}
+                    className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-ink-3"
+                  >
+                    DISCONNECT
+                  </button>
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-2">
+                {(connect.apps ?? [])
+                  .filter(
+                    (app) => !(connect.accounts ?? []).some((a) => a.app === app),
+                  )
+                  .map((app) => (
+                    <button
+                      key={app}
+                      onClick={() => void openConnectLink(app)}
+                      className="rounded-control border px-3 py-2 text-[13.5px] text-ink"
+                      style={{ borderColor: "var(--teal-border)" }}
+                    >
+                      Connect {app.replace(/_/g, " ")} →
+                    </button>
+                  ))}
+              </div>
+              <p className="text-[12.5px] leading-relaxed text-ink-3">
+                Connections run through your Chief Connect subscription (2-click
+                OAuth). Every one has a do-it-yourself twin — app password, your
+                own OAuth client, or a direct MCP server below — so you can eject
+                any time.
+              </p>
+            </div>
+          ) : (
+            <p className="text-[13px] leading-relaxed text-ink-2">
+              Remote MCP connectors (calendar, tickets, …) are configured in the
+              <span className="font-mono text-[12px]"> Connectors — MCP servers </span>
+              setting below — or set the{" "}
+              <span className="font-mono text-[12px]">Chief Connect</span> URL +
+              key for 2-click connections. Reads run freely; anything that writes
+              becomes an approval card.
+            </p>
+          )}
         </div>
       </Section>
 

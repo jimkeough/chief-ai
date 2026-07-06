@@ -85,6 +85,13 @@ export async function POST(req: Request) {
     brokerServers = (await getMcpServers()).filter((s) => s.name !== "gmail");
     const gmail = await (await import("@/lib/gmail")).gmailMcpServer().catch(() => null);
     if (gmail) brokerServers.push(gmail);
+    // Chief Connect (the optional hub): same broker treatment as everything
+    // else. User-configured servers win on a name collision.
+    const connect = await (await import("@/lib/chief-connect"))
+      .getConnectServers()
+      .catch(() => []);
+    const taken = new Set(brokerServers.map((s) => s.name));
+    brokerServers.push(...connect.filter((s) => !taken.has(s.name)));
   }
 
   const brokerReads: { server: McpServerConfig; def: McpToolDef }[] = [];

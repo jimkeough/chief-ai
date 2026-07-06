@@ -2,6 +2,16 @@
 
 A self-hosted personal AI chief of staff. One user per deployment (your Vercel + your Supabase + your Anthropic key). Chief proposes; you approve.
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit&project-name=chief&repository-name=chief&env=ANTHROPIC_API_KEY&envDescription=Your%20Anthropic%20API%20key%20powers%20Chief%20%E2%80%94%20create%20one%20at%20console.anthropic.com&envLink=https%3A%2F%2Fconsole.anthropic.com%2Fsettings%2Fkeys&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22supabase%22%2C%22integrationSlug%22%3A%22supabase%22%7D%5D)
+
+**One-click path:** the button clones this repo to your GitHub, creates the
+Vercel project, **provisions a Supabase database on your own account
+(migrations run automatically, env vars injected)**, and asks for one thing —
+your Anthropic API key. After deploy: create your login (Supabase dashboard →
+Authentication → Add user), sign in, and connect your email from the Inbox tab
+with an app password. Everything runs on accounts you own; see `TRUST.md` for
+exactly what that means.
+
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,ANTHROPIC_API_KEY&envDescription=Your%20own%20Supabase%20project%20URL%20%2B%20anon%20key%2C%20and%20your%20Anthropic%20API%20key.&envLink=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit%2Fblob%2Fmain%2F.env.example)
 
 Deploying your own copy: click the button (it clones this repo into your
