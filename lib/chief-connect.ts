@@ -147,6 +147,54 @@ export async function disconnectConnectAccount(accountId: string): Promise<void>
   await serviceFetch(config, "/api/disconnect", { accountId });
 }
 
+// --- Proactive triggers ------------------------------------------------------
+
+export type TriggerComponent = {
+  id: string;
+  name: string;
+  description?: string;
+};
+
+/** The deployable trigger components for one app (e.g. "New task assigned"). */
+export async function listTriggerComponents(
+  app: string,
+): Promise<TriggerComponent[]> {
+  const config = await getConnectConfig();
+  if (!config) return [];
+  const data = await serviceFetch<{ components: TriggerComponent[] }>(
+    config,
+    "/api/triggers",
+    { action: "list-components", app },
+  );
+  return data.components ?? [];
+}
+
+/** Deploy a trigger for this user that POSTs events to `webhookUrl`. Returns
+ *  the Pipedream deployed-trigger id + the signing key for verification. */
+export async function deployTrigger(input: {
+  id: string;
+  webhookUrl: string;
+  configuredProps?: Record<string, unknown>;
+}): Promise<{ id: string; name?: string; signingKey: string | null }> {
+  const config = await getConnectConfig();
+  if (!config) throw new Error("Chief Connect isn't configured.");
+  return serviceFetch(config, "/api/triggers", {
+    action: "deploy",
+    id: input.id,
+    webhookUrl: input.webhookUrl,
+    configuredProps: input.configuredProps ?? {},
+  });
+}
+
+export async function deleteConnectTrigger(triggerId: string): Promise<void> {
+  const config = await getConnectConfig();
+  if (!config) throw new Error("Chief Connect isn't configured.");
+  await serviceFetch(config, "/api/triggers", {
+    action: "delete",
+    triggerId,
+  });
+}
+
 function buildMcpUrl(
   token: McpToken,
   app: string,

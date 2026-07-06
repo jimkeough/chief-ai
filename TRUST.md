@@ -19,6 +19,14 @@ Everything below runs on infrastructure **you** own and bill:
   performs a write is `app/api/actions/execute`, on your explicit approval.
   Reversible actions carry Undo; sending email requires slide-to-confirm.
   Every executed action lands in the append-only journal.
+- **Proactive events stay proposals.** When you turn on "notify me when…"
+  (Config → Connections), Pipedream pushes events to `/api/events/pipedream`.
+  That endpoint has no session, so it uses the Supabase service-role key —
+  the one sanctioned exception to the session-client rule — and only after
+  verifying the unguessable per-trigger token (plus Pipedream's signature).
+  An incoming event can update your board and *queue* a proposal; it can
+  never act on its own. Leave `SUPABASE_SERVICE_ROLE_KEY` unset and the whole
+  proactive path is simply off.
 
 No telemetry, no phone-home, no vendor account required. The app works
 end-to-end in this mode: email over an app password, connectors as direct

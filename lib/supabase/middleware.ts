@@ -39,7 +39,10 @@ export async function updateSession(request: NextRequest) {
     path === "/manifest.webmanifest" ||
     path.startsWith("/auth/") ||
     path.startsWith("/icon") ||
-    path.startsWith("/apple-icon");
+    path.startsWith("/apple-icon") ||
+    // Proactive-event ingest: Pipedream posts here with no session; the route
+    // authenticates by the per-trigger token in the URL.
+    path === "/api/events/pipedream";
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
