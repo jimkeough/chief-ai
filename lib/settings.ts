@@ -13,6 +13,8 @@ export type SettingKey =
   | "waiting.aging_days"
   | "focus.top_count"
   | "chief.model"
+  | "ai.provider"
+  | "ai.gateway_key"
   | "mcp.chat_enabled"
   | "actions.enabled"
   | "web.fetch_enabled"
@@ -61,10 +63,34 @@ export const SETTING_DEFS: SettingDef[] = [
     key: "chief.model",
     label: "Chief — model",
     description:
-      "The Claude model Chief runs on. Leave at the default unless you have a reason to change it.",
+      "The model Chief runs on. In the default (Anthropic) mode this is a Claude id like claude-opus-4-8. In AI Gateway mode it can be any gateway model id — e.g. anthropic/claude-opus-4.7 or openai/gpt-5 — a bare id is assumed to be Anthropic.",
     default: "claude-opus-4-8",
     singleLine: true,
     placeholder: "claude-opus-4-8",
+  },
+  // --- AI provider (optional AI Gateway) ----------------------------------
+  // Sovereign default: your Anthropic key, sent only to Anthropic. Flip to
+  // "gateway" to route through Vercel AI Gateway instead — one endpoint, any
+  // model, and (on your own Vercel deployment) no Anthropic key to fetch at
+  // all: the project's OIDC token authenticates and usage bills to your own
+  // Vercel account. Eject by flipping back to "anthropic". See TRUST.md.
+  {
+    key: "ai.provider",
+    label: "AI — provider",
+    description:
+      "Where Chief's model calls go. \"anthropic\" (default) = your Anthropic API key, sent only to Anthropic. \"gateway\" = Vercel AI Gateway (any model; on a Vercel deployment the OIDC token authenticates and it bills to your Vercel account, so no Anthropic key is needed).",
+    default: "anthropic",
+    singleLine: true,
+    placeholder: "anthropic",
+  },
+  {
+    key: "ai.gateway_key",
+    label: "AI Gateway — API key (optional)",
+    description:
+      "Only for gateway mode. Leave BLANK on a Vercel deployment — the project's OIDC token is used automatically. Paste an AI Gateway key only for local dev or if you prefer an explicit key over OIDC.",
+    default: "",
+    singleLine: true,
+    placeholder: "(blank — uses Vercel OIDC)",
   },
   // --- Chief loop switches (Phase 3) --------------------------------------
   // Two kill switches, both must be on for a write to execute: the master

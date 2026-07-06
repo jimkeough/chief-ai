@@ -6,6 +6,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getAuthed, unauthorized } from "@/lib/auth";
 import { getAppSettings } from "@/lib/settings";
+import { resolveAi } from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,11 +24,6 @@ const CACHE = new Map<string, string>();
 export async function POST(req: Request) {
   if (!(await getAuthed())) return unauthorized();
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return Response.json({ ok: false, error: "ANTHROPIC_API_KEY is not set." }, { status: 500 });
-  }
-
   const { messageId, from, subject, body } = (await req.json().catch(() => ({}))) as {
     messageId?: string;
     from?: string;
@@ -43,8 +39,11 @@ export async function POST(req: Request) {
   if (cached) return Response.json({ ok: true, read: cached });
 
   const settings = await getAppSettings();
-  const model = process.env.ANTHROPIC_MODEL || settings["chief.model"];
-  const client = new Anthropic({ apiKey });
+  const ai = await resolveAi({ settings });
+  if (!ai) {
+    return Response.json({ ok: false, error: "No AI provider is configured." }, { status: 500 });
+  }
+  const { client, model } = ai;
   const msg = await client.messages.create({
     model,
     max_tokens: 100,

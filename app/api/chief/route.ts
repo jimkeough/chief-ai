@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getAuthed } from "@/lib/auth";
 import { getAppSettings } from "@/lib/settings";
+import { resolveAi } from "@/lib/ai";
 import { buildChiefSystemPrompt, type ChiefPageContext } from "@/lib/chief";
 import { getMcpServers, type McpServerConfig } from "@/lib/mcp";
 import { listMcpTools, callMcpTool, type McpToolDef } from "@/lib/mcp-broker";
@@ -75,11 +76,14 @@ export async function POST(req: Request) {
   const authed = await getAuthed();
   if (!authed) return new Response("Not signed in.", { status: 401 });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return new Response("ANTHROPIC_API_KEY is not set.", { status: 500 });
-
   const settings = await getAppSettings();
-  const model = process.env.ANTHROPIC_MODEL || settings["chief.model"];
+  const ai = await resolveAi({ settings });
+  if (!ai)
+    return new Response(
+      'No AI provider is configured. Set ANTHROPIC_API_KEY, or switch "ai.provider" to "gateway" in Config (a Vercel deployment authenticates the gateway automatically).',
+      { status: 500 },
+    );
+  const model = ai.model;
 
   const mcpEnabled = settings["mcp.chat_enabled"].trim().toLowerCase() === "on";
   if (!mcpEnabled) {
@@ -277,7 +281,7 @@ export async function POST(req: Request) {
     { type: "text", text: system, cache_control: { type: "ephemeral" } },
   ];
 
-  const client = new Anthropic({ apiKey });
+  const client = ai.client;
   const convo: Anthropic.MessageParam[] = (messages ?? []).map((m) => ({
     role: m.role,
     content: m.content,

@@ -5,6 +5,7 @@
 // regardless of which surface triggers it.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { resolveAi } from "@/lib/ai";
 import { getKbDocument } from "./store";
 
 const DEFAULT_MODEL = "claude-opus-4-8";
@@ -70,11 +71,11 @@ export async function reconcileKbEntry(
   existingId: string,
   note: { title?: string; body: string; tags?: string[] },
 ): Promise<ReconciledNote> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
-  if (!apiKey) {
-    throw new ReconcileError("Anthropic is not configured.", 500);
+  const ai = await resolveAi({ model: process.env.ANTHROPIC_MODEL || DEFAULT_MODEL });
+  if (!ai) {
+    throw new ReconcileError("No AI provider is configured.", 500);
   }
+  const model = ai.model;
 
   const existing = await getKbDocument(existingId);
   if (!existing) {
@@ -94,7 +95,7 @@ export async function reconcileKbEntry(
     note.body,
   ].join("\n");
 
-  const client = new Anthropic({ apiKey });
+  const client = ai.client;
   const msg = await client.messages.create({
     model,
     max_tokens: 1024,

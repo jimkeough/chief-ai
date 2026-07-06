@@ -7,6 +7,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getAuthed, unauthorized } from "@/lib/auth";
 import { getAppSettings } from "@/lib/settings";
+import { resolveAi } from "@/lib/ai";
 import { buildFocusSnapshot } from "@/lib/focus";
 import { listProjectsWithState } from "@/lib/projects";
 
@@ -37,8 +38,7 @@ export async function GET() {
   ]);
 
   let narrative = CACHE.get(fingerprint) ?? "";
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!narrative && apiKey && snapshot.top.length > 0) {
+  if (!narrative && snapshot.top.length > 0) {
     try {
       const projects = await listProjectsWithState().catch(() => []);
       const projectLines = projects
@@ -47,8 +47,9 @@ export async function GET() {
         .map((p) => `- ${p.name}: ${p.state?.current_state ?? "(no state)"}`)
         .join("\n");
       const settings = await getAppSettings();
-      const model = process.env.ANTHROPIC_MODEL || settings["chief.model"];
-      const client = new Anthropic({ apiKey });
+      const ai = await resolveAi({ settings });
+      if (!ai) throw new Error("no AI provider configured");
+      const { client, model } = ai;
       const msg = await client.messages.create({
         model,
         max_tokens: 120,

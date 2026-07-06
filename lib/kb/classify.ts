@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { resolveAi } from "@/lib/ai";
 
 // Classify-on-save: when a new fact is created without an explicit area, file it
 // into the user's EXISTING locked areas (the AI-derived taxonomy). This keeps the
@@ -34,9 +35,10 @@ export async function classifyArea(input: {
   body: string;
   tags?: string[];
 }): Promise<{ area: string; topic: string | null } | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
-  if (!apiKey || input.areas.length === 0) return null;
+  if (input.areas.length === 0) return null;
+  const ai = await resolveAi({ model: process.env.ANTHROPIC_MODEL || DEFAULT_MODEL });
+  if (!ai) return null;
+  const model = ai.model;
 
   const areaList = input.areas
     .map(
@@ -61,7 +63,7 @@ export async function classifyArea(input: {
     .join("\n");
 
   try {
-    const client = new Anthropic({ apiKey });
+    const client = ai.client;
     const msg = await client.messages.create({
       model,
       max_tokens: 200,
