@@ -4,10 +4,15 @@ A self-hosted personal AI chief of staff. One user per deployment (your Vercel +
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit&project-name=chief&repository-name=chief&env=ANTHROPIC_API_KEY&envDescription=Your%20Anthropic%20API%20key%20powers%20Chief%20%E2%80%94%20create%20one%20at%20console.anthropic.com&envLink=https%3A%2F%2Fconsole.anthropic.com%2Fsettings%2Fkeys&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22supabase%22%2C%22integrationSlug%22%3A%22supabase%22%7D%5D)
 
-**One-click path:** the button clones this repo to your GitHub, creates the
-Vercel project, **provisions a Supabase database on your own account
-(migrations run automatically, env vars injected)**, and asks for one thing —
-your Anthropic API key. After deploy: create your login (Supabase dashboard →
+**One-click path — two signups, Vercel + GitHub.** The button clones this repo
+to your GitHub and creates the Vercel project (those are the only two accounts
+you need), then **provisions a Supabase database on your own account through
+the Vercel Marketplace — migrations run automatically, env vars injected**, so
+there's no separate supabase.com signup. It asks for one thing: your Anthropic
+API key. *(Rather not make a trip to console.anthropic.com? Leave it blank and,
+after first render, switch to Vercel AI Gateway in Config → **AI — provider** =
+`gateway` — usage then bills to your own Vercel account and no Anthropic key is
+needed. See `TRUST.md`.)* After deploy: create your login (Supabase dashboard →
 Authentication → Add user), sign in, and connect your email from the Inbox tab
 with an app password. Everything runs on accounts you own; see `TRUST.md` for
 exactly what that means.
