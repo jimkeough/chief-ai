@@ -29,6 +29,8 @@ import {
 } from "@/lib/kb/store";
 import { reconcileKbEntry, ReconcileError } from "@/lib/kb/reconcile";
 import { createContact } from "@/lib/contacts";
+import { gmailMcpServer, archiveThread, sendGmailReply } from "@/lib/gmail";
+import { recordCommunication } from "@/lib/communications";
 import type { UndoDescriptor } from "@/lib/undo";
 import {
   createTask,
@@ -95,7 +97,13 @@ export async function POST(req: Request) {
   // already satisfied. No undo descriptor: the write ran on an external system
   // we can't safely reverse.
   if (server) {
-    const cfg = (await getMcpServers()).find((s) => s.name === server);
+    // The built-in Gmail connection resolves like any configured server, so an
+    // approved Gmail MCP write (e.g. create_draft proposed by Chief) executes
+    // through the same default-deny path.
+    let cfg = (await getMcpServers()).find((s) => s.name === server);
+    if (!cfg && server === "gmail") {
+      cfg = (await gmailMcpServer().catch(() => null)) ?? undefined;
+    }
     if (!cfg || !key) {
       return Response.json(
         { ok: false, error: "Unknown or not-permitted server." },
@@ -540,6 +548,76 @@ export async function POST(req: Request) {
 
       return Response.json(
         { ok: false, error: "Unknown project action." },
+        { status: 400 },
+      );
+    }
+
+    if (action.via === "gmail") {
+      const threadId = String(safeArgs.thread_id ?? "").trim();
+      if (!threadId) {
+        return Response.json(
+          { ok: false, error: "No email thread to act on." },
+          { status: 400 },
+        );
+      }
+
+      if (action.key === "archive_email") {
+        const server = await gmailMcpServer();
+        if (!server) {
+          return Response.json(
+            { ok: false, error: "Gmail is not connected." },
+            { status: 503 },
+          );
+        }
+        await archiveThread(server, threadId);
+        const subject = opt(safeArgs.subject);
+        await journal("Archived email", subject ?? threadId);
+        const undo: UndoDescriptor = {
+          kind: "unarchive_thread",
+          thread_id: threadId,
+          label: `Back in inbox${subject ? `: ${subject}` : ""}`,
+        };
+        return Response.json({
+          ok: true,
+          result: `Archived${subject ? ` — ${subject}` : "."}`,
+          undo,
+        });
+      }
+
+      if (action.key === "reply_email") {
+        // The ONE send in the app. Runs only here, only on an approved
+        // red-tier proposal (slide-to-send). No undo — it's irreversible.
+        const to = Array.isArray(safeArgs.to)
+          ? (safeArgs.to as unknown[]).map((t) => String(t).trim()).filter(Boolean)
+          : [];
+        const cc = Array.isArray(safeArgs.cc)
+          ? (safeArgs.cc as unknown[]).map((t) => String(t).trim()).filter(Boolean)
+          : [];
+        const subject = String(safeArgs.subject ?? "").trim();
+        const body = String(safeArgs.body ?? "").trim();
+        if (to.length === 0 || !subject || !body) {
+          return Response.json(
+            { ok: false, error: "The reply needs recipients, a subject, and a body." },
+            { status: 400 },
+          );
+        }
+        await sendGmailReply({ threadId, to, cc, subject, body });
+        // The outbound lands in the append-only communications log — this is
+        // what the waiting-on cross-reference reads.
+        await recordCommunication({
+          channel: "email",
+          direction: "out",
+          subject,
+          bodyText: body,
+          externalThreadId: threadId,
+          metadata: { to, cc },
+        }).catch(() => {});
+        await journal("Sent reply", `${subject} → ${to.join(", ")}`);
+        return Response.json({ ok: true, result: `Sent — ${subject}` });
+      }
+
+      return Response.json(
+        { ok: false, error: "Unknown Gmail action." },
         { status: 400 },
       );
     }

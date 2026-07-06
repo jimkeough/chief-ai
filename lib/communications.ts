@@ -72,6 +72,20 @@ export async function listCommunications(
   return (data ?? []) as Communication[];
 }
 
+/** True when a specific Gmail message was already recorded — the inbox view
+ *  logs each inbound message once, keyed by metadata.gmail_message_id. */
+export async function hasEmailCommunication(messageId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("communications")
+    .select("id")
+    .contains("metadata", { gmail_message_id: messageId })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(data);
+}
+
 /**
  * Has this contact sent anything since `sinceIso`? Drives the Waiting-on strip:
  * green = they moved (an inbound message after the task entered waiting),

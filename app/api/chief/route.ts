@@ -75,10 +75,17 @@ export async function POST(req: Request) {
   // reads happen on a turn without the untrusted content, or behind approval.
   const untrustedTurn = page?.untrusted === true;
 
-  // Broker every configured server so Chief can read across all of them.
-  const brokerServers: McpServerConfig[] = untrustedTurn
-    ? []
-    : await getMcpServers();
+  // Broker every configured server so Chief can read across all of them —
+  // plus Gmail when connected (its reads are annotated read-only, so
+  // search_threads/get_thread run transparently and its writes gate like any
+  // other connector's). A user-configured server named "gmail" would collide,
+  // so the built-in wins.
+  let brokerServers: McpServerConfig[] = [];
+  if (!untrustedTurn) {
+    brokerServers = (await getMcpServers()).filter((s) => s.name !== "gmail");
+    const gmail = await (await import("@/lib/gmail")).gmailMcpServer().catch(() => null);
+    if (gmail) brokerServers.push(gmail);
+  }
 
   const brokerReads: { server: McpServerConfig; def: McpToolDef }[] = [];
   const brokerWrites: { server: McpServerConfig; def: McpToolDef }[] = [];

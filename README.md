@@ -20,11 +20,23 @@ Build phases completed so far: **1** (skeleton, design system, PWA shell,
 migrations, single-user auth) · **2** (core domain: projects with living
 current-state records, tasks with waiting status, settings, journal, contacts,
 communications log, knowledge base with hybrid search; Tasks & Projects
-screens).
+screens) · **3** (the Chief loop: streaming chat with the approve-first write
+gate, proposal cards with undo, MCP broker, journaled executor).
 
-**Existing deployments:** after pulling Phase 2, run the new files in
+**Existing deployments:** after pulling a phase, run the new files in
 `supabase/migrations/` (anything newer than what you've applied) in the SQL
 editor.
+
+### Gmail (the Inbox)
+
+The inbox reads through **Google's official Gmail remote MCP server** with an
+OAuth grant you approve; tokens live only in your own database. You bring your
+own Google Cloud OAuth client — the step-by-step (project, the two APIs, the
+consent screen + scopes, the redirect URI) is in `.env.example` under the
+Google section. Set `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, deploy, then tap
+**Connect Gmail** on the Inbox screen. Archive is a reversible label change;
+**Reply actually sends** (a single Gmail REST call in the executor) and only
+ever runs behind the copper slide-to-send card.
 
 ## For Claude Code
 
