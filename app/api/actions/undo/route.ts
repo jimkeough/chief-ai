@@ -12,6 +12,7 @@ import { UNDO_KINDS, type UndoDescriptor } from "@/lib/undo";
 import { deleteKbDocument, updateKbDocument } from "@/lib/kb/store";
 import { deleteContact } from "@/lib/contacts";
 import { gmailMcpServer, unarchiveThread } from "@/lib/gmail";
+import { getMailAccount, imapUnarchive } from "@/lib/mail";
 import {
   deleteTask,
   updateTask,
@@ -237,6 +238,23 @@ export async function POST(req: Request) {
         );
       }
       await unarchiveThread(server, String(undo.thread_id ?? ""));
+      await journal(label);
+      return Response.json({ ok: true, result: label });
+    }
+
+    if (undo.kind === "unarchive_imap") {
+      const account = await getMailAccount();
+      if (!account) {
+        return Response.json(
+          { ok: false, error: "No mail account is connected." },
+          { status: 503 },
+        );
+      }
+      await imapUnarchive(
+        account,
+        String(undo.uid ?? ""),
+        String(undo.mailbox ?? "Archive"),
+      );
       await journal(label);
       return Response.json({ ok: true, result: label });
     }

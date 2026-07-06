@@ -27,16 +27,25 @@ gate, proposal cards with undo, MCP broker, journaled executor).
 `supabase/migrations/` (anything newer than what you've applied) in the SQL
 editor.
 
-### Gmail (the Inbox)
+### Email (the Inbox)
 
-The inbox reads through **Google's official Gmail remote MCP server** with an
-OAuth grant you approve; tokens live only in your own database. You bring your
-own Google Cloud OAuth client — the step-by-step (project, the two APIs, the
-consent screen + scopes, the redirect URI) is in `.env.example` under the
-Google section. Set `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, deploy, then tap
-**Connect Gmail** on the Inbox screen. Archive is a reversible label change;
-**Reply actually sends** (a single Gmail REST call in the executor) and only
-ever runs behind the copper slide-to-send card.
+Two ways to connect, both storing credentials only in your own database:
+
+1. **App password (the easy path, any provider).** Turn on 2-Step
+   Verification, generate an app password (Gmail:
+   myaccount.google.com/apppasswords), and paste it into the Inbox screen's
+   connect form. Works over IMAP/SMTP with Gmail, Outlook, Fastmail, iCloud —
+   the form's advanced fields take any host. Trade-off: an app password is a
+   full-mailbox credential (revocable at your provider any time).
+2. **Google OAuth (the scoped path).** Reads through Google's official Gmail
+   remote MCP server with a grant limited to mail scopes. You bring your own
+   Google Cloud OAuth client — step-by-step in `.env.example` under the Google
+   section; set `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, deploy, then tap
+   Connect with Google OAuth.
+
+Either way the write gate is identical: archive is a reversible standard card
+(with Undo), and **Reply actually sends** — only ever behind the copper
+slide-to-send card, through the one executor.
 
 ## For Claude Code
 

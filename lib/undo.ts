@@ -32,7 +32,8 @@ export type UndoDescriptor =
       label: string;
     }
   | { kind: "delete_contact"; id: string; label: string }
-  | { kind: "unarchive_thread"; thread_id: string; label: string };
+  | { kind: "unarchive_thread"; thread_id: string; label: string }
+  | { kind: "unarchive_imap"; uid: string; mailbox: string; label: string };
 
 export const UNDO_KINDS = new Set<string>([
   "delete_task",
@@ -45,4 +46,5 @@ export const UNDO_KINDS = new Set<string>([
   "restore_kb",
   "delete_contact",
   "unarchive_thread",
+  "unarchive_imap",
 ]);

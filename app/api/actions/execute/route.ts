@@ -29,7 +29,8 @@ import {
 } from "@/lib/kb/store";
 import { reconcileKbEntry, ReconcileError } from "@/lib/kb/reconcile";
 import { createContact } from "@/lib/contacts";
-import { gmailMcpServer, archiveThread, sendGmailReply } from "@/lib/gmail";
+import { gmailMcpServer } from "@/lib/gmail";
+import { getMailProvider } from "@/lib/mail";
 import { recordCommunication } from "@/lib/communications";
 import type { UndoDescriptor } from "@/lib/undo";
 import {
@@ -569,25 +570,20 @@ export async function POST(req: Request) {
       }
 
       if (action.key === "archive_email") {
-        const server = await gmailMcpServer();
-        if (!server) {
+        const provider = await getMailProvider();
+        if (!provider) {
           return Response.json(
-            { ok: false, error: "Gmail is not connected." },
+            { ok: false, error: "No mail account is connected." },
             { status: 503 },
           );
         }
-        await archiveThread(server, threadId);
         const subject = opt(safeArgs.subject);
+        const undo = await provider.archive(threadId, subject);
         await journal("Archived email", subject ?? threadId);
-        const undo: UndoDescriptor = {
-          kind: "unarchive_thread",
-          thread_id: threadId,
-          label: `Back in inbox${subject ? `: ${subject}` : ""}`,
-        };
         return Response.json({
           ok: true,
           result: `Archived${subject ? ` — ${subject}` : "."}`,
-          undo,
+          ...(undo ? { undo } : {}),
         });
       }
 
@@ -608,7 +604,14 @@ export async function POST(req: Request) {
             { status: 400 },
           );
         }
-        await sendGmailReply({ threadId, to, cc, subject, body });
+        const provider = await getMailProvider();
+        if (!provider) {
+          return Response.json(
+            { ok: false, error: "No mail account is connected." },
+            { status: 503 },
+          );
+        }
+        await provider.send({ threadId, to, cc, subject, body });
         // The outbound lands in the append-only communications log — this is
         // what the waiting-on cross-reference reads.
         await recordCommunication({

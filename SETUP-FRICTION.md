@@ -273,3 +273,10 @@ Options, in order of fit:
    user's own instance. Revisit when user count justifies it.
 3. **Managed OAuth vendor (Pipedream/Nango).** Fastest, but a third party
    sits in the token path — weakest fit for the trust story.
+4. **App password over IMAP/SMTP (SHIPPED as the default, via Claude Chat's
+   suggestion).** One-string setup: 2FA on → generate app password → paste.
+   Full-mailbox credential (the honest trade, stated in the UI), revocable at
+   the provider, stored only in the user's own DB — and it makes Chief
+   provider-agnostic (Outlook/Fastmail/iCloud via the advanced host fields).
+   OAuth stays as the scoped path. The GCloud errand (entry 9) is now
+   OPTIONAL, which shrinks the concierge's hardest set piece to a nice-to-have.

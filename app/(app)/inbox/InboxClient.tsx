@@ -25,8 +25,10 @@ type InboxEmail = {
 };
 
 type InboxResponse = {
-  configured: boolean;
   connected: boolean;
+  /** Whether the deployment has a Google OAuth client (enables that path). */
+  oauthConfigured?: boolean;
+  provider?: "imap" | "gmail-mcp";
   account?: string | null;
   email?: InboxEmail | null;
   queueCount?: number;
@@ -80,7 +82,7 @@ export default function InboxClient() {
       const body = (await res.json()) as InboxResponse;
       setData(body);
     } catch {
-      setData({ configured: true, connected: true, error: "Couldn't reach the inbox." });
+      setData({ connected: true, error: "Couldn't reach the inbox." });
     } finally {
       setLoading(false);
     }
@@ -159,6 +161,13 @@ export default function InboxClient() {
     }
   }, [receipt, refresh]);
 
+  const disconnect = useCallback(async () => {
+    const url =
+      data?.provider === "imap" ? "/api/mail/disconnect" : "/api/google/disconnect";
+    await fetch(url, { method: "POST" }).catch(() => {});
+    await refresh();
+  }, [data?.provider, refresh]);
+
   const askChief = useCallback(() => setOpen(true), [setOpen]);
   const draftReply = useCallback(() => {
     setOpen(true);
@@ -175,29 +184,12 @@ export default function InboxClient() {
     return <div className="pt-6 text-[14px] text-ink-3">Checking the inbox…</div>;
   }
 
-  if (data && !data.configured) {
-    return (
-      <SetupCard title="Gmail isn't configured yet">
-        Add <Mono>GOOGLE_CLIENT_ID</Mono> and <Mono>GOOGLE_CLIENT_SECRET</Mono> to your
-        deployment&apos;s environment variables (your own Google Cloud OAuth client — see
-        the README&apos;s Gmail section), then reload.
-      </SetupCard>
-    );
-  }
-
   if (data && !data.connected) {
     return (
-      <SetupCard title="Connect your Gmail">
-        Chief reads your inbox through Google&apos;s official Gmail MCP server with a grant
-        you approve — your tokens live only in your own database.
-        <a
-          href="/api/google/connect"
-          className="mt-4 flex h-12 items-center justify-center rounded-control text-[15px] font-semibold"
-          style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
-        >
-          Connect Gmail
-        </a>
-      </SetupCard>
+      <ConnectMail
+        oauthConfigured={data.oauthConfigured === true}
+        onConnected={() => void refresh()}
+      />
     );
   }
 
@@ -383,12 +375,199 @@ export default function InboxClient() {
           </div>
         </>
       )}
+
+      {data?.account && (
+        <div className="flex items-center justify-center gap-3 pb-1 font-mono text-[10px] tracking-[0.08em] text-ink-3">
+          <span>
+            {data.provider === "imap" ? "IMAP" : "GMAIL"} · {data.account}
+          </span>
+          <button
+            onClick={() => void disconnect()}
+            className="underline underline-offset-2"
+          >
+            DISCONNECT
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-function Mono({ children }: { children: React.ReactNode }) {
-  return <span className="font-mono text-[13px] text-ink">{children}</span>;
+// --- Connect screen ---------------------------------------------------------
+// The easy path: an app password over IMAP/SMTP (any provider; defaults are
+// Gmail's). The scoped path: Google OAuth, shown when the deployment has a
+// client configured. Both credentials live only in the user's own database.
+
+const field =
+  "h-11 w-full rounded-control border bg-transparent px-3 text-[15px] text-ink outline-none placeholder:text-ink-3";
+
+function ConnectMail({
+  oauthConfigured,
+  onConnected,
+}: {
+  oauthConfigured: boolean;
+  onConnected: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [advanced, setAdvanced] = useState(false);
+  const [imapHost, setImapHost] = useState("imap.gmail.com");
+  const [imapPort, setImapPort] = useState("993");
+  const [smtpHost, setSmtpHost] = useState("smtp.gmail.com");
+  const [smtpPort, setSmtpPort] = useState("465");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/mail/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          imap_host: imapHost,
+          imap_port: Number(imapPort),
+          smtp_host: smtpHost,
+          smtp_port: Number(smtpPort),
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+      };
+      if (res.ok && body.ok) onConnected();
+      else setError(body.error ?? "Connection failed.");
+    } catch {
+      setError("Connection failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4 pt-2">
+      <h1 className="text-[22px] font-semibold text-ink">Inbox</h1>
+      <div
+        className="flex flex-col gap-3 rounded-card border p-5"
+        style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
+      >
+        <div className="text-[16px] font-semibold text-ink">Connect your email</div>
+        <p className="text-[14px] leading-relaxed text-ink-2">
+          Paste an <span className="text-ink">app password</span> — for Gmail: turn on
+          2-Step Verification, then create one at{" "}
+          <a
+            href="https://myaccount.google.com/apppasswords"
+            target="_blank"
+            rel="noreferrer"
+            className="text-teal underline underline-offset-2"
+          >
+            myaccount.google.com/apppasswords
+          </a>
+          . It grants full mailbox access, is stored only in your own database, and you
+          can revoke it there any time.
+        </p>
+        <input
+          type="email"
+          autoComplete="email"
+          placeholder="you@gmail.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className={field}
+          style={{ borderColor: "var(--hairline)" }}
+        />
+        <input
+          type="password"
+          autoComplete="off"
+          placeholder="App password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className={field}
+          style={{ borderColor: "var(--hairline)" }}
+        />
+        <button
+          onClick={() => setAdvanced((a) => !a)}
+          className="self-start font-mono text-[11px] tracking-[0.08em] text-ink-3"
+        >
+          {advanced ? "HIDE" : "NOT GMAIL?"} · SERVER SETTINGS
+        </button>
+        {advanced && (
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <input
+                placeholder="IMAP host"
+                value={imapHost}
+                onChange={(e) => setImapHost(e.target.value)}
+                className={`${field} flex-[2]`}
+                style={{ borderColor: "var(--hairline)" }}
+              />
+              <input
+                placeholder="993"
+                value={imapPort}
+                onChange={(e) => setImapPort(e.target.value)}
+                className={`${field} flex-1`}
+                style={{ borderColor: "var(--hairline)" }}
+              />
+            </div>
+            <div className="flex gap-2">
+              <input
+                placeholder="SMTP host"
+                value={smtpHost}
+                onChange={(e) => setSmtpHost(e.target.value)}
+                className={`${field} flex-[2]`}
+                style={{ borderColor: "var(--hairline)" }}
+              />
+              <input
+                placeholder="465"
+                value={smtpPort}
+                onChange={(e) => setSmtpPort(e.target.value)}
+                className={`${field} flex-1`}
+                style={{ borderColor: "var(--hairline)" }}
+              />
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="text-[13px]" style={{ color: "var(--danger)" }}>
+            {error}
+          </div>
+        )}
+        <button
+          onClick={() => void submit()}
+          disabled={busy || !email.trim() || !password.trim()}
+          className="flex h-12 items-center justify-center rounded-control text-[15px] font-semibold disabled:opacity-40"
+          style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+        >
+          {busy ? "Checking the connection…" : "Connect"}
+        </button>
+      </div>
+
+      {oauthConfigured && (
+        <div
+          className="flex flex-col gap-2 rounded-card border p-5"
+          style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
+        >
+          <div className="text-[15px] font-semibold text-ink">
+            Prefer the scoped route?
+          </div>
+          <p className="text-[13.5px] leading-relaxed text-ink-2">
+            Google OAuth grants only mail read/compose/send scopes through Google&apos;s
+            official Gmail MCP server (requires the Google Cloud setup from the README).
+          </p>
+          <a
+            href="/api/google/connect"
+            className="mt-1 flex h-11 items-center justify-center rounded-control border text-[14px] font-medium text-ink"
+            style={{ borderColor: "var(--hairline)" }}
+          >
+            Connect with Google OAuth
+          </a>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SetupCard({
