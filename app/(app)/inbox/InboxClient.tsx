@@ -63,7 +63,7 @@ function dateLabel(iso: string | null): string {
 }
 
 export default function InboxClient() {
-  const { setOpen, send, streaming } = useChief();
+  const { setOpen, openAndSend } = useChief();
   const [data, setData] = useState<InboxResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [chiefRead, setChiefRead] = useState<string | null>(null);
@@ -170,13 +170,10 @@ export default function InboxClient() {
 
   const askChief = useCallback(() => setOpen(true), [setOpen]);
   const draftReply = useCallback(() => {
-    setOpen(true);
-    if (!streaming) {
-      void send(
-        "Draft a reply to the email I'm looking at, in my voice, then propose sending it.",
-      );
-    }
-  }, [setOpen, send, streaming]);
+    openAndSend(
+      "Draft a reply to the email I'm looking at, in my voice, then propose sending it.",
+    );
+  }, [openAndSend]);
 
   // --- Render states ---------------------------------------------------------
 
