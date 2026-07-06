@@ -44,6 +44,15 @@ type ConnectStatus = {
   error?: string;
 };
 
+type CatalogApp = { slug: string; name: string; description?: string; img?: string };
+
+type ServerTool = {
+  name: string;
+  description: string;
+  readOnly: boolean;
+  mode: "auto" | "ask" | "off";
+};
+
 const card =
   "flex flex-col gap-3 rounded-card border p-4";
 const cardStyle = {
@@ -107,6 +116,82 @@ export default function ConfigClient() {
     if (mem) setMemory(((mem.documents ?? []) as KbDoc[]).slice(0, 20));
     if (con) setConnect(con as ConnectStatus);
   }, []);
+
+  // --- Catalog search + per-account tool lists ------------------------------
+  const [appQuery, setAppQuery] = useState("");
+  const [appResults, setAppResults] = useState<CatalogApp[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [toolsFor, setToolsFor] = useState<string | null>(null);
+  const [tools, setTools] = useState<ServerTool[] | null>(null);
+  const [toolsError, setToolsError] = useState<string | null>(null);
+
+  const searchApps = async () => {
+    const q = appQuery.trim();
+    if (!q || searching) return;
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/connect/apps?q=${encodeURIComponent(q)}`);
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        apps?: CatalogApp[];
+      };
+      setAppResults(body.ok ? (body.apps ?? []) : []);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const enableApp = async (slug: string) => {
+    const res = await fetch("/api/connect/apps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug }),
+    }).catch(() => null);
+    const body = (await res?.json().catch(() => ({}))) as {
+      ok?: boolean;
+      url?: string;
+    };
+    if (body?.ok && body.url) window.open(body.url, "_blank", "noopener");
+    setAppResults(null);
+    setAppQuery("");
+    await refresh();
+  };
+
+  const loadTools = async (server: string) => {
+    if (toolsFor === server) {
+      setToolsFor(null);
+      setTools(null);
+      return;
+    }
+    setToolsFor(server);
+    setTools(null);
+    setToolsError(null);
+    const res = await fetch(
+      `/api/connect/tools?server=${encodeURIComponent(server)}`,
+    ).catch(() => null);
+    const body = (await res?.json().catch(() => ({}))) as {
+      ok?: boolean;
+      tools?: ServerTool[];
+      error?: string;
+    };
+    if (body?.ok) setTools(body.tools ?? []);
+    else setToolsError(body?.error ?? "Couldn't list tools.");
+  };
+
+  const setToolMode = async (
+    server: string,
+    tool: string,
+    mode: "auto" | "ask" | "off",
+  ) => {
+    setTools(
+      (ts) => ts?.map((t) => (t.name === tool ? { ...t, mode } : t)) ?? null,
+    );
+    await fetch("/api/connect/tools", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ server, tool, mode }),
+    }).catch(() => {});
+  };
 
   const openConnectLink = async (app: string) => {
     const res = await fetch("/api/connect/link", {
@@ -253,25 +338,93 @@ export default function ConfigClient() {
                   {connect.error}
                 </div>
               )}
-              {(connect.accounts ?? []).map((a) => (
-                <div key={a.id} className="flex items-center gap-3">
-                  <Dot ok={a.healthy} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[14.5px] text-ink">{a.app}</div>
-                    {a.name && (
-                      <div className="truncate font-mono text-[11px] text-ink-3">
-                        {a.name}
+              {(connect.accounts ?? []).map((a) => {
+                const serverName = `pipedream-${a.app}`;
+                const expanded = toolsFor === serverName;
+                return (
+                  <div key={a.id} className="flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                      <Dot ok={a.healthy} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[14.5px] text-ink">{a.app}</div>
+                        {a.name && (
+                          <div className="truncate font-mono text-[11px] text-ink-3">
+                            {a.name}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => void loadTools(serverName)}
+                        className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-teal"
+                      >
+                        {expanded ? "HIDE TOOLS" : "TOOLS"}
+                      </button>
+                      <button
+                        onClick={() => void disconnectAccount(a.id)}
+                        className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-ink-3"
+                      >
+                        DISCONNECT
+                      </button>
+                    </div>
+                    {expanded && (
+                      <div
+                        className="flex flex-col gap-2 rounded-control border p-3"
+                        style={{ borderColor: "var(--hairline)" }}
+                      >
+                        {tools === null && !toolsError && (
+                          <div className="text-[13px] text-ink-3">Listing tools…</div>
+                        )}
+                        {toolsError && (
+                          <div className="text-[13px]" style={{ color: "var(--danger)" }}>
+                            {toolsError}
+                          </div>
+                        )}
+                        {tools?.map((t) => (
+                          <div key={t.name} className="flex items-center gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-mono text-[12px] text-ink">
+                                {t.name}
+                              </div>
+                              <div className="truncate text-[11.5px] text-ink-3">
+                                {t.readOnly ? "read" : "write — always asks"}
+                              </div>
+                            </div>
+                            {(t.readOnly
+                              ? (["auto", "ask", "off"] as const)
+                              : (["ask", "off"] as const)
+                            ).map((m) => (
+                              <button
+                                key={m}
+                                onClick={() =>
+                                  void setToolMode(`pipedream-${a.app}`, t.name, m)
+                                }
+                                className="rounded-chip border px-2 py-1 font-mono text-[10px] tracking-[0.06em]"
+                                style={
+                                  t.mode === m
+                                    ? {
+                                        background: "var(--teal-fill)",
+                                        color: "var(--teal-on-fill)",
+                                        borderColor: "transparent",
+                                      }
+                                    : {
+                                        borderColor: "var(--hairline)",
+                                        color: "var(--ink-3)",
+                                      }
+                                }
+                              >
+                                {m.toUpperCase()}
+                              </button>
+                            ))}
+                          </div>
+                        ))}
+                        {tools && tools.length === 0 && (
+                          <div className="text-[13px] text-ink-3">No tools exposed.</div>
+                        )}
                       </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => void disconnectAccount(a.id)}
-                    className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-ink-3"
-                  >
-                    DISCONNECT
-                  </button>
-                </div>
-              ))}
+                );
+              })}
               <div className="flex flex-wrap gap-2">
                 {(connect.apps ?? [])
                   .filter(
@@ -288,11 +441,63 @@ export default function ConfigClient() {
                     </button>
                   ))}
               </div>
+              {/* Find any app by name (Pipedream catalog). */}
+              <div className="flex gap-2">
+                <input
+                  value={appQuery}
+                  onChange={(e) => setAppQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void searchApps()}
+                  placeholder="Find an app… (asana, notion, slack)"
+                  className={inputCls}
+                  style={{ borderColor: "var(--hairline)" }}
+                />
+                <button
+                  onClick={() => void searchApps()}
+                  disabled={searching || !appQuery.trim()}
+                  className="h-[42px] shrink-0 rounded-control border px-3.5 text-[13.5px] text-ink disabled:opacity-40"
+                  style={{ borderColor: "var(--teal-border)" }}
+                >
+                  {searching ? "…" : "Search"}
+                </button>
+              </div>
+              {appResults && (
+                <div className="flex flex-col gap-1.5">
+                  {appResults.length === 0 && (
+                    <div className="text-[13px] text-ink-3">No matching apps.</div>
+                  )}
+                  {appResults.map((app) => (
+                    <button
+                      key={app.slug}
+                      onClick={() => void enableApp(app.slug)}
+                      className="flex items-center gap-2.5 rounded-control border px-3 py-2 text-left"
+                      style={{ borderColor: "var(--hairline)" }}
+                    >
+                      {app.img && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={app.img} alt="" className="h-5 w-5 rounded" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[14px] text-ink">{app.name}</div>
+                        {app.description && (
+                          <div className="truncate text-[11.5px] text-ink-3">
+                            {app.description}
+                          </div>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-[13px] font-semibold text-teal">
+                        connect →
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <p className="text-[12.5px] leading-relaxed text-ink-3">
                 Connections run through your Chief Connect subscription (2-click
-                OAuth). Every one has a do-it-yourself twin — app password, your
-                own OAuth client, or a direct MCP server below — so you can eject
-                any time.
+                OAuth). Reads marked AUTO run freely; writes always show an
+                approval card (ASK) or can be switched OFF — never auto. Every
+                connection has a do-it-yourself twin — app password, your own
+                OAuth client, or a direct MCP server below — so you can eject any
+                time.
               </p>
             </div>
           ) : (

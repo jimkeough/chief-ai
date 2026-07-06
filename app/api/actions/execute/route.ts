@@ -126,6 +126,16 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
+      // Respect the user's per-tool dial: a tool switched off is refused even
+      // on an approval click.
+      const { getToolOverrides } = await import("@/lib/tool-overrides");
+      const overrides = await getToolOverrides().catch(() => ({} as import("@/lib/tool-overrides").ToolOverrides));
+      if (overrides[server]?.[key] === "off") {
+        return Response.json(
+          { ok: false, error: "That tool is switched off in Config." },
+          { status: 403 },
+        );
+      }
       const result = await callMcpTool(cfg, key, safeArgs);
       await createJournalEntry({
         title: `${server}: ${key} (via Chief)`,

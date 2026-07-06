@@ -78,3 +78,16 @@ export function json(res, status, body) {
   res.status(status).setHeader("Content-Type", "application/json");
   res.end(JSON.stringify(body));
 }
+
+/** Authenticated call to a raw /v1 Pipedream API path (outside /connect). */
+export async function pdApiFetch(path) {
+  const { token } = await pdAccessToken();
+  const res = await fetch(`${PD_API}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Pipedream ${path} ${res.status}: ${detail.slice(0, 200)}`);
+  }
+  return res.json();
+}
