@@ -14,9 +14,11 @@ Everything below runs on infrastructure **you** own and bill:
   the communications log, the journal, settings, and any credentials you
   paste (email app password, Google refresh token). Row-level security on
   every table.
-- **Your AI** — by default, your Anthropic API key, sent only to Anthropic.
-  (Optional AI Gateway mode routes through your own Vercel account instead —
-  see below.)
+- **Your AI** — by default, routed through Vercel AI Gateway on **your own**
+  Vercel project: the deployment's OIDC token authenticates and usage bills
+  to your Vercel account, so there is no key to fetch. Prefer prompts that go
+  only to Anthropic? Flip one setting to direct-Anthropic mode with your own
+  API key — see below.
 - **The write gate** — Chief can read and propose; the ONLY code path that
   performs a write is `app/api/actions/execute`, on your explicit approval.
   Reversible actions carry Undo; sending email requires slide-to-confirm.
@@ -34,12 +36,14 @@ No telemetry, no phone-home, no vendor account required. The app works
 end-to-end in this mode: email over an app password, connectors as direct
 MCP URLs you configure yourself.
 
-## AI Gateway (optional)
+## AI Gateway (the default)
 
-Instead of a direct Anthropic key you can route Chief's model calls through
-[Vercel AI Gateway](https://vercel.com/docs/ai-gateway) — turn it on in Config
-(**AI — provider** = `gateway`). Why you might: one endpoint reaches any model
-(Claude, GPT, Gemini, …) and there's no `console.anthropic.com` key to fetch.
+Chief's model calls route through
+[Vercel AI Gateway](https://vercel.com/docs/ai-gateway) by default. Why it's
+the default: it is the only provider that works with **zero keys to fetch** —
+the single most hostile step in onboarding (console.anthropic.com, billing,
+credit card) simply disappears — and one endpoint reaches any model (Claude,
+GPT, Gemini, …).
 
 **Why this stays sovereign:** you deploy your OWN Vercel project, so gateway
 traffic authenticates with *that* project's auto-injected OIDC token and bills
@@ -49,17 +53,19 @@ setting stays yours to control (it just accepts gateway model ids like
 `anthropic/claude-opus-4.7` or `openai/gpt-5`).
 
 **The one honest give:** in gateway mode your prompts pass through Vercel (your
-own vendor), which meters them — where in the default mode they go only to
+own vendor), which meters them — where in direct mode they go only to
 Anthropic. That is the whole difference.
 
-**Ejecting:** flip **AI — provider** back to `anthropic` and set your
-`ANTHROPIC_API_KEY`. One setting, and the layer is gone.
+**Ejecting:** flip **AI — provider** to `anthropic` and set your
+`ANTHROPIC_API_KEY`. One setting, and the layer is gone. (The reverse courtesy
+also holds: gateway mode with no gateway credential in sight falls back to a
+present Anthropic key rather than failing.)
 
-**Caveat:** gateway mode is best-effort for Chief's heaviest turn — server-side
-tools (web fetch) and remote MCP connectors rely on Anthropic-native betas the
-gateway's Anthropic-compatible endpoint may not proxy. The lighter calls (home
-line, email read, KB classify/merge) work the same either way. Prefer the
-default Anthropic mode if you rely on connectors.
+**Caveat:** connectors are unaffected by the provider choice — the app brokers
+MCP servers itself and hands the model plain tools. The one Anthropic-native
+piece is the optional server-side web fetch tool (off by default), which the
+gateway's Anthropic-compatible endpoint may not proxy; flip to direct
+Anthropic mode if you turn it on and it misbehaves.
 
 ## Chief Connect (optional, paid)
 

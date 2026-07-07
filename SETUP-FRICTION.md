@@ -369,3 +369,74 @@ invariant is unchanged — they just stop being unattended.
 **Decision (Jim, 2026-07-07): rejected.** Staying on the v2 funnel — static
 landing site + deploy button, concierge starts at first render. The v2 rule
 stands unamended.
+
+### 12. The v2 funnel, implemented: one zero-question link (2026-07-07)
+
+The landing-site link now exists and prompts for NOTHING — the README's
+primary Deploy button (repo clone + Vercel project + Supabase via the
+`stores` Marketplace parameter, no env prompts). What made zero-question
+possible, and what to verify at dogfood #2:
+
+- **AI Gateway is now the DEFAULT provider** (`ai.provider` default =
+  `gateway`). The funnel's most hostile step — console.anthropic.com, billing,
+  card — is gone: the deployment's OIDC token authenticates and usage bills to
+  the user's own Vercel account. Direct-Anthropic stays one setting away, and
+  gateway mode with no credential falls back to a present `ANTHROPIC_API_KEY`
+  (so local dev and old-style deployments keep working unchanged). Connectors
+  are unaffected — the app brokers MCP itself; only the optional server-side
+  web fetch is Anthropic-native (TRUST.md caveat updated).
+- **The Marketplace injects NEW env-var names** (publishable/secret keys, not
+  anon/service_role: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+  `SUPABASE_SECRET_KEY`, `POSTGRES_URL*`). The app now reads either naming
+  (`lib/supabase/env.ts`) — without that, a one-click instance boots with env
+  present but unread, the exact silent failure of entry 5.
+- **Migrations do NOT run themselves** — entry 10 / PR #9 overclaimed that.
+  Instead the app now runs its own migrations: first render (or `POST
+  /api/setup/migrate`) applies `supabase/migrations/*.sql` over the injected
+  `POSTGRES_URL_NON_POOLING`, recorded in the same ledger the Supabase CLI
+  uses. This also discharges the "app runs pending migrations" update
+  commitment.
+- **First render IS onboarding, for real now**: `/login` consults
+  `GET /api/setup/health` (entry 5's endpoint) and renders the right moment —
+  env-not-wired explainer / one-tap database setup / **create-your-login
+  in-app** (admin API, autoconfirm handled; entry 3 absorbed) / sign-in.
+  Every setup mutation refuses to run once the first user exists.
+- **The honest trade to state on the landing page**: until the first login is
+  created, a fresh deployment is claimable by whoever reaches its URL — the
+  price of a zero-prompt deploy. Deploy → open your URL → create your login,
+  in one sitting.
+- **Verify at dogfood #2** (things only a live click can prove): the `stores`
+  parameter is what current Vercel docs specify (the older `products` spelling
+  is what PR #9 shipped; if the Supabase card doesn't appear on the clone
+  screen, try `products`); whether the Marketplace flow demands a credit card;
+  whether `VERCEL_OIDC_TOKEN` is present without toggling project settings
+  (Settings → Security → Secure backend access); and gateway billing appearing
+  on the Vercel invoice.
+
+Remaining manual moments in the funnel: authorize the deploy button, create
+your login at first render, paste an email app password. The Anthropic-key
+moment is gone.
+
+## Dogfood #2 — teardown of walkthrough #1 (the reset checklist)
+
+To re-run onboarding as a true user #2, delete everything walkthrough #1
+created, in this order (helper sessions can't do this for you — entry 1b's
+lesson: only your own logins can touch sovereign infra):
+
+1. **Supabase**: dashboard → the Chief project (personal org, e.g. "Jim AI")
+   → Project Settings → General → Delete project. (Deleting the project
+   deletes the auth user and all data with it — nothing else to clean.)
+2. **Vercel**: dashboard (personal scope) → the chief project → Settings →
+   Advanced → Delete Project. If Chief Connect's `connect-service` is deployed
+   as its own project, LEAVE it — it's operator infrastructure, not user
+   infrastructure.
+3. **GitHub**: delete the cloned repo if walkthrough #1 created one (Settings
+   → Danger Zone). If the Vercel project was imported straight from
+   `jim-homejab/ai-cockpit`, there is no clone to delete — and dogfood #2
+   SHOULD produce one, since the deploy button clones.
+4. Optional, for the full user-#2 experience: use a fresh Vercel account (new
+   email) so the signup wall, GitHub authorization, and Marketplace billing
+   prompts all appear exactly as a stranger would see them.
+
+Then: click the README's primary Deploy button on a phone, and log every
+friction moment here as entries 13+.

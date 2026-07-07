@@ -63,25 +63,27 @@ export const SETTING_DEFS: SettingDef[] = [
     key: "chief.model",
     label: "Chief — model",
     description:
-      "The model Chief runs on. Search the list to pick one, or type any id by hand. In the default (Anthropic) mode this is a Claude id like claude-opus-4-8. In AI Gateway mode it can be any gateway model id — e.g. anthropic/claude-opus-4.7 or openai/gpt-5 — a bare id is assumed to be Anthropic.",
+      "The model Chief runs on. Search the list to pick one, or type any id by hand. In the default (AI Gateway) mode it can be any gateway model id — e.g. anthropic/claude-opus-4.7 or openai/gpt-5 — a bare id is assumed to be Anthropic. In direct Anthropic mode it's a Claude id like claude-opus-4-8.",
     default: "claude-opus-4-8",
     singleLine: true,
     placeholder: "claude-opus-4-8",
   },
-  // --- AI provider (optional AI Gateway) ----------------------------------
-  // Sovereign default: your Anthropic key, sent only to Anthropic. Flip to
-  // "gateway" to route through Vercel AI Gateway instead — one endpoint, any
-  // model, and (on your own Vercel deployment) no Anthropic key to fetch at
-  // all: the project's OIDC token authenticates and usage bills to your own
-  // Vercel account. Eject by flipping back to "anthropic". See TRUST.md.
+  // --- AI provider (Vercel AI Gateway by default) --------------------------
+  // Gateway is the default because it needs ZERO keys on a Vercel deployment:
+  // the project's OIDC token authenticates and usage bills to the user's own
+  // Vercel account — no console.anthropic.com trip in the funnel. Still
+  // sovereign: it's the user's own Vercel project, no operator in the path.
+  // Eject by flipping to "anthropic" with an ANTHROPIC_API_KEY set — prompts
+  // then go only to Anthropic. When gateway mode has no credential at all,
+  // lib/ai.ts falls back to a present Anthropic key. See TRUST.md.
   {
     key: "ai.provider",
     label: "AI — provider",
     description:
-      "Where Chief's model calls go. \"anthropic\" (default) = your Anthropic API key, sent only to Anthropic. \"gateway\" = Vercel AI Gateway (any model; on a Vercel deployment the OIDC token authenticates and it bills to your Vercel account, so no Anthropic key is needed).",
-    default: "anthropic",
+      "Where Chief's model calls go. \"gateway\" (default) = Vercel AI Gateway: any model, and on a Vercel deployment the OIDC token authenticates and usage bills to your Vercel account — no Anthropic key needed. \"anthropic\" = your own Anthropic API key, sent only to Anthropic.",
+    default: "gateway",
     singleLine: true,
-    placeholder: "anthropic",
+    placeholder: "gateway",
   },
   {
     key: "ai.gateway_key",

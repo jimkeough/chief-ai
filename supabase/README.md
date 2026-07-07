@@ -1,8 +1,11 @@
 # Database schema
 
 The source of truth for Chief's database lives in `supabase/migrations/`.
-Apply migrations to your Supabase project via the dashboard SQL editor, the
-Supabase CLI (`supabase db push`), or the Supabase MCP tools.
+The app applies them itself at first render (and on demand at
+`POST /api/setup/migrate`) whenever a direct `POSTGRES_URL_NON_POOLING` is
+set — tracked in `supabase_migrations.schema_migrations`, the same ledger the
+Supabase CLI uses, so `supabase db push`, the dashboard SQL editor, and the
+in-app runner stay in agreement.
 
 ## Conventions
 
@@ -19,8 +22,14 @@ Supabase CLI (`supabase db push`), or the Supabase MCP tools.
 
 ## Setup for a fresh deployment
 
-1. Create a Supabase project.
-2. Run each file in `migrations/` in filename order.
-3. Create your one user: Dashboard → Authentication → Add user (email +
-   password, autoconfirm).
-4. Put the project URL + anon key in `.env.local` (see `.env.example`).
+1. Create a Supabase project (the one-click deploy button does this for you
+   via the Vercel Marketplace).
+2. Put the project URL + keys in the env (see `.env.example`) — injected
+   automatically on a one-click deployment.
+3. Open the app: first render runs the migrations and creates your one user
+   in-app. There is no sign-up flow by design — the create-login screen locks
+   itself the moment the first user exists.
+
+Manual fallback (no service key / no Postgres URL set): run each file in
+`migrations/` in filename order in the SQL editor, then Dashboard →
+Authentication → Add user (email + password, autoconfirm).

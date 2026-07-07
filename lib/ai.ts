@@ -1,16 +1,18 @@
 // Central AI client factory. One place decides which provider Chief talks to
 // and hands back a ready `@anthropic-ai/sdk` client + resolved model id, so the
-// call sites stay identical whether we go straight to Anthropic (the sovereign
-// default) or through Vercel AI Gateway (optional, opt-in).
+// call sites stay identical whether we go through Vercel AI Gateway (the
+// default) or straight to Anthropic with your own key.
 //
-// Sovereignty note: the default is unchanged — your Anthropic key, sent only to
-// Anthropic. Gateway mode stays sovereign by construction: each deployment is
-// the user's OWN Vercel project, so gateway traffic authenticates with that
-// project's auto-injected OIDC token and bills to the user's own Vercel
-// account — no operator sits in the path, unlike Chief Connect. The only trust
-// give is that Vercel (the user's own vendor) meters the prompts it routes.
-// The eject path is one setting: flip `ai.provider` back to "anthropic".
-// See TRUST.md.
+// Sovereignty note: gateway mode is the default because it is the only
+// provider that works with ZERO keys to fetch — each deployment is the user's
+// OWN Vercel project, so gateway traffic authenticates with that project's
+// auto-injected OIDC token and bills to the user's own Vercel account. No
+// operator sits in the path (unlike Chief Connect); the only trust give is
+// that Vercel (the user's own vendor) meters the prompts it routes. The eject
+// path is one setting: flip `ai.provider` to "anthropic" and set
+// ANTHROPIC_API_KEY — prompts then go only to Anthropic. And when gateway mode
+// has no credential at all (e.g. local dev without OIDC) but an Anthropic key
+// is present, we fall back to it rather than failing. See TRUST.md.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { getAppSettings, type AppSettings } from "@/lib/settings";
@@ -25,6 +27,35 @@ export type ResolvedAi = {
   model: string;
   provider: AiProvider;
 };
+
+/** The gateway credential, in precedence order: key pasted in Config,
+ *  AI_GATEWAY_API_KEY (local dev), the deployment's auto-injected OIDC token.
+ *  Null when gateway mode has nothing to authenticate with. */
+export function resolveGatewayKey(
+  settings?: Partial<AppSettings>,
+): string | null {
+  return (
+    settings?.["ai.gateway_key"]?.trim() ||
+    process.env.AI_GATEWAY_API_KEY ||
+    process.env.VERCEL_OIDC_TOKEN ||
+    null
+  );
+}
+
+/** The EFFECTIVE provider: the configured choice ("gateway" by default), with
+ *  one graceful fallback — gateway chosen but no gateway credential in sight
+ *  while an Anthropic key exists → use the Anthropic key. An explicit
+ *  "anthropic" is always respected. */
+export function resolveProvider(settings?: Partial<AppSettings>): AiProvider {
+  const raw = (settings?.["ai.provider"] ?? process.env.AI_PROVIDER ?? "gateway")
+    .trim()
+    .toLowerCase();
+  if (raw === "anthropic") return "anthropic";
+  if (!resolveGatewayKey(settings) && process.env.ANTHROPIC_API_KEY) {
+    return "anthropic";
+  }
+  return "gateway";
+}
 
 /** Resolve the configured AI provider into a ready client + model.
  *
@@ -46,10 +77,7 @@ export async function resolveAi(opts?: {
     }
   }
 
-  const providerRaw =
-    settings?.["ai.provider"] ?? process.env.AI_PROVIDER ?? "anthropic";
-  const provider: AiProvider =
-    providerRaw.trim().toLowerCase() === "gateway" ? "gateway" : "anthropic";
+  const provider = resolveProvider(settings);
 
   let model =
     opts?.model ??
@@ -59,13 +87,7 @@ export async function resolveAi(opts?: {
   model = model.trim() || DEFAULT_MODEL;
 
   if (provider === "gateway") {
-    // On the user's own Vercel deployment the OIDC token is injected
-    // automatically, so no key is needed to paste. A pasted key (or the
-    // AI_GATEWAY_API_KEY env, handy for local dev) takes precedence.
-    const apiKey =
-      settings?.["ai.gateway_key"]?.trim() ||
-      process.env.AI_GATEWAY_API_KEY ||
-      process.env.VERCEL_OIDC_TOKEN;
+    const apiKey = resolveGatewayKey(settings);
     if (!apiKey) return null;
     // Gateway model ids are provider-prefixed (e.g. "anthropic/…", "openai/…").
     // A bare id is assumed to be an Anthropic model.

@@ -2,42 +2,52 @@
 
 A self-hosted personal AI chief of staff. One user per deployment (your Vercel + your Supabase + your Anthropic key). Chief proposes; you approve.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit&project-name=chief&repository-name=chief&env=ANTHROPIC_API_KEY&envDescription=Your%20Anthropic%20API%20key%20powers%20Chief%20%E2%80%94%20create%20one%20at%20console.anthropic.com&envLink=https%3A%2F%2Fconsole.anthropic.com%2Fsettings%2Fkeys&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22supabase%22%2C%22integrationSlug%22%3A%22supabase%22%7D%5D)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit&project-name=chief&repository-name=chief&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%2C%22protocol%22%3A%22storage%22%7D%5D)
 
-**One-click path — two signups, Vercel + GitHub.** The button clones this repo
-to your GitHub and creates the Vercel project (those are the only two accounts
-you need), then **provisions a Supabase database on your own account through
-the Vercel Marketplace — migrations run automatically, env vars injected**, so
-there's no separate supabase.com signup. It asks for one thing: your Anthropic
-API key. *(Rather not make a trip to console.anthropic.com? Leave it blank and,
-after first render, switch to Vercel AI Gateway in Config → **AI — provider** =
-`gateway` — usage then bills to your own Vercel account and no Anthropic key is
-needed. See `TRUST.md`.)* After deploy: create your login (Supabase dashboard →
-Authentication → Add user), sign in, and connect your email from the Inbox tab
-with an app password. Everything runs on accounts you own; see `TRUST.md` for
-exactly what that means.
+**One-click path — two signups (Vercel + GitHub), zero questions.** This is
+THE link for the landing site. The button clones this repo to your GitHub,
+creates the Vercel project, and **provisions a Supabase database on your own
+account through the Vercel Marketplace** (env vars injected — no separate
+supabase.com signup, nothing to paste). It prompts for no keys at all: Chief
+runs on **Vercel AI Gateway by default**, authenticated by your own
+deployment's OIDC token and billed to your own Vercel account, so there is no
+console.anthropic.com trip. *(Prefer prompts that go only to Anthropic? Flip
+Config → **AI — provider** = `anthropic` and set your own key. See
+`TRUST.md`.)* Then open your deployment — **first render IS onboarding**: the
+app sets up its own database schema (one tap) and creates your login right
+there; no visit to the Supabase dashboard. Sign in and connect your email from
+the Inbox tab with an app password. Everything runs on accounts you own; see
+`TRUST.md` for exactly what that means.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,ANTHROPIC_API_KEY&envDescription=Your%20own%20Supabase%20project%20URL%20%2B%20anon%20key%2C%20and%20your%20Anthropic%20API%20key.&envLink=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit%2Fblob%2Fmain%2F.env.example)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY&envDescription=Your%20own%20Supabase%20project%20URL%20%2B%20anon%20key%20(bring-your-own-project%20path).&envLink=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit%2Fblob%2Fmain%2F.env.example)
 
-Deploying your own copy: click the button (it clones this repo into your
-GitHub and deploys to your Vercel), create a Supabase project + run the
-migrations + add your one auth user (steps below), fill in the three env
-vars, and sign in. Clones get updates as pull requests they review — see
-`.github/workflows/upstream-updates.yml`.
+Bring-your-own-Supabase path: click the second button (clones this repo into
+your GitHub and deploys to your Vercel), paste your existing project's URL +
+anon key, and let the first-render setup screen finish the rest (it runs the
+migrations for you when a `POSTGRES_URL` env var is present, otherwise it
+tells you exactly what to paste into the SQL editor). Clones get updates as
+pull requests they review — see `.github/workflows/upstream-updates.yml`.
 
 ## Start here
 
 1. **`BUILD-BRIEF.md`** — the master build brief: architecture, port map from `jim-homejab/Email-wrapper`, data model, security rules, and six build phases.
 2. **`handoff/`** — design source of truth from Claude Design (`HANDOFF.md` = tokens + intent, `Chief Design Spec.dc.html` = visual spec).
 
-## Getting started
+## Getting started (local dev)
 
-1. Create a Supabase project and run the files in `supabase/migrations/` in
-   order (dashboard SQL editor or `supabase db push`).
-2. Create your one user: Dashboard → Authentication → Add user (email +
-   password, autoconfirm). There is no sign-up flow by design.
-3. `cp .env.example .env.local` and fill in the Supabase URL + anon key.
-4. `npm install && npm run dev` → sign in at `http://localhost:3000`.
+1. Create a Supabase project.
+2. `cp .env.example .env.local` and fill in the Supabase URL + anon key —
+   plus, to let the app do the rest itself, the service key and a
+   `POSTGRES_URL_NON_POOLING` connection string (all on the project's
+   connect/API pages).
+3. `npm install && npm run dev` → open `http://localhost:3000`. First render
+   walks you through it: one tap runs the migrations, then you create your one
+   login in-app (there is no sign-up flow by design — that screen locks itself
+   after the first user exists). Skipped the service key? The screen shows the
+   manual fallback (SQL editor + dashboard Add-user) instead.
+4. For Chief itself, set `ANTHROPIC_API_KEY` (or `AI_GATEWAY_API_KEY` /
+   `vercel env pull` for gateway mode) — on a Vercel deployment neither is
+   needed; the OIDC token covers it.
 
 Build phases completed so far: **1** (skeleton, design system, PWA shell,
 migrations, single-user auth) · **2** (core domain: projects with living

@@ -14,7 +14,11 @@
 
 import { getAuthed, unauthorized } from "@/lib/auth";
 import { getAppSettings } from "@/lib/settings";
-import { AI_GATEWAY_BASE_URL, type AiProvider } from "@/lib/ai";
+import {
+  AI_GATEWAY_BASE_URL,
+  resolveGatewayKey,
+  resolveProvider,
+} from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,25 +35,21 @@ export async function GET() {
     settings = undefined;
   }
 
-  const providerRaw =
-    settings?.["ai.provider"] ?? process.env.AI_PROVIDER ?? "anthropic";
-  const provider: AiProvider =
-    providerRaw.trim().toLowerCase() === "gateway" ? "gateway" : "anthropic";
+  // Same resolution as lib/ai.ts — including the fallback to a present
+  // Anthropic key when gateway mode has no credential — so the picker always
+  // lists the catalog Chief will actually talk to.
+  const provider = resolveProvider(settings);
 
   const models =
     provider === "gateway"
-      ? await gatewayModels(settings?.["ai.gateway_key"]?.trim())
+      ? await gatewayModels(resolveGatewayKey(settings) ?? undefined)
       : await anthropicModels();
 
   return Response.json({ provider, models });
 }
 
 /** Vercel AI Gateway catalog (any provider; ids are provider-prefixed). */
-async function gatewayModels(pastedKey?: string): Promise<Model[]> {
-  const apiKey =
-    pastedKey ||
-    process.env.AI_GATEWAY_API_KEY ||
-    process.env.VERCEL_OIDC_TOKEN;
+async function gatewayModels(apiKey?: string): Promise<Model[]> {
   if (!apiKey) return [];
   try {
     const res = await fetch(`${AI_GATEWAY_BASE_URL}/v1/models`, {
