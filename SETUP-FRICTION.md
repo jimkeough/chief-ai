@@ -301,3 +301,71 @@ Jim chose the middle ground between full sovereignty and full SaaS:
 - MVP security note: Pipedream access tokens are project-scoped; isolation
   rests on unguessable per-customer externalUserIds. Hardening path: proxy
   MCP calls through the service. Documented in connect-service/README.
+
+### 11. The login-first pivot: should a hosted concierge run day-0? (Jim, 2026-07-07 — REJECTED, staying with the v2 static-landing funnel)
+
+The question (Jim): require users to log into OUR app first, and have it
+concierge them through spinning up their sovereign instance — instead of the
+static landing site + deploy button of the v2 funnel.
+
+**What it would genuinely fix.** The v2 funnel's known weak point is that
+Claude cannot help until the Anthropic key exists (funnel step 3, entry 8) —
+the most hostile step in the whole flow is covered only by "the best-crafted
+static UI in the app." A hosted concierge runs on the OPERATOR's key, so it
+is present for both manual human moments (deploy-button authorization AND
+key acquisition). Two further wins come free: **resumability** (today a user
+who abandons mid-setup is simply lost; an account lets them pick up where
+they left off, and gives the operator a follow-up channel) and **Chief
+Connect finally gets a front door** — today issuing a subscription key means
+hand-editing the `CONNECT_KEYS` env var (connect-service/README), which does
+not survive contact with customer #10. The account created at onboarding is
+the natural place for the Connect subscription and billing to live later.
+
+**The line it must not cross.** The v2 rule exists for a reason: "the moment
+it collects keys or provisions on the user's behalf we've built a hosted
+service and broken the sovereign model." Entry 1b already proved the deeper
+point structurally — no helper's credentials can touch the user's sovereign
+instance, and that's a feature. So a hosted concierge's verbs are limited by
+design to: **explain, deep-link, verify, hand off.** It never holds the
+user's Anthropic key, never takes a GitHub/Vercel/Supabase OAuth grant, never
+provisions. The deploy button (the user's own grants) remains the only actor.
+Verification is done from the outside: poll the user's chosen deployment URL
+for `/api/setup/health` (entry 5's endpoint, now doing double duty) to watch
+the checklist tick over, and hand off to the IN-APP concierge at first
+render. Phase 6 is unchanged — the hosted concierge covers pre-render, the
+in-app concierge covers post-render; the seam between them is first render,
+same as the v2 rule always said.
+
+**Options, in order of fit:**
+1. **Guide-only hosted concierge (recommended shape if we pivot).** Email
+   magic-link login (an email is a far cheaper ask than an API key — the wall
+   is low). A stateful checklist wizard whose steps are the v2 funnel's
+   script; mostly deterministic UI with Claude chat as the escalation hatch,
+   on the operator's key, per-account token caps. Polls the user's app URL to
+   verify progress. Later becomes the Chief Connect account/billing portal.
+2. **Status quo (static landing).** Zero operator cost, zero new trust
+   surface, but the API-key cliff stays unattended and abandonment is
+   unrecoverable.
+3. **Full hosted portal** — collects the Anthropic key, takes OAuth grants,
+   provisions for the user. Genuinely 2-click, and genuinely a hosted SaaS
+   holding god-mode credentials: breaks TRUST.md's core accounting. Rejected;
+   if we ever want this we should admit we're building a hosted product and
+   redesign the trust story from scratch, not erode it.
+
+**The honest costs of option 1:** a login wall in front of a funnel already
+fighting drop-off (mitigated by magic-link, and by letting the brochure page
+remain readable pre-login); operator pays Anthropic tokens for prospects who
+may never convert (mitigated: deterministic wizard first, AI on demand,
+caps); a second surface to build and keep in sync with the funnel script;
+and one more paragraph owed to TRUST.md ("what the onboarding service can
+see: your email address and your setup progress; what it can never see:
+everything else").
+
+**If adopted, the v2 rule amends from** "the landing site must stay static"
+**to** "the landing service may talk and verify, but may never hold a
+credential or provision on the user's behalf." The two-manual-moments
+invariant is unchanged — they just stop being unattended.
+
+**Decision (Jim, 2026-07-07): rejected.** Staying on the v2 funnel — static
+landing site + deploy button, concierge starts at first render. The v2 rule
+stands unamended.
