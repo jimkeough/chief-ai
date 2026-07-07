@@ -97,12 +97,24 @@ export function isUnclaimed(status: SetupStatus): boolean {
 }
 
 // A local dev database usually speaks no TLS; Supabase requires it but its
-// chain isn't in Node's default CA store, so we skip verification there.
+// chain isn't in Node's default CA store, so we skip verification (the
+// connection URL is itself the secret).
 function pgClient(dbUrl: string): Client {
   const local = /@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl);
+  if (local) return new Client({ connectionString: dbUrl });
+  // A `sslmode=` in the URL makes node-postgres build its own strict TLS
+  // config that overrides the option below and throws "self-signed
+  // certificate in certificate chain" against Supabase (dogfood #2). Strip it
+  // — carefully, so the userinfo/password is never touched — so only our
+  // rejectUnauthorized:false applies.
+  const connectionString = dbUrl
+    .replace(/([?&])sslmode=[^&]*/gi, "$1")
+    .replace(/\?&/g, "?")
+    .replace(/&&/g, "&")
+    .replace(/[?&]$/g, "");
   return new Client({
-    connectionString: dbUrl,
-    ssl: local ? undefined : { rejectUnauthorized: false },
+    connectionString,
+    ssl: { rejectUnauthorized: false },
   });
 }
 
