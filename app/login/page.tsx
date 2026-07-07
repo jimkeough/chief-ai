@@ -28,7 +28,10 @@ type Phase = "loading" | "env" | "database" | "claim" | "signin";
 function phaseFor(h: Health | null): Phase {
   if (!h) return "signin"; // health unreachable → fail open to plain sign-in
   if (!h.env.supabaseUrl || !h.env.supabaseAnonKey) return "env";
-  if (h.schema === "missing") return "database";
+  // Only a schema we've CONFIRMED "ready" may skip database setup. "missing"
+  // and "unknown" both route here — never jump to "create your login" on a
+  // schema we couldn't verify, or we'd claim an empty database (dogfood #2).
+  if (h.schema !== "ready") return "database";
   if (h.users === 0) return "claim";
   return "signin";
 }

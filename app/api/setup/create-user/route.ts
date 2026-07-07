@@ -28,6 +28,15 @@ export async function POST(request: Request) {
         { status: 403 },
       );
     }
+    // Safety net: never create a login against a schema-less database, or the
+    // account exists but every app screen errors (dogfood #2). The database
+    // must be set up first; only "ready" clears this gate.
+    if (status.schema !== "ready") {
+      return Response.json(
+        { error: "Set up the database first — then create your login." },
+        { status: 409 },
+      );
+    }
 
     const body = (await request.json().catch(() => ({}))) as {
       email?: string;

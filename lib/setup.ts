@@ -51,35 +51,31 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     databaseUrl: Boolean(supabaseDbUrl()),
   };
 
+  // Schema detection is the load-bearing check: it decides whether the app
+  // offers "set up my database" or jumps ahead to "create your login". It must
+  // NEVER false-positive to "ready" on an empty database, or a user creates a
+  // login against a schema-less instance and every screen errors (dogfood #2).
+  // So prefer an authoritative Postgres check via `to_regclass` — PostgREST's
+  // schema cache can 200 on a missing table right after Marketplace
+  // provisioning, which is exactly the trap that bit us. The REST probe is
+  // only a fallback for the bring-your-own path with no direct DB URL.
   let schema: SetupStatus["schema"] = "unknown";
-  let users: number | null = null;
+  if (env.databaseUrl) {
+    schema = await schemaViaPostgres();
+  } else if (env.supabaseUrl && (env.supabaseAnonKey || env.supabaseServiceKey)) {
+    schema = await schemaViaRest();
+  }
 
-  if (env.supabaseUrl && (env.supabaseAnonKey || env.supabaseServiceKey)) {
-    const key = supabaseServiceKey() || supabaseAnonKey();
-    const probe = createSupabaseClient(supabaseUrl(), key, {
+  let users: number | null = null;
+  if (env.supabaseUrl && env.supabaseServiceKey) {
+    const admin = createSupabaseClient(supabaseUrl(), supabaseServiceKey(), {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-
-    const { error } = await probe
-      .from("settings")
-      .select("key", { head: true, count: "exact" });
-    if (!error) {
-      schema = "ready";
-    } else if (
-      error.code === "42P01" || // undefined_table (raw Postgres)
-      error.code === "PGRST205" || // PostgREST: table not in schema cache
-      /does not exist|find the table/i.test(error.message)
-    ) {
-      schema = "missing";
-    }
-
-    if (env.supabaseServiceKey) {
-      const { data, error: usersError } = await probe.auth.admin.listUsers({
-        page: 1,
-        perPage: 1,
-      });
-      if (!usersError) users = data.users.length;
-    }
+    const { data, error: usersError } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1,
+    });
+    if (!usersError) users = data.users.length;
   }
 
   return {
@@ -98,6 +94,48 @@ export async function getSetupStatus(): Promise<SetupStatus> {
  *  Only while the instance is unclaimed: schema absent, or zero users. */
 export function isUnclaimed(status: SetupStatus): boolean {
   return status.schema === "missing" || status.users === 0;
+}
+
+// A local dev database usually speaks no TLS; Supabase requires it but its
+// chain isn't in Node's default CA store, so we skip verification there.
+function pgClient(dbUrl: string): Client {
+  const local = /@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl);
+  return new Client({
+    connectionString: dbUrl,
+    ssl: local ? undefined : { rejectUnauthorized: false },
+  });
+}
+
+/** Authoritative table-existence check over the direct Postgres connection.
+ *  `to_regclass` returns null when the table doesn't exist — no schema-cache
+ *  in the path, so no false "ready". Returns "unknown" only if we can't even
+ *  connect (transient), which callers treat conservatively as not-ready. */
+async function schemaViaPostgres(): Promise<SetupStatus["schema"]> {
+  const client = pgClient(supabaseDbUrl());
+  try {
+    await client.connect();
+    const { rows } = await client.query(
+      "select to_regclass('public.settings') is not null as ready",
+    );
+    return rows[0]?.ready ? "ready" : "missing";
+  } catch {
+    return "unknown";
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+/** Fallback for the bring-your-own path (no direct DB URL): probe via REST.
+ *  Best-effort — a healthy schema returns rows without error; any error is
+ *  treated as not-ready. (Prefer schemaViaPostgres whenever a DB URL exists;
+ *  the REST schema cache has been observed to 200 on a missing table.) */
+async function schemaViaRest(): Promise<SetupStatus["schema"]> {
+  const key = supabaseServiceKey() || supabaseAnonKey();
+  const probe = createSupabaseClient(supabaseUrl(), key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { error } = await probe.from("settings").select("key").limit(1);
+  return error ? "missing" : "ready";
 }
 
 // --- The migration runner ---------------------------------------------------
@@ -133,13 +171,7 @@ export async function runMigrations(): Promise<string[]> {
   }
 
   const files = await listMigrationFiles();
-  // Supabase requires TLS but its chain isn't in Node's default CA store;
-  // a local dev database usually speaks no TLS at all.
-  const local = /@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl);
-  const client = new Client({
-    connectionString: dbUrl,
-    ssl: local ? undefined : { rejectUnauthorized: false },
-  });
+  const client = pgClient(dbUrl);
   await client.connect();
   const applied: string[] = [];
   try {
