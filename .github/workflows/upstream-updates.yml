@@ -47,10 +47,16 @@ jobs:
           git config user.name "chief-updates[bot]"
           git config user.email "noreply@github.com"
           git checkout -B chief/upstream-update
-          # Merge (not rebase) so the user's own commits are preserved.
-          git merge --no-edit upstream/main || {
+          # Take upstream's version on any overlap. Vercel's deploy-button clone
+          # does NOT share git history with upstream, so a plain merge refuses
+          # ("unrelated histories"); --allow-unrelated-histories + -X theirs lets
+          # the first update apply cleanly (later updates are ordinary merges,
+          # since upstream becomes an ancestor once this merges). User code edits
+          # are discouraged — config lives in the DB — so favoring upstream is
+          # the right call. The abort can't itself fail the job (|| true).
+          git merge --no-edit --allow-unrelated-histories -X theirs upstream/main || {
             echo "MERGE_CONFLICT=1" >> "$GITHUB_ENV"
-            git merge --abort
+            git merge --abort 2>/dev/null || true
           }
 
       - name: Push and open PR
