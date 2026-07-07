@@ -80,7 +80,7 @@ export async function POST(req: Request) {
   const ai = await resolveAi({ settings });
   if (!ai)
     return new Response(
-      'No AI provider is configured. Set ANTHROPIC_API_KEY, or switch "ai.provider" to "gateway" in Config (a Vercel deployment authenticates the gateway automatically).',
+      "Chief has no AI credential. On Vercel: enable Settings → Security → Secure Backend Access so the AI Gateway OIDC token is issued (the sovereign default, no key needed). Or set an explicit credential — paste an AI Gateway key in Config, or set ANTHROPIC_API_KEY and switch Config → AI — provider to \"anthropic\".",
       { status: 500 },
     );
   const model = ai.model;

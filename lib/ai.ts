@@ -29,29 +29,46 @@ export type ResolvedAi = {
 };
 
 /** The gateway credential, in precedence order: key pasted in Config,
- *  AI_GATEWAY_API_KEY (local dev), the deployment's auto-injected OIDC token.
- *  Null when gateway mode has nothing to authenticate with. */
-export function resolveGatewayKey(
+ *  AI_GATEWAY_API_KEY (local dev), then the deployment's OIDC token. Null when
+ *  gateway mode has nothing to authenticate with.
+ *
+ *  The OIDC token is the subtle one: on Vercel it's an env var only at BUILD
+ *  time — at RUNTIME it arrives as a request header, so `process.env` is empty
+ *  and we must read it via `getVercelOidcToken()` (which pulls it from the
+ *  request context). It's issued only when the project has "Secure Backend
+ *  Access" enabled. Async because of that lookup. */
+export async function resolveGatewayKey(
   settings?: Partial<AppSettings>,
-): string | null {
-  return (
-    settings?.["ai.gateway_key"]?.trim() ||
-    process.env.AI_GATEWAY_API_KEY ||
-    process.env.VERCEL_OIDC_TOKEN ||
-    null
-  );
+): Promise<string | null> {
+  const pasted = settings?.["ai.gateway_key"]?.trim();
+  if (pasted) return pasted;
+  if (process.env.AI_GATEWAY_API_KEY) return process.env.AI_GATEWAY_API_KEY;
+  // Build-time, or `vercel env pull` locally, expose it as an env var.
+  if (process.env.VERCEL_OIDC_TOKEN) return process.env.VERCEL_OIDC_TOKEN;
+  // Runtime on Vercel: read it from the request context. Dynamic-import so
+  // non-Vercel/local/no-request contexts degrade to null instead of throwing.
+  try {
+    const { getVercelOidcToken } = await import("@vercel/oidc");
+    const token = (await getVercelOidcToken())?.trim();
+    if (token) return token;
+  } catch {
+    /* not on Vercel, Secure Backend Access off, or no request context */
+  }
+  return null;
 }
 
 /** The EFFECTIVE provider: the configured choice ("gateway" by default), with
  *  one graceful fallback — gateway chosen but no gateway credential in sight
  *  while an Anthropic key exists → use the Anthropic key. An explicit
  *  "anthropic" is always respected. */
-export function resolveProvider(settings?: Partial<AppSettings>): AiProvider {
+export async function resolveProvider(
+  settings?: Partial<AppSettings>,
+): Promise<AiProvider> {
   const raw = (settings?.["ai.provider"] ?? process.env.AI_PROVIDER ?? "gateway")
     .trim()
     .toLowerCase();
   if (raw === "anthropic") return "anthropic";
-  if (!resolveGatewayKey(settings) && process.env.ANTHROPIC_API_KEY) {
+  if (!(await resolveGatewayKey(settings)) && process.env.ANTHROPIC_API_KEY) {
     return "anthropic";
   }
   return "gateway";
@@ -77,7 +94,7 @@ export async function resolveAi(opts?: {
     }
   }
 
-  const provider = resolveProvider(settings);
+  const provider = await resolveProvider(settings);
 
   let model =
     opts?.model ??
@@ -87,7 +104,7 @@ export async function resolveAi(opts?: {
   model = model.trim() || DEFAULT_MODEL;
 
   if (provider === "gateway") {
-    const apiKey = resolveGatewayKey(settings);
+    const apiKey = await resolveGatewayKey(settings);
     if (!apiKey) return null;
     // Gateway model ids are provider-prefixed (e.g. "anthropic/…", "openai/…").
     // A bare id is assumed to be an Anthropic model.

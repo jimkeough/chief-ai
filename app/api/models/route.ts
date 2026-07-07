@@ -38,11 +38,11 @@ export async function GET() {
   // Same resolution as lib/ai.ts — including the fallback to a present
   // Anthropic key when gateway mode has no credential — so the picker always
   // lists the catalog Chief will actually talk to.
-  const provider = resolveProvider(settings);
+  const provider = await resolveProvider(settings);
 
   const models =
     provider === "gateway"
-      ? await gatewayModels(resolveGatewayKey(settings) ?? undefined)
+      ? await gatewayModels((await resolveGatewayKey(settings)) ?? undefined)
       : await anthropicModels();
 
   return Response.json({ provider, models });
