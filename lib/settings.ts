@@ -15,6 +15,7 @@ export type SettingKey =
   | "chief.model"
   | "ai.provider"
   | "ai.gateway_key"
+  | "ai.byok_anthropic_key"
   | "mcp.chat_enabled"
   | "actions.enabled"
   | "web.fetch_enabled"
@@ -93,6 +94,15 @@ export const SETTING_DEFS: SettingDef[] = [
     default: "",
     singleLine: true,
     placeholder: "(blank — uses Vercel OIDC)",
+  },
+  {
+    key: "ai.byok_anthropic_key",
+    label: "AI Gateway — bring your own Anthropic key (optional)",
+    description:
+      "Gateway mode only. Paste your own Anthropic API key to run premium models (Opus) on YOUR Anthropic billing, routed through the gateway — no Vercel paid-credit top-up needed. Blank = use Vercel credits (free-tier models are free; premium needs credits). Your key is stored only in your own database and sent to the gateway per request.",
+    default: "",
+    singleLine: true,
+    placeholder: "sk-ant-… (optional)",
   },
   // --- Chief loop switches (Phase 3) --------------------------------------
   // Two kill switches, both must be on for a write to execute: the master

@@ -40,10 +40,23 @@ MCP URLs you configure yourself.
 
 Chief's model calls route through
 [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) by default. Why it's
-the default: it is the only provider that works with **zero keys to fetch** —
-the single most hostile step in onboarding (console.anthropic.com, billing,
-credit card) simply disappears — and one endpoint reaches any model (Claude,
-GPT, Gemini, …).
+the default: **no key to fetch** — no separate console.anthropic.com account —
+and one endpoint reaches any model (Claude, GPT, Gemini, …). Auth is your
+deployment's OIDC token, read at runtime; nothing to paste.
+
+**Zero-key, not zero-cost — the honest version.** The gateway requires a
+**payment method on your Vercel account** to service any request (Vercel's
+anti-abuse gate). With a card on file, **free-tier models run at $0**;
+**premium models (Opus) need paid credits** (a top-up, ~$10 minimum) — *or*
+bring your own Anthropic key (below). So the "API-key cliff" didn't vanish, it
+moved from Anthropic to the Vercel account you already made for the deploy —
+one account instead of two. Chief ships a **free-model fallback** so a premium
+model your account can't reach degrades to a working one instead of erroring.
+
+**Bring your own key (BYOK).** Paste your own Anthropic key in Config → *AI
+Gateway — bring your own Anthropic key*, and premium models run on **your
+Anthropic billing**, routed through the gateway (no Vercel top-up). Your key is
+stored only in your own database and sent to the gateway per request.
 
 **Why this stays sovereign:** you deploy your OWN Vercel project, so gateway
 traffic authenticates with *that* project's auto-injected OIDC token and bills

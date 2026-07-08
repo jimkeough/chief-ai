@@ -20,12 +20,23 @@ import { getAppSettings, type AppSettings } from "@/lib/settings";
 export const AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh";
 const DEFAULT_MODEL = "claude-opus-4-8";
 
+// A free-tier gateway model Chief falls back to when the chosen premium model
+// is unavailable to this account (e.g. no paid credits, no BYOK key). Keeps
+// Chief answering — degraded, not dead — instead of the RestrictedModelsError
+// a stranger hits on a carded-but-not-topped-up account (dogfood #2). Pinned
+// to a capable free agentic model; overridable is a future setting.
+const FREE_FALLBACK_MODEL = "moonshotai/kimi-k2.7";
+
 export type AiProvider = "anthropic" | "gateway";
 
 export type ResolvedAi = {
   client: Anthropic;
   model: string;
   provider: AiProvider;
+  /** Gateway-only `providerOptions` to spread into each messages create/stream
+   *  call: a free-model fallback, plus BYOK when the user pasted a provider
+   *  key. Undefined in direct-Anthropic mode. */
+  providerOptions?: Record<string, unknown>;
 };
 
 /** The gateway credential, in precedence order: key pasted in Config,
@@ -109,10 +120,21 @@ export async function resolveAi(opts?: {
     // Gateway model ids are provider-prefixed (e.g. "anthropic/…", "openai/…").
     // A bare id is assumed to be an Anthropic model.
     if (!model.includes("/")) model = `anthropic/${model}`;
+
+    // Gateway routing options. A free-model fallback so a premium model the
+    // account can't reach degrades to a working one instead of erroring; and
+    // BYOK so a pasted Anthropic key runs premium models on the user's own
+    // Anthropic billing (no Vercel paid credits needed).
+    const gateway: Record<string, unknown> = {};
+    if (model !== FREE_FALLBACK_MODEL) gateway.models = [FREE_FALLBACK_MODEL];
+    const byok = settings?.["ai.byok_anthropic_key"]?.trim();
+    if (byok) gateway.byok = { anthropic: [{ apiKey: byok }] };
+
     return {
       client: new Anthropic({ apiKey, baseURL: AI_GATEWAY_BASE_URL }),
       model,
       provider,
+      ...(Object.keys(gateway).length ? { providerOptions: { gateway } } : {}),
     };
   }
 

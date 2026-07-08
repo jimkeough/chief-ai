@@ -8,12 +8,15 @@ A self-hosted personal AI chief of staff. One user per deployment (your Vercel +
 THE link for the landing site. The button clones this repo to your GitHub,
 creates the Vercel project, and **provisions a Supabase database on your own
 account through the Vercel Marketplace** (env vars injected — no separate
-supabase.com signup, nothing to paste). It prompts for no keys at all: Chief
-runs on **Vercel AI Gateway by default**, authenticated by your own
-deployment's OIDC token and billed to your own Vercel account, so there is no
-console.anthropic.com trip. *(Prefer prompts that go only to Anthropic? Flip
-Config → **AI — provider** = `anthropic` and set your own key. See
-`TRUST.md`.)* Then open your deployment — **first render IS onboarding**: the
+supabase.com signup, nothing to paste). It prompts for **no keys**: Chief runs
+on **Vercel AI Gateway by default**, authenticated by your deployment's OIDC
+token — no console.anthropic.com trip, nothing to paste. The one cost step:
+the gateway needs a **payment method on your Vercel account** to run (free-tier
+models are $0; premium models like Opus need paid credits, or bring your own
+Anthropic key in Config). Zero-key, not zero-cost — but one account, not two.
+*(Prefer prompts that go only to Anthropic? Flip Config → **AI — provider** =
+`anthropic` and set your own key. See `TRUST.md`.)* Then open your deployment
+— **first render IS onboarding**: the
 app sets up its own database schema (one tap) and creates your login right
 there; no visit to the Supabase dashboard. Sign in and connect your email from
 the Inbox tab with an app password. Everything runs on accounts you own; see

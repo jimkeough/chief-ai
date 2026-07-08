@@ -539,3 +539,44 @@ TRUST.md's no-phone-home guarantee.
 `@supabase/ssr` → `@supabase/supabase-js` references `process.version`, which
 Next flags for the Edge middleware runtime. Build still "Compiled
 successfully"; harmless. Optional cleanup: pin middleware to the Node runtime.
+
+### 22. AI Gateway zero-key ≠ zero-cost — the real payment step (2026-07-08)
+Chief responded once the gateway was sorted, but the path revealed the true
+cost gate (two 403s, in order):
+1. **Before a card:** `customer_verification_required` — "AI Gateway requires a
+   valid credit card on file to service requests." Account-level, model-
+   independent: **no card = no gateway at all**, even for free credits.
+2. **Card added, on Opus:** `RestrictedModelsError` — "Free tier users do not
+   have access to this model." Premium models need **paid credits** (Jim hit a
+   **$10 minimum top-up**); free-tier models run at $0 on just a card.
+
+So the "API-key cliff" (entry 8) didn't disappear — it **moved to Vercel**: a
+card is required regardless of model; premium models cost real money. The win
+is one account (Vercel, already made for the deploy) instead of two, and a
+$0 path exists via free-tier models. Honest framing now in README/TRUST:
+**zero-key, not zero-cost.**
+
+Responses shipped this session:
+- **Free-model fallback** (`lib/ai.ts`): gateway calls carry
+  `providerOptions.gateway.models:[<free model>]`, so a premium model the
+  account can't reach degrades to a working free one instead of erroring.
+- **BYOK** (`ai.byok_anthropic_key` setting): paste your own Anthropic key →
+  premium models run on your Anthropic billing through the gateway, no Vercel
+  top-up. (Open question to verify: whether BYOK also waives the card-on-file
+  requirement.)
+- **Default-model decision (pending Jim's live test):** keep Opus (premium,
+  needs credits/BYOK — best tool-use) vs. default to a free agentic model
+  (`moonshotai/kimi-k2.7`, $0 first-run) — decided by testing whether a free
+  model handles Chief's approval-card/tool protocol acceptably.
+
+Still owed (next): per-turn cost display + a Config → Usage panel (token usage
+per response; `/v1/credits` for balance + lifetime spend; spend reports tagged
+via `providerOptions.gateway.tags`).
+
+## Walkthrough #2 — bottom line
+The zero-question provisioning funnel (deploy button → Supabase → first-render
+DB setup → in-app login) is **proven end to end on a real deployment**, and
+Chief runs on the sovereign zero-key gateway default. Remaining friction is
+honest and small: sign in with GitHub (covers both accounts), a payment method
+on Vercel (one account, $0 on free models), and the update-enable tap. Every
+bug the walkthrough surfaced (entries 16–19) is fixed.

@@ -306,7 +306,12 @@ export async function POST(req: Request) {
             system: systemBlocks,
             ...(cachedClientTools.length ? { tools: cachedClientTools } : {}),
             messages: convo,
-          });
+            // Gateway routing (free-model fallback + BYOK) when in gateway mode.
+            // `providerOptions` is a gateway extension the SDK types don't know.
+            ...(ai.providerOptions
+              ? { providerOptions: ai.providerOptions }
+              : {}),
+          } as unknown as Anthropic.MessageStreamParams);
           stream.on("text", (delta: string) => {
             assistantText += delta;
             controller.enqueue(encoder.encode(delta));
