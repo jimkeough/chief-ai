@@ -223,14 +223,21 @@ export default function ConfigClient() {
   const [memory, setMemory] = useState<KbDoc[]>([]);
   const [newRule, setNewRule] = useState("");
   const [connect, setConnect] = useState<ConnectStatus | null>(null);
+  const [upd, setUpd] = useState<{
+    current: string;
+    latest: string | null;
+    behind: boolean;
+    releaseUrl: string;
+  } | null>(null);
 
   const refresh = useCallback(async () => {
-    const [s, st, ins, mem, con] = await Promise.all([
+    const [s, st, ins, mem, con, up] = await Promise.all([
       fetch("/api/settings").then((r) => r.json()).catch(() => null),
       fetch("/api/config/status").then((r) => r.json()).catch(() => null),
       fetch("/api/kb?kind=instruction").then((r) => r.json()).catch(() => null),
       fetch("/api/kb?kind=fact").then((r) => r.json()).catch(() => null),
       fetch("/api/connect").then((r) => r.json()).catch(() => null),
+      fetch("/api/updates/status").then((r) => r.json()).catch(() => null),
     ]);
     if (s) {
       setDefs(s.defs ?? []);
@@ -240,6 +247,7 @@ export default function ConfigClient() {
     if (ins) setInstructions((ins.documents ?? []) as KbDoc[]);
     if (mem) setMemory(((mem.documents ?? []) as KbDoc[]).slice(0, 20));
     if (con) setConnect(con as ConnectStatus);
+    if (up) setUpd(up);
   }, []);
 
   // --- Catalog search + per-account tool lists ------------------------------
@@ -987,6 +995,55 @@ export default function ConfigClient() {
             <span className="text-ink">your own</span> repo — you review and
             merge; merging auto-deploys. Nothing changes without your approval.
           </p>
+
+          {upd &&
+            (upd.behind ? (
+              <div
+                className="flex flex-col gap-2 rounded-control border p-3"
+                style={{ borderColor: "var(--copper-border, var(--hairline))", background: "var(--copper-dim, var(--raised))" }}
+              >
+                <div className="flex items-center gap-2">
+                  <Dot ok={false} />
+                  <span className="text-[14px] font-medium text-ink">
+                    Update available — v{upd.latest}
+                  </span>
+                </div>
+                <span className="text-[12.5px] text-ink-2">
+                  You&apos;re on v{upd.current}.{" "}
+                  <a
+                    href={upd.releaseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-teal underline"
+                  >
+                    What&apos;s new
+                  </a>
+                </span>
+                {status?.updates?.repoOwner && status?.updates?.repoSlug && (
+                  <a
+                    href={`https://github.com/${status.updates.repoOwner}/${status.updates.repoSlug}/actions/workflows/upstream-updates.yml`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-10 items-center justify-center rounded-control px-4 text-[14px] font-medium"
+                    style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+                  >
+                    Get this update →
+                  </a>
+                )}
+                <span className="text-[11.5px] leading-relaxed text-ink-3">
+                  Opens the updater: tap <span className="text-ink-2">Run workflow</span> →
+                  it prepares a pull request in your repo → review the diff and merge.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Dot ok={true} />
+                <span className="text-[13px] text-ink-2">
+                  Up to date{upd.current ? ` (v${upd.current})` : ""}.
+                </span>
+              </div>
+            ))}
+
           {status?.updates?.enableUrl ? (
             <>
               <p className="text-[13.5px] leading-relaxed text-ink-2">

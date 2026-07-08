@@ -440,3 +440,102 @@ lesson: only your own logins can touch sovereign infra):
 
 Then: click the README's primary Deploy button on a phone, and log every
 friction moment here as entries 13+.
+
+## Walkthrough #2 result (2026-07-08) — the provisioning pass, live
+
+Jim ran the deploy-button funnel end to end on a phone. The zero-question
+provisioning half **works**; the after-deploy half surfaced four real bugs
+(all fixed this session) and one broken subsystem (updates), rebuilt. Log:
+
+### 13. Signup wall — "Sign up" vs the provider buttons; phone verification
+- The Vercel "New Project" screen shows a **Sign Up** button, but the three
+  provider buttons (GitHub/GitLab/Bitbucket) ARE the signup — clicking
+  **Continue with GitHub** collapses Vercel signup + GitHub authorization into
+  one action. The separate "Sign Up" reads as a required extra step.
+  → Landing-site copy: "You'll sign in with GitHub — that covers both accounts."
+- **Vercel ties one phone number to one account**, so an operator testing with
+  themselves can't make a true second account. NOT a real-user blocker (a
+  stranger has their own phone); it just means the provisioning pass runs on
+  the operator's existing Vercel account. Fresh-identity testing needs a burner
+  number.
+
+### 14. The upstream repo must be PUBLIC (launch blocker)
+The deploy button clones the source repo; if `jim-homejab/ai-cockpit` is
+private, a stranger's Vercel can't read it and the button fails. Made public
+(the byte-diffability trust story assumes public anyway). Pre-launch checklist
+item. (History was scanned clean first — only `.env.example` ever committed.)
+
+### 15. Provisioning half works — confirmations
+- The `stores=[{…supabase…}]` deploy-button parameter **is** correct (Supabase
+  card appears on the clone screen; the older `products` spelling was wrong).
+- Supabase provisions on the **Free plan, no credit card**.
+- The Marketplace injects **both** env-var naming schemes (anon/service_role
+  AND publishable/secret + POSTGRES_URL*); the app reads either
+  (`lib/supabase/env.ts`).
+- The user's clone repo is named from `repository-name` (`chief`), private by
+  default; the clone screen still shows the upstream name as the source.
+
+### 16. First render skipped DB setup on an empty database (fixed, PR #23)
+Health check reported `schema: "ready"` on a freshly provisioned, EMPTY DB
+(PostgREST's schema cache returned no error for the missing table), so the app
+jumped past "Set up my database" straight to "Create your login" — which would
+have created a login on a schema-less instance. Fixed: detect schema
+authoritatively over the direct Postgres connection (`to_regclass`), route to
+setup unless schema is *confirmed* ready, and a create-user guard.
+
+### 17. In-app migrations failed TLS to Supabase (fixed, PR #24)
+"Set up my database" hit **"self-signed certificate in certificate chain."**
+`ssl:{rejectUnauthorized:false}` alone wasn't enough — node-postgres treats a
+`sslmode=require` in the injected `POSTGRES_URL` as `verify-full`, overriding
+it. Fixed by stripping `sslmode` from the URL. (Only caught because the earlier
+local test used a non-TLS database; verified the fix against a self-signed TLS
+Postgres.)
+
+### 18. AI Gateway zero-key auth failed at runtime (fixed, PR #26)
+With gateway as the default and no keys, Chief said "No AI provider is
+configured." Cause: `VERCEL_OIDC_TOKEN` is an env var only at BUILD time; at
+RUNTIME it arrives as a request header and must be read via
+`getVercelOidcToken()`. "Secure Backend Access (OIDC Federation)" was already
+enabled by default (Team issuer) and the token was minting — the bug was purely
+reading it from the wrong place. Fixed.
+
+### 19. THE update pipeline was broken end to end (rebuilt, PRs #25/#27 + this)
+The "updates ship as proposals" design assumed clones are git forks. Vercel
+deploy-button clones are **not forks and not git clones** — they're a fresh
+repo seeded with the template files. Consequences, each a separate break:
+- **`.github/workflows/` is stripped** on clone (Vercel's App lacks the
+  `workflow` scope), so the updater never lands in a user's repo → PR #25 ships
+  the workflow as a string and adds a one-tap "Enable auto-updates" that commits
+  it into the user's own repo (deep link built from `VERCEL_GIT_REPO_*`).
+- **Enabling also needs** "Allow GitHub Actions to create pull requests" toggled
+  on (off by default) — currently a documented step in the card.
+- **Unrelated git history** → the updater's `git merge upstream/main` refused
+  ("unrelated histories") and its `git merge --abort` fallback then failed too
+  (exit 128) → PR #27: `--allow-unrelated-histories -X theirs` + a safe abort.
+  First update reconciles history; later ones are ordinary merges.
+- **Detection can't use commit SHAs** (unrelated histories never match) and the
+  app can't read the private clone via API → this PR makes detection
+  **version/release-driven**: the operator tags releases (`release.yml` cuts a
+  GitHub Release on a `package.json` version bump), and the app compares its
+  bundled version to upstream's latest PUBLIC release (`/api/updates/status`),
+  surfacing an "update available" card in Config → Software updates.
+
+**Final update process (design):** first update = one tap in-app to commit the
+workflow (+ the PR-permission toggle) — ideally folded into onboarding; every
+update after = the weekly workflow opens a PR and Chief shows an approve-first
+"vX available → review & merge" card. All in the user's own repo + Vercel; no
+operator in the path. Scale option (later): a "Chief Updater" GitHub App that
+opens the PRs centrally, removing the per-repo workflow + toggle.
+
+### 20. Integrations — keep the bundle minimal (decision)
+The deploy button bundles Supabase only, on purpose. Add capability through
+NATIVE Vercel features (Cron for a daily digest / update check) and what
+Supabase already provides (Storage for files) — not more Marketplace products.
+**Never** add telemetry/analytics/error-reporting integrations (Sentry, Vercel
+Analytics, Log Drains): they ship user data off the instance and break
+TRUST.md's no-phone-home guarantee.
+
+### 21. Cosmetic: "A Node.js API is used (process.version)" build warning
+`@supabase/ssr` → `@supabase/supabase-js` references `process.version`, which
+Next flags for the Edge middleware runtime. Build still "Compiled
+successfully"; harmless. Optional cleanup: pin middleware to the Node runtime.

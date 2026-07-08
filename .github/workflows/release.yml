@@ -1,0 +1,47 @@
+# Cuts a versioned GitHub Release whenever package.json's version changes on
+# main — the signal the in-app update check reads (each deployment compares its
+# bundled version to the latest release here). Runs on the UPSTREAM repo only.
+#
+# To ship an update to everyone: bump "version" in package.json, merge to main.
+# This tags v<version> and publishes a release with auto-generated notes; every
+# deployed Chief then shows "update available" until its owner merges the
+# updater PR. Keep versions increasing (semver).
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [package.json]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.repository == 'jim-homejab/ai-cockpit'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: v
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Tag + release if this version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ steps.v.outputs.version }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists — nothing to do."
+            exit 0
+          fi
+          git config user.name "chief-release[bot]"
+          git config user.email "noreply@github.com"
+          git tag "$tag"
+          git push origin "$tag"
+          gh release create "$tag" --title "$tag" --generate-notes
