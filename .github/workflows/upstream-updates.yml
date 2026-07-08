@@ -16,6 +16,12 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  # Without this, pushing a branch that touches .github/workflows/* (which an
+  # upstream update almost always does) is rejected with "refusing to allow a
+  # GitHub App to create or update workflow ... without `workflows` permission"
+  # — a hard gate that the repo's "Read and write permissions" setting does
+  # NOT cover; it's only grantable from inside the workflow file itself.
+  workflows: write
 
 env:
   UPSTREAM: jim-homejab/ai-cockpit
@@ -66,7 +72,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           git push -f origin chief/upstream-update || {
-            echo "::error::Push denied even though this workflow requests contents:write — an org policy may be capping GITHUB_TOKEN. Check Settings > Actions > General > Workflow permissions."
+            echo "::error::Push denied. If the log above says 'without \`workflows\` permission', this workflow's own YAML is missing workflows:write (should already be fixed if you're on a current version — re-enable auto-updates to recommit it). Otherwise an org policy may be capping GITHUB_TOKEN — check Settings > Actions > General > Workflow permissions."
             exit 1
           }
           gh pr list --head chief/upstream-update --state open --json number \
