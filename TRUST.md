@@ -9,7 +9,12 @@ to leave. If any code change contradicts this file, the code is wrong.
 Everything below runs on infrastructure **you** own and bill:
 
 - **The app** — your Vercel project, cloned byte-for-byte from this public
-  repo (compare any time: your fork vs. upstream is one GitHub diff).
+  repo (compare any time: your clone vs. upstream is one GitHub diff). Keep the
+  clone **public**: it carries no secrets (`.env` is gitignored; every
+  credential lives in your database, below), and a public clone is what lets
+  updates deploy for free — so nothing about your setup is exposed by it, and
+  updates "just work" (see *Updates*, below). Your data plane stays private
+  regardless of repo visibility.
 - **Your data** — your Supabase project: tasks, projects, memory, contacts,
   the communications log, the journal, settings, and any credentials you
   paste (email app password, Google refresh token). Row-level security on
@@ -35,6 +40,27 @@ Everything below runs on infrastructure **you** own and bill:
 No telemetry, no phone-home, no vendor account required. The app works
 end-to-end in this mode: email over an app password, connectors as direct
 MCP URLs you configure yourself.
+
+## Updates (sovereign, approve-first)
+
+The trust contract applies to Chief's own evolution: **the app never updates
+itself silently.** New versions arrive as pull requests into *your* repo that
+*you* review and merge — merging is what deploys them. No operator ever pushes
+code to you, and there is no auto-update daemon.
+
+- **Detection is read-only.** Your deployment compares its own bundled version
+  to upstream's latest **public** GitHub release (`/api/updates/status`). It
+  reads a public fact; it needs no token and touches nothing of yours. The
+  same public releases power the [changelog](/changelog).
+- **Delivery stays in your accounts.** A weekly GitHub Action *in your repo*
+  opens the update PR; you merge it in your own GitHub; your own Vercel
+  deploys it. Chief holds no credential to any of this — every button in
+  Config → Software updates just lands you in your own authenticated GitHub.
+- **Why the clone is public.** It's the delivery mechanism, not a give: a
+  public repo lets your free Vercel plan deploy the updater's merge commits.
+  The repo holds no secrets, and your data plane (below) is private either way.
+  Staying private is possible but costs friction (Vercel Pro, or merging
+  locally so the commit is authored by you).
 
 ## AI Gateway (the default)
 

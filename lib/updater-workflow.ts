@@ -20,21 +20,78 @@ export type UpdatesInfo = {
    *  repo, content prefilled. Null when no GitHub repo can be identified (e.g.
    *  local dev, or a non-GitHub provider). */
   enableUrl: string | null;
+  /** The repo's GitHub home. Null off a GitHub deployment. */
+  repoUrl: string | null;
+  /** The repo's Settings page — where the user flips visibility to Public
+   *  (required so Vercel Hobby will deploy the updater's merge commits; see
+   *  the "why public" note in the Software updates card). */
+  settingsUrl: string | null;
+  /** The updater workflow's Actions page: the user taps "Run workflow" to
+   *  prepare the update PR on demand (also the recovery path if GitHub has
+   *  auto-paused the weekly cron after 60 days of repo inactivity). */
+  runWorkflowUrl: string | null;
+  /** The repo's open pull requests — where the update PR lands for review and
+   *  merge. Merging is what auto-deploys the new code. */
+  reviewUrl: string | null;
 };
 
 /** Identify the deployment's own git repo from Vercel's injected system env and
- *  build the one-tap "enable updates" link. All server-side; never exposes a
- *  token (there is none — the user commits the file themselves). */
+ *  build the deep links the Software updates card uses. All server-side and
+ *  purely string-built from the repo identity — never exposes a token (there is
+ *  none; every action lands the user in their OWN authenticated GitHub). */
 export function getUpdatesInfo(): UpdatesInfo {
   const provider = process.env.VERCEL_GIT_PROVIDER ?? null;
   const repoOwner = process.env.VERCEL_GIT_REPO_OWNER ?? null;
   const repoSlug = process.env.VERCEL_GIT_REPO_SLUG ?? null;
-  let enableUrl: string | null = null;
-  if (provider === "github" && repoOwner && repoSlug) {
-    enableUrl =
-      `https://github.com/${repoOwner}/${repoSlug}/new/main` +
-      `?filename=${UPDATER_WORKFLOW_PATH}` +
-      `&value=${encodeURIComponent(UPDATER_WORKFLOW_YAML)}`;
+  const onGithub = provider === "github" && Boolean(repoOwner && repoSlug);
+  const base = onGithub ? `https://github.com/${repoOwner}/${repoSlug}` : null;
+  return {
+    provider,
+    repoOwner,
+    repoSlug,
+    enableUrl: base
+      ? `${base}/new/main?filename=${UPDATER_WORKFLOW_PATH}` +
+        `&value=${encodeURIComponent(UPDATER_WORKFLOW_YAML)}`
+      : null,
+    repoUrl: base,
+    settingsUrl: base ? `${base}/settings` : null,
+    runWorkflowUrl: base
+      ? `${base}/actions/workflows/upstream-updates.yml`
+      : null,
+    reviewUrl: base ? `${base}/pulls` : null,
+  };
+}
+
+/** Is the deployment's own repo public? Updates only auto-deploy on Vercel's
+ *  free (Hobby) plan when the repo is public — a private repo blocks the
+ *  updater's bot/merge commits (they aren't authored by a project collaborator,
+ *  which Hobby doesn't support). A Chief clone holds no secrets (.env is
+ *  gitignored; all credentials live in the user's Supabase), so public is safe.
+ *
+ *  Read with NO token against the public GitHub API: 200 → public, 404 →
+ *  private-or-absent, anything else (rate limit, network) → null = "unknown".
+ *  Callers treat null as "don't nag." */
+export async function getRepoPublic(
+  owner: string | null,
+  slug: string | null,
+): Promise<boolean | null> {
+  if (!owner || !slug) return null;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${slug}`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "chief-update-check",
+      },
+      cache: "no-store",
+    });
+    if (res.status === 200) {
+      const data = (await res.json()) as { private?: boolean };
+      // A public repo is reachable unauthenticated and reports private:false.
+      return data.private === false;
+    }
+    if (res.status === 404) return false; // private (or doesn't exist)
+    return null; // rate-limited / transient — unknown
+  } catch {
+    return null;
   }
-  return { provider, repoOwner, repoSlug, enableUrl };
 }

@@ -696,3 +696,64 @@ immediate unblock is a manual Redeploy from the Vercel dashboard.
 the user the old story (enable → run workflow → merge → done). Until the deploy
 gate is solved, that UI is promising an update flow that stops one step short.
 Don't ship UI copy claiming updates "just work" until option A–D is chosen.
+
+### 24. RESOLVED — the deploy gate falls to a public clone (2026-07-08)
+
+Entry 23's wall is gone. The fix is the simplest thing on the option list and
+wasn't options A–D: **make the user's clone public.**
+
+**Why it works.** The block is Vercel's, and it is scoped to *private* repos:
+"the Hobby Plan does not support collaboration for **private** repositories."
+Public repos on Hobby deploy commits from **any** author — the ordinary
+open-source flow — so the updater's `web-flow`/bot merge commits deploy with no
+Pro, no token, no re-authoring. Proven live on `jimkeough/chief`: after flipping
+to public, every commit on `main` builds green and the instance moved to v0.3.0.
+(Redeploy stays blocked because it rebuilds the *same* old `web-flow` commit
+under Vercel's cached private-repo state; the unstick is a *fresh* commit —
+Jim's own README edit — after which the normal merge→auto-deploy flow resumes.)
+
+**Why it's safe / doesn't break sovereignty.** A Chief clone holds no secrets:
+`.env*` is gitignored (only `.env.example`, a placeholder, is tracked), and
+every credential lives in the user's Supabase. The clone is a byte-for-byte copy
+of the already-public upstream. So public exposes nothing new; the **data plane
+stays private in Supabase** regardless. It also makes TRUST.md's "diff your
+clone vs. upstream" trivially easy.
+
+**What shipped this session (all sovereign — no operator, no stored token):**
+- **Public-by-default guidance + a detection safety net.** `getRepoPublic()`
+  (`lib/updater-workflow.ts`) reads the deployment's own repo via the *public*
+  GitHub API with no token (200 → public, 404 → private, else → unknown);
+  `/api/updates/status` returns `repoPublic`. Config → Software updates shows a
+  "Make your repo public to receive updates" card (with the no-secrets rationale
+  + a link to repo Settings) *only* when the repo is positively detected
+  private. Nobody hits the wall blind again.
+- **Rewrote the Software-updates card.** Removed the "GitHub blocks the updater"
+  doom framing. It's now a launch pad: version status → **Review & merge** deep
+  link to the PR (with a "Prepare it" link to `workflow_dispatch` when no PR
+  exists yet) → merge deploys. Honest one-time-setup copy for enabling the
+  workflow. Fixes the entry-23 "don't ship 'just works' copy" note.
+- **Public `/changelog` page** (`app/changelog/page.tsx`, allowed pre-auth in
+  middleware): renders upstream's public releases as human-readable notes — the
+  informational companion the in-app card links to. (Distinct from installing:
+  a *marketing/changelog* page is anonymous and can't know a visitor's repo, so
+  the actionable "get this into YOUR repo" button must live in the app, which
+  knows the repo from `VERCEL_GIT_REPO_*`. The changelog is release notes, not
+  an installer.)
+- **Docs**: README "Staying up to date" + TRUST.md "Updates (sovereign)"
+  section now state the public-clone requirement and why it's safe.
+
+**Known remaining friction (documented, not blocking):**
+- **Deploy button can't force public.** Vercel's deploy-button URL has no
+  visibility parameter (verified against Vercel docs — supported params are
+  `repository-url`, `repository-name`, `env`, `stores`, `integration-ids`,
+  `redirect-url`, …). The clone screen defaults to a *private* repo via a
+  checkbox the user must uncheck. So "make it public" is one guided step, not
+  automatic. Onboarding/concierge candidate.
+- **GitHub auto-pauses scheduled workflows after 60 days of repo inactivity.**
+  A quiet user's weekly updater cron silently stops opening PRs. Mitigated:
+  detection is app-driven (the version check doesn't need the cron), and the
+  card links to run the workflow manually. Worth a concierge nudge if a check
+  hasn't run in a while.
+- **Private-repo path still exists for holdouts:** Vercel Pro, or merge updates
+  locally (`git pull && git push`) so the tip commit is authored by the owner.
+  Documented as the advanced/opt-out path; public is the recommended default.

@@ -39,6 +39,10 @@ type Status = {
     repoOwner: string | null;
     repoSlug: string | null;
     enableUrl: string | null;
+    repoUrl: string | null;
+    settingsUrl: string | null;
+    runWorkflowUrl: string | null;
+    reviewUrl: string | null;
   };
 };
 
@@ -283,6 +287,7 @@ export default function ConfigClient({
     latest: string | null;
     behind: boolean;
     releaseUrl: string;
+    repoPublic?: boolean | null;
   } | null>(null);
   const [usage, setUsage] = useState<{
     available: boolean;
@@ -1140,8 +1145,59 @@ export default function ConfigClient({
           <p className="text-[13.5px] leading-relaxed text-ink-2">
             Chief improves over time. Updates arrive as pull requests in{" "}
             <span className="text-ink">your own</span> repo — you review and
-            merge; merging auto-deploys. Nothing changes without your approval.
+            merge; merging deploys the new version. Nothing changes without your
+            approval.{" "}
+            <a
+              href="/changelog"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-teal underline"
+            >
+              See what&apos;s changed
+            </a>
+            .
           </p>
+
+          {/* Make-repo-public safety net: on the free Vercel plan a PRIVATE
+              repo blocks the updater's merge commits from deploying (the wall
+              Jim hit). A Chief clone holds no secrets, so public is safe — and
+              it's the one thing that makes merges deploy automatically. Only
+              shown when we positively detected the repo is private. */}
+          {upd?.repoPublic === false && status?.updates?.settingsUrl ? (
+            <div
+              className="flex flex-col gap-2 rounded-control border p-3"
+              style={{ borderColor: "var(--copper-border, var(--hairline))", background: "var(--copper-dim, var(--raised))" }}
+            >
+              <div className="flex items-center gap-2">
+                <Dot ok={false} />
+                <span className="text-[14px] font-medium text-ink">
+                  Make your repo public to receive updates
+                </span>
+              </div>
+              <p className="text-[12.5px] leading-relaxed text-ink-2">
+                On the free Vercel plan a <span className="text-ink">private</span>{" "}
+                repo won&apos;t deploy an update after you merge it. Your repo is
+                just a copy of the public Chief code and holds{" "}
+                <span className="text-ink">no secrets</span> — your keys and data
+                live in your Supabase, never in the repo — so making it public is
+                safe, and it makes merges deploy automatically.
+              </p>
+              <a
+                href={status.updates.settingsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-10 items-center justify-center rounded-control px-4 text-[14px] font-medium"
+                style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+              >
+                Open repo settings →
+              </a>
+              <span className="text-[11.5px] leading-relaxed text-ink-3">
+                In Settings, scroll to <span className="text-ink-2">Danger
+                Zone</span> → <span className="text-ink-2">Change repository
+                visibility</span> → <span className="text-ink-2">Public</span>.
+              </span>
+            </div>
+          ) : null}
 
           {upd &&
             (upd.behind ? (
@@ -1158,7 +1214,7 @@ export default function ConfigClient({
                 <span className="text-[12.5px] text-ink-2">
                   You&apos;re on v{upd.current}.{" "}
                   <a
-                    href={upd.releaseUrl}
+                    href="/changelog"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-teal underline"
@@ -1166,28 +1222,39 @@ export default function ConfigClient({
                     What&apos;s new
                   </a>
                 </span>
-                {updatesEnabled &&
-                status?.updates?.repoOwner &&
-                status?.updates?.repoSlug ? (
+                {updatesEnabled && status?.updates?.reviewUrl ? (
                   <>
                     <a
-                      href={`https://github.com/${status.updates.repoOwner}/${status.updates.repoSlug}/actions/workflows/upstream-updates.yml`}
+                      href={status.updates.reviewUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex h-10 items-center justify-center rounded-control px-4 text-[14px] font-medium"
                       style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
                     >
-                      Get this update →
+                      Review &amp; merge →
                     </a>
                     <span className="text-[11.5px] leading-relaxed text-ink-3">
-                      Opens the updater: tap <span className="text-ink-2">Run workflow</span> →
-                      it prepares a pull request in your repo → review the diff and merge.
+                      Opens the update pull request in your repo — review the
+                      diff and merge; merging deploys it. Don&apos;t see one yet?{" "}
+                      {status.updates.runWorkflowUrl ? (
+                        <a
+                          href={status.updates.runWorkflowUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-teal underline"
+                        >
+                          Prepare it
+                        </a>
+                      ) : (
+                        "run the updater"
+                      )}{" "}
+                      (tap <span className="text-ink-2">Run workflow</span>).
                     </span>
                   </>
                 ) : (
                   <span className="text-[11.5px] leading-relaxed text-ink-3">
-                    Turn on auto-updates below first — a one-time step that lets
-                    GitHub open this update as a pull request.
+                    Turn on auto-updates below first — a one-time step so GitHub
+                    can open this update as a pull request.
                   </span>
                 )}
               </div>
@@ -1202,34 +1269,55 @@ export default function ConfigClient({
 
           {status?.updates?.enableUrl ? (
             updatesEnabled ? (
-              <div className="flex items-center gap-2">
-                <Dot ok={true} />
-                <span className="text-[13px] text-ink-2">
-                  Auto-updates enabled for{" "}
-                  <span className="font-mono text-[12px] text-ink">
-                    {status.updates.repoOwner}/{status.updates.repoSlug}
+              <>
+                <div className="flex items-center gap-2">
+                  <Dot ok={true} />
+                  <span className="text-[13px] text-ink-2">
+                    Auto-updates enabled for{" "}
+                    <span className="font-mono text-[12px] text-ink">
+                      {status.updates.repoOwner}/{status.updates.repoSlug}
+                    </span>
+                    .{" "}
+                    <a
+                      href={status.updates.enableUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-teal underline"
+                    >
+                      Re-commit the workflow
+                    </a>
                   </span>
-                  .{" "}
-                  <a
-                    href={status.updates.enableUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-teal underline"
-                  >
-                    Re-commit the workflow
-                  </a>
-                </span>
-              </div>
+                </div>
+                <p className="text-[11.5px] leading-relaxed text-ink-3">
+                  The weekly check pauses if your repo sees no activity for 60
+                  days (a GitHub rule). Chief still spots new versions on its
+                  own; if a check hasn&apos;t run,{" "}
+                  {status.updates.runWorkflowUrl ? (
+                    <a
+                      href={status.updates.runWorkflowUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-teal underline"
+                    >
+                      run it manually
+                    </a>
+                  ) : (
+                    "run it manually"
+                  )}{" "}
+                  any time.
+                </p>
+              </>
             ) : (
               <>
                 <p className="text-[13.5px] leading-relaxed text-ink-2">
-                  The one-click deploy couldn&apos;t include the updater
-                  (GitHub blocks it), so turn it on once: this commits the update
-                  workflow into{" "}
+                  Turn on auto-updates once: this commits the updater workflow
+                  into{" "}
                   <span className="font-mono text-[12px] text-ink">
                     {status.updates.repoOwner}/{status.updates.repoSlug}
                   </span>{" "}
-                  as you.
+                  as you. (The one-click deploy can&apos;t include it — GitHub
+                  won&apos;t let an automated deploy add workflow files — so this
+                  one step is manual.)
                 </p>
                 <a
                   href={status.updates.enableUrl}

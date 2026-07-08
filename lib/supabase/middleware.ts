@@ -12,6 +12,7 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublic =
     path === "/login" ||
+    path === "/changelog" ||
     path === "/manifest.webmanifest" ||
     path.startsWith("/auth/") ||
     path.startsWith("/icon") ||

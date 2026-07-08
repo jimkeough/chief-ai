@@ -5,6 +5,7 @@
 
 import { getAuthed, unauthorized } from "@/lib/auth";
 import { APP_VERSION, UPSTREAM_REPO, isNewer } from "@/lib/version";
+import { getUpdatesInfo, getRepoPublic } from "@/lib/updater-workflow";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,11 +13,17 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   if (!(await getAuthed())) return unauthorized();
 
+  // Is this deployment's OWN repo public? Updates can only auto-deploy on the
+  // free Vercel plan when it is (see getRepoPublic). null = unknown → no nag.
+  const { repoOwner, repoSlug } = getUpdatesInfo();
+  const repoPublic = await getRepoPublic(repoOwner, repoSlug);
+
   const result = {
     current: APP_VERSION,
     latest: null as string | null,
     behind: false,
     releaseUrl: `https://github.com/${UPSTREAM_REPO}/releases`,
+    repoPublic,
   };
 
   try {

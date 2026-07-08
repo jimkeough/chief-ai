@@ -28,8 +28,27 @@ Bring-your-own-Supabase path: click the second button (clones this repo into
 your GitHub and deploys to your Vercel), paste your existing project's URL +
 anon key, and let the first-render setup screen finish the rest (it runs the
 migrations for you when a `POSTGRES_URL` env var is present, otherwise it
-tells you exactly what to paste into the SQL editor). Clones get updates as
-pull requests they review — see `.github/workflows/upstream-updates.yml`.
+tells you exactly what to paste into the SQL editor).
+
+## Staying up to date
+
+Chief ships updates as pull requests into **your own** repo: a weekly workflow
+notices upstream has moved, opens a PR, and you review and merge it — merging
+deploys the new version. Nothing changes without your approval, and Config →
+**Software updates** shows when a new version is out and links straight to the
+PR (and to the [changelog](/changelog)).
+
+**Make your clone public** — it's the one thing that makes updates deploy on
+Vercel's free (Hobby) plan. A private repo blocks the updater's merge commit
+from deploying, because Hobby only deploys commits authored by a project
+collaborator (which it doesn't support on private repos). Your clone is just a
+copy of this public code and holds **no secrets** — `.env` is gitignored and
+every credential lives in your Supabase, never in the repo — so public is safe,
+and your data stays private regardless. During deploy, uncheck "Create private
+Git Repository"; if you already deployed private, flip it under your repo's
+Settings → Danger Zone → Change visibility → Public. (Prefer to stay private?
+You'll need Vercel Pro, or to merge updates locally so the commit is authored by
+you.) See `.github/workflows/upstream-updates.yml` and `TRUST.md`.
 
 ## Start here
 
