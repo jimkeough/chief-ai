@@ -868,3 +868,37 @@ operator runs migrations centrally).
 delivery — it's code **and** schema. Either auto-run pending migrations on boot
 when `POSTGRES_URL_NON_POOLING` is present, or surface a global apply-update
 prompt. Track this before shipping more migration-bearing features.
+
+### 28. CORRECTION — UPDATES DO NOT WORK. Stop claiming otherwise. (2026-07-09, Jim)
+
+**Entry 25's "proven end to end" is retracted as a general claim.** It described
+ONE assisted run on ONE already-set-up instance, with an expert in the loop. It
+is not evidence that the flow works for a user. As of today — roughly the TENTH
+completely fresh deploy-button deploy — the update flow still does not work.
+Any session reading this log: do NOT describe the update pipeline as working,
+proven, or "close." "Close" has not converged after days of fixes.
+
+**Observed on the latest fresh deploy:** the app's "Review & merge" deep link
+(`…/compare/main...chief/upstream-update`) renders GitHub's *"There isn't
+anything to compare — do they point to valid commits?"* — i.e. the
+`chief/upstream-update` branch does not exist in the clone. On a fresh clone
+the updater workflow is stripped by design (entry 19), so until auto-updates
+are enabled AND a run has actually pushed the branch, that link points at a
+branch that cannot exist. The UI presents an action that cannot succeed on
+exactly the instance that most needs it. (Logged as the observed symptom; not
+claimed to be the only remaining defect.)
+
+**The independent verdict, even if the mechanics someday work:** the flow —
+make repo public → enable auto-updates → PR-permission toggle → run workflow →
+compare page → create PR → merge → apply DB migration — is far too complex for
+a non-developer. Fixing the mechanics does not fix the audience problem. The
+git/PR update pipeline should be treated as a developer-only path at best, and
+further investment in polishing it is suspect (sunk cost).
+
+**Status:** update delivery for user #2+ is an OPEN architecture problem, not a
+bug queue. Candidate directions under discussion (see CLOUD-PLAN.md review):
+accept dev-only updates; build for user #1 only for now (user #1 needs none of
+this machinery — deploying straight from the upstream repo makes every merge an
+auto-deploy); or redesign distribution away from git entirely (e.g. releases as
+artifacts + in-app one-tap deploy via the user's own Vercel token, or an
+app-store-style packaging platform). No direction chosen yet.
