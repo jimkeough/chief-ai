@@ -227,8 +227,7 @@ export type ConfigSection =
   | "ai"
   | "connections"
   | "chief"
-  | "memory"
-  | "account";
+  | "memory";
 
 const CONFIG_PAGES: { slug: ConfigSection; href: string; label: string }[] = [
   { slug: "home", href: "/config", label: "Setup" },
@@ -236,35 +235,20 @@ const CONFIG_PAGES: { slug: ConfigSection; href: string; label: string }[] = [
   { slug: "connections", href: "/config/connections", label: "Connections" },
   { slug: "chief", href: "/config/chief", label: "Chief" },
   { slug: "memory", href: "/config/memory", label: "Memory" },
-  { slug: "account", href: "/config/account", label: "Account" },
 ];
 
-// Horizontal, scrollable tab bar shared by every config page.
-function ConfigNav({ active }: { active: ConfigSection }) {
+// Drill-in back link (ChatGPT-style): sub-pages return to the settings menu.
+function ConfigBackLink() {
   return (
-    <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {CONFIG_PAGES.map((p) => {
-        const on = p.slug === active;
-        return (
-          <Link
-            key={p.slug}
-            href={p.href}
-            className="shrink-0 rounded-chip border px-3 py-1.5 font-mono text-[11px] tracking-[0.06em]"
-            style={
-              on
-                ? {
-                    background: "var(--teal-fill)",
-                    color: "var(--teal-on-fill)",
-                    borderColor: "transparent",
-                  }
-                : { borderColor: "var(--hairline)", color: "var(--ink-3)" }
-            }
-          >
-            {p.label.toUpperCase()}
-          </Link>
-        );
-      })}
-    </div>
+    <Link
+      href="/config"
+      className="-ml-1 flex items-center gap-1 self-start py-1 text-[15px] text-ink-2"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14.5 5.5L8 12l6.5 6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      Settings
+    </Link>
   );
 }
 
@@ -602,7 +586,11 @@ export default function ConfigClient({
 
   return (
     <div className="flex flex-col gap-6 pt-2 pb-8">
-      <ConfigNav active={section} />
+      {section === "home" ? (
+        <h1 className="pt-1 text-[26px] font-semibold text-ink">Settings</h1>
+      ) : (
+        <ConfigBackLink />
+      )}
 
       {/* Setup: the on-demand concierge, plus the checklist until it's done. */}
       {section === "home" && (
@@ -642,23 +630,23 @@ export default function ConfigClient({
       </Section>
       )}
 
-      {/* Home landing: quick links into each config page. */}
+      {/* Home landing: readable, tappable links into each config page. */}
       {section === "home" && (
-        <Section label="SETTINGS">
-          <div className="grid grid-cols-1 gap-2">
-            {CONFIG_PAGES.filter((p) => p.slug !== "home").map((p) => (
-              <Link
-                key={p.slug}
-                href={p.href}
-                className="flex items-center justify-between rounded-card border px-4 py-3.5"
-                style={cardStyle}
-              >
-                <span className="text-[15px] font-medium text-ink">{p.label}</span>
-                <span className="text-[13px] font-semibold text-teal">open →</span>
-              </Link>
-            ))}
-          </div>
-        </Section>
+        <div className="flex flex-col gap-2">
+          {CONFIG_PAGES.filter((p) => p.slug !== "home").map((p) => (
+            <Link
+              key={p.slug}
+              href={p.href}
+              className="flex items-center justify-between rounded-card border px-4 py-4"
+              style={cardStyle}
+            >
+              <span className="text-[16.5px] text-ink">{p.label}</span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M9.5 5.5L16 12l-6.5 6.5" stroke="var(--ink-3)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </Link>
+          ))}
+        </div>
       )}
 
       {/* Connections */}
@@ -1356,31 +1344,6 @@ export default function ConfigClient({
         </div>
       </Section>
       </>
-      )}
-
-      {/* Account */}
-      {section === "account" && (
-      <Section label="ACCOUNT">
-        <div className={card} style={cardStyle}>
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-[14.5px] text-ink">Signed in</div>
-              <div className="truncate font-mono text-[11px] text-ink-3">
-                {status?.account ?? "…"}
-              </div>
-            </div>
-            <form action="/auth/signout" method="post">
-              <button
-                type="submit"
-                className="rounded-control border px-3.5 py-2 text-[13.5px] text-ink-2"
-                style={{ borderColor: "var(--hairline)" }}
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
-        </div>
-      </Section>
       )}
     </div>
   );
