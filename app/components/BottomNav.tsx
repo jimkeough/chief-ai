@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Bottom nav — 5 slots: Home · Inbox · C (center, raised teal circle) · Projects · Tasks.
+// Bottom nav: Home · Inbox · C (center, raised teal circle) · Projects · Tasks · Notes.
 // Labels mono 9px caps; active = ink, inactive = ink-3 (handoff/HANDOFF.md · Nav).
 
 type IconProps = { stroke: string };
@@ -42,11 +42,21 @@ function TasksIcon({ stroke }: IconProps) {
   );
 }
 
+function NotesIcon({ stroke }: IconProps) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 3.5h8L18.5 8v12.5h-13V3.5z" stroke={stroke} strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M8.5 11.5h7M8.5 15h5" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const TABS = [
   { href: "/", label: "HOME", Icon: HomeIcon },
   { href: "/inbox", label: "INBOX", Icon: InboxIcon },
   { href: "/projects", label: "PROJECTS", Icon: ProjectsIcon },
   { href: "/tasks", label: "TASKS", Icon: TasksIcon },
+  { href: "/notes", label: "NOTES", Icon: NotesIcon },
 ] as const;
 
 function Tab({
@@ -58,7 +68,7 @@ function Tab({
   return (
     <Link
       href={href}
-      className="flex w-[60px] flex-col items-center gap-1 pt-1"
+      className="flex w-[52px] flex-col items-center gap-1 pt-1"
       aria-current={active ? "page" : undefined}
     >
       <Icon stroke={active ? "var(--ink)" : "var(--ink-3)"} />
@@ -79,13 +89,13 @@ export default function BottomNav() {
   return (
     <nav
       aria-label="Main"
-      className="flex items-start justify-around px-2 pt-2.5"
+      className="flex items-start justify-around px-1.5 pt-2.5"
       style={{ paddingBottom: "max(30px, env(safe-area-inset-bottom))" }}
     >
       <Tab {...TABS[0]} active={isActive(TABS[0].href)} />
       <Tab {...TABS[1]} active={isActive(TABS[1].href)} />
       {/* Center slot: the C — 48px teal circle, raised −8px */}
-      <Link href="/chief" className="-mt-2 flex w-[60px] flex-col items-center" aria-label="Chief">
+      <Link href="/chief" className="-mt-2 flex w-[52px] flex-col items-center" aria-label="Chief">
         <span
           className="flex h-12 w-12 items-center justify-center rounded-full font-serif text-[22px] font-medium"
           style={{
@@ -100,6 +110,7 @@ export default function BottomNav() {
       </Link>
       <Tab {...TABS[2]} active={isActive(TABS[2].href)} />
       <Tab {...TABS[3]} active={isActive(TABS[3].href)} />
+      <Tab {...TABS[4]} active={isActive(TABS[4].href)} />
     </nav>
   );
 }

@@ -844,3 +844,27 @@ plain language ("changes X and Y, adds a migration to run, low risk") to help a
 non-technical user decide to merge. Read-only, touches nothing, honors the write
 gate — comprehension, not code-pushing. That's the right side of the line. Good
 Phase-6/concierge candidate.
+
+### 27. Updates ship CODE, not SCHEMA — the migration gap (2026-07-09, v0.4.3)
+
+Surfaced building the Notes feature (v0.4.3), which adds a `notes` table. An
+update lands as merge → deploy, which ships the new *code* but does NOT create
+new *tables*. So a feature with a migration is broken on an existing instance
+until the migration runs — and there was no in-app way to run it post-setup
+(the setup screen only shows pre-claim; Config had no "apply update" button).
+`/api/setup/migrate` already *allows* a signed-in owner to run pending
+migrations (it needs `POSTGRES_URL_NON_POOLING`), but nothing in the UI called
+it after an update.
+
+**Handled for Notes (the pattern):** the Notes page detects its table is
+missing (list throws), and instead of 500-ing renders a one-tap **"Apply
+database update"** that POSTs `/api/setup/migrate` and reloads. Self-heal, no
+SQL editor. This is the template every migration-bearing feature should follow
+until there's a general "your instance has a pending database update — apply it"
+prompt (a good global affordance to add next; also trivial in Cloud, where the
+operator runs migrations centrally).
+
+**Takeaway for the Sovereign edition:** "updates fully working" isn't just code
+delivery — it's code **and** schema. Either auto-run pending migrations on boot
+when `POSTGRES_URL_NON_POOLING` is present, or surface a global apply-update
+prompt. Track this before shipping more migration-bearing features.
