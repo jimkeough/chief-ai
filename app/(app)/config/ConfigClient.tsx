@@ -589,7 +589,12 @@ export default function ConfigClient({
       {section === "home" ? (
         <h1 className="pt-1 text-[26px] font-semibold text-ink">Settings</h1>
       ) : (
-        <ConfigBackLink />
+        <div className="flex flex-col gap-1">
+          <ConfigBackLink />
+          <h1 className="text-[26px] font-semibold text-ink">
+            {CONFIG_PAGES.find((p) => p.slug === section)?.label}
+          </h1>
+        </div>
       )}
 
       {/* Guided Setup: on-demand concierge interview. Disappears once every
