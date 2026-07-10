@@ -36,6 +36,24 @@ type InboxResponse = {
   error?: string;
 };
 
+type FrontConversation = {
+  id: string;
+  subject: string;
+  status: string;
+  preview: string;
+  correspondent: string;
+  updatedAt: string | null;
+  tags: string[];
+  link: string | null;
+};
+
+type FrontResponse = {
+  connected: boolean;
+  account?: string | null;
+  conversations?: FrontConversation[];
+  error?: string;
+};
+
 function senderName(from: string): string {
   const m = from.match(/^\s*"?([^"<]+?)"?\s*</);
   if (m) return m[1].trim();
@@ -185,10 +203,13 @@ export default function InboxClient() {
 
   if (data && !data.connected) {
     return (
-      <ConnectMail
-        oauthConfigured={data.oauthConfigured === true}
-        onConnected={() => void refresh()}
-      />
+      <div className="flex flex-col gap-5">
+        <FrontConversations />
+        <ConnectMail
+          oauthConfigured={data.oauthConfigured === true}
+          onConnected={() => void refresh()}
+        />
+      </div>
     );
   }
 
@@ -211,7 +232,8 @@ export default function InboxClient() {
   const name = email ? senderName(email.from) : "";
 
   return (
-    <div className="flex h-[calc(100dvh-218px)] flex-col gap-4">
+    <div className="flex min-h-[calc(100dvh-218px)] flex-col gap-4">
+      <FrontConversations />
       {email && (
         <ChiefPageSnapshot
           route="/inbox"
@@ -402,6 +424,126 @@ export default function InboxClient() {
         </>
       )}
     </div>
+  );
+}
+
+// --- Front open conversations -----------------------------------------------
+// Lists the open conversations from a connected Front account (via the MCP
+// broker; see lib/front-inbox.ts). Self-contained and self-fetching: renders
+// nothing at all when Front isn't wired up, so the email inbox is unaffected.
+
+function FrontConversations() {
+  const [data, setData] = useState<FrontResponse | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void fetch("/api/inbox/front")
+      .then((r) => r.json())
+      .then((b: FrontResponse) => {
+        if (alive) setData(b);
+      })
+      .catch(() => {
+        if (alive) setData({ connected: false });
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!data || !data.connected) return null;
+  const convos = data.conversations ?? [];
+
+  return (
+    <section className="flex flex-col gap-2.5 pt-2">
+      <div className="flex items-center justify-between">
+        <h2 className="text-[15px] font-semibold text-ink">Open in Front</h2>
+        <div
+          className="rounded-full border px-2.5 py-[5px] font-mono text-[11px] tracking-[0.08em] text-ink-3"
+          style={{ borderColor: "var(--hairline)" }}
+        >
+          {"error" in data && data.error ? "UNAVAILABLE" : `${convos.length} OPEN`}
+        </div>
+      </div>
+
+      {"error" in data && data.error ? (
+        <div
+          className="rounded-control border px-3 py-2.5 text-[13px] text-ink-2"
+          style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
+        >
+          {data.error}
+        </div>
+      ) : convos.length === 0 ? (
+        <div
+          className="rounded-control border px-3 py-2.5 text-[13.5px] text-ink-3"
+          style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
+        >
+          No open conversations in Front.
+        </div>
+      ) : (
+        <ul className="flex max-h-[46vh] flex-col gap-2 overflow-y-auto">
+          {convos.map((c) => {
+            const content = (
+              <>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate text-[15px] font-semibold text-ink">
+                    {c.correspondent || c.subject}
+                  </span>
+                  <span className="shrink-0 font-mono text-[11px] text-ink-3">
+                    {dateLabel(c.updatedAt)}
+                  </span>
+                </div>
+                {c.correspondent && (
+                  <span className="truncate text-[14px] text-ink-2">{c.subject}</span>
+                )}
+                {c.preview && (
+                  <span className="line-clamp-2 text-[13.5px] leading-snug text-ink-3">
+                    {c.preview}
+                  </span>
+                )}
+                {c.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {c.tags.slice(0, 4).map((t) => (
+                      <span
+                        key={t}
+                        className="rounded-full border px-2 py-0.5 font-mono text-[10px] tracking-[0.06em] text-ink-3"
+                        style={{ borderColor: "var(--hairline)" }}
+                      >
+                        {t.toUpperCase()}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            );
+            const cardClass =
+              "flex flex-col gap-1 rounded-card border px-3.5 py-3 text-left";
+            const cardStyle = {
+              borderColor: "var(--hairline)",
+              background: "var(--surface)",
+            };
+            return (
+              <li key={c.id}>
+                {c.link ? (
+                  <a
+                    href={c.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cardClass}
+                    style={cardStyle}
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <div className={cardClass} style={cardStyle}>
+                    {content}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
