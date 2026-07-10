@@ -217,16 +217,18 @@ const accountServerName = (app: string, accountId: string) =>
   `pipedream-${app}-${accountId.replace(/[^a-zA-Z0-9]/g, "")}`;
 
 /**
- * Broker configs for the user's CONNECTED Chief Connect apps (enabled ∩
- * healthy). One server per app; multiple accounts of one app get one server
- * each, account-scoped and tool-namespaced. Returns [] (never throws) when the
- * layer is off or the service is unreachable — a Connect outage must never
- * break the chat.
+ * Broker configs for the user's CONNECTED Chief Connect accounts (healthy).
+ * `connect.apps` is only the "suggest to connect" list for the UI — an
+ * account the user has already authorized must stay usable by Chief even if
+ * its slug isn't (or is no longer) in that list. One server per app; multiple
+ * accounts of one app get one server each, account-scoped and
+ * tool-namespaced. Returns [] (never throws) when the layer is off or the
+ * service is unreachable — a Connect outage must never break the chat.
  */
 export async function getConnectServers(): Promise<McpServerConfig[]> {
   try {
     const config = await getConnectConfig();
-    if (!config || config.apps.length === 0) return [];
+    if (!config) return [];
     const [token, accounts] = await Promise.all([
       getMcpToken(config),
       listConnectAccounts(config),
@@ -234,7 +236,6 @@ export async function getConnectServers(): Promise<McpServerConfig[]> {
     const healthy = accounts.filter((a) => a.healthy);
     const byApp = new Map<string, ConnectAccount[]>();
     for (const a of healthy) {
-      if (!config.apps.includes(a.app)) continue;
       const list = byApp.get(a.app) ?? [];
       list.push(a);
       byApp.set(a.app, list);
