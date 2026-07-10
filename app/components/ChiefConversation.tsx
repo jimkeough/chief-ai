@@ -54,19 +54,19 @@ function ConnectCard({ suggestion }: { suggestion: ConnectSuggestion }) {
         CONNECT {suggestion.name.toUpperCase()}
       </div>
       {suggestion.reason && (
-        <div className="mb-3 text-[15px] leading-snug text-ink">
+        <div className="mb-3 text-[17px] leading-snug text-ink">
           {suggestion.reason}
         </div>
       )}
       {state === "opened" ? (
-        <div className="text-[14px] text-ink-2">
+        <div className="text-[16px] text-ink-2">
           Authorize in the new tab, then ask me again.
         </div>
       ) : (
         <button
           onClick={() => void connect()}
           disabled={state === "opening"}
-          className="flex h-12 w-full items-center justify-center rounded-control text-[15px] font-semibold disabled:opacity-60"
+          className="flex h-12 w-full items-center justify-center rounded-control text-[17px] font-semibold disabled:opacity-60"
           style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
         >
           {state === "opening"
@@ -126,7 +126,7 @@ export default function ChiefConversation() {
               m.role === "user" ? (
                 <div key={i} className="flex justify-end">
                   <div
-                    className="max-w-[85%] rounded-card px-3.5 py-2.5 text-[15px] leading-relaxed text-ink"
+                    className="max-w-[85%] rounded-card px-3.5 py-2.5 text-[18px] leading-relaxed text-ink"
                     style={{ background: "var(--raised)" }}
                   >
                     {m.content}
@@ -186,7 +186,7 @@ export default function ChiefConversation() {
             }}
             rows={1}
             placeholder="Ask Chief…"
-            className="max-h-32 min-h-[44px] flex-1 resize-none rounded-control border bg-transparent px-3.5 py-2.5 text-[15px] leading-snug text-ink outline-none placeholder:text-ink-3"
+            className="max-h-32 min-h-[44px] flex-1 resize-none rounded-control border bg-transparent px-3.5 py-2.5 text-[18px] leading-snug text-ink outline-none placeholder:text-ink-3"
             style={{ borderColor: "var(--hairline)" }}
           />
           <button

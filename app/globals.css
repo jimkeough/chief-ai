@@ -186,8 +186,8 @@
      not for paragraphs. Also styles the markdown Chief writes. */
   .chief-prose {
     font-family: var(--font-serif);
-    font-size: 17px;
-    line-height: 1.55;
+    font-size: 20px;
+    line-height: 1.6;
   }
   .chief-prose p,
   .chief-prose ul,
@@ -206,7 +206,7 @@
   .chief-prose h2,
   .chief-prose h3,
   .chief-prose h4 {
-    font-size: 17px;
+    font-size: 20px;
     font-weight: 600;
     margin: 0.9em 0 0.35em;
   }
@@ -238,7 +238,7 @@
   }
   .chief-prose pre {
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: 14px;
     line-height: 1.5;
     background: var(--raised);
     border-radius: var(--radius-control);
