@@ -50,9 +50,14 @@ Useful: `http://localhost:3000/api/setup/health` reports env wiring, `schema`
   update needed" dialog). `supabase/seed.sql` reproduces the hosted grants and is
   auto-applied by `supabase start` / `supabase db reset`. Do not delete it for local
   dev, and do not add grants to the migrations (they belong only in local seed).
-- **AI features need a credential.** Chief chat / AI calls need one of
-  `AI_GATEWAY_API_KEY`, `VERCEL_OIDC_TOKEN` (`vercel env pull`), or
-  `ANTHROPIC_API_KEY`. The core loop (auth, projects, tasks, notes, inbox triage)
-  works fine without any AI key.
+- **AI features need a credential.** Chief chat (the `/chief` conversation, the
+  bottom "ASK CHIEF" bar, Home narrative, and the approve-first proposal loop)
+  needs one of `AI_GATEWAY_API_KEY`, `VERCEL_OIDC_TOKEN` (`vercel env pull`), or
+  `ANTHROPIC_API_KEY`; the default provider is the Vercel AI Gateway
+  (`lib/ai.ts`). The core loop (auth, projects, tasks, notes, inbox triage) works
+  fine without any AI key. `AI_GATEWAY_API_KEY` is provided as a Cursor secret
+  and injected into the VM env — it is read straight from `process.env`, so if
+  the secret is added mid-session you must **restart `npm run dev`** for the
+  already-running server to pick it up.
 - **Resetting data:** `supabase db reset` wipes the DB (including your login) and
   re-applies migrations + seed; you'll re-do the create-login onboarding after.
