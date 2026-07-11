@@ -2,10 +2,10 @@
 # main — the signal the in-app update check reads (each deployment compares its
 # bundled version to the latest release here). Runs on the UPSTREAM repo only.
 #
-# To ship an update to everyone: bump "version" in package.json, merge to main.
-# This tags v<version> and publishes a release with auto-generated notes; every
-# deployed Chief then shows "update available" until its owner merges the
-# updater PR. Keep versions increasing (semver).
+# To ship an update to everyone: run npm run release:patch (or the appropriate
+# minor/major command) and merge to main. This tags v<version> and publishes a
+# release with auto-generated notes; every deployed Chief then shows "update
+# available" until its owner merges the updater PR.
 
 name: Release
 
@@ -26,6 +26,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Validate release files
+        run: npm run release:check
 
       - name: Read version
         id: v

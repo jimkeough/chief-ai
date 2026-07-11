@@ -11,6 +11,21 @@ Standard scripts live in `package.json` (`dev`, `build`, `start`, `typecheck`).
 There is **no ESLint and no test suite** — `npm run typecheck` (`tsc --noEmit`) is
 the only static check. `.env.local` is gitignored; general setup is in `README.md`.
 
+### Release discipline
+
+- Every pull request to the upstream Chief repo must increase the app version.
+  Run `npm run release:patch` by default; use `release:minor` or `release:major`
+  when the change warrants it. These commands keep `package.json` and
+  `package-lock.json` synchronized.
+- `package.json` is the single source of truth. Runtime UI and release automation
+  read it directly; do not copy the current version into `README.md`, `TRUST.md`,
+  `CLAUDE.md`, or other helper files.
+- Before finishing a PR, run `npm run release:check` and review whether the change
+  also requires updates to `README.md` (user/setup behavior), `TRUST.md` (security,
+  privacy, or data-flow contract), or other agent guidance.
+- Changes to `.github/workflows/upstream-updates.yml` must also update the embedded
+  copy in `lib/updater-workflow.ts`; `release:check` enforces exact parity.
+
 ### Running the app locally (Supabase runs locally via the CLI)
 
 The VM snapshot already has Node, Docker, and the Supabase CLI installed; the

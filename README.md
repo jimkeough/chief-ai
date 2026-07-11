@@ -50,6 +50,20 @@ Settings → Danger Zone → Change visibility → Public. (Prefer to stay priva
 You'll need Vercel Pro, or to merge updates locally so the commit is authored by
 you.) See `.github/workflows/upstream-updates.yml` and `TRUST.md`.
 
+### Shipping a Chief release
+
+`package.json` is Chief's single version source; the app, update check, and
+GitHub release workflow all read it directly. Every upstream pull request must
+increase that version with `npm run release:patch` (or `release:minor` /
+`release:major`) and pass `npm run release:check`. Merging the version bump to
+`main` creates the matching GitHub release automatically.
+
+Do not copy the current version into helper docs. Instead, update the relevant
+contract when behavior changes: `README.md` for user/setup instructions,
+`TRUST.md` for security/privacy/data-flow changes, and `AGENTS.md` or
+`CLAUDE.md` for coding-agent guidance. The PR template carries this review
+checklist.
+
 ## Start here
 
 1. **`BUILD-BRIEF.md`** — the master build brief: architecture, port map from `jim-homejab/Email-wrapper`, data model, security rules, and six build phases.
