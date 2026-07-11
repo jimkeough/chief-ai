@@ -28,26 +28,6 @@ export type McpToolDef = {
 // Anthropic requires tool names to match this; skip anything that wouldn't be
 // accepted rather than 400 the whole request.
 const TOOL_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
-const PIPEDREAM_CONNECT_ENTITLEMENT_ERROR =
-  /Connect component API not enabled for this organization/i;
-const PIPEDREAM_CONNECT_ENTITLEMENT_MESSAGE =
-  "Pipedream rejected this connector because its organization does not have the Connect component API enabled. The Pipedream organization owner must enable that entitlement; reconnecting the app or changing MCP routing will not fix it.";
-
-/**
- * Convert an MCP tool result into an actionable error when needed. Pipedream
- * can return action-level failures inside an `isError: false` MCP envelope, so
- * recognize its organization-entitlement denial from the text as well.
- */
-export function mcpToolResultError(
-  text: string,
-  isError: boolean,
-): string | null {
-  if (PIPEDREAM_CONNECT_ENTITLEMENT_ERROR.test(text)) {
-    return PIPEDREAM_CONNECT_ENTITLEMENT_MESSAGE;
-  }
-  if (isError) return text || "The MCP server rejected the request.";
-  return null;
-}
 
 async function connect(server: McpServerConfig) {
   const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
@@ -70,7 +50,7 @@ async function connect(server: McpServerConfig) {
 }
 
 // Tool lists rarely change; cache briefly so we don't reconnect+list on every
-// chat turn. Keyed by url (the token doesn't change which tools exist).
+// chat turn. Config and credential fingerprints isolate distinct connections.
 type CacheEntry = { tools: McpToolDef[]; at: number };
 const TOOL_CACHE = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 60_000;
@@ -191,11 +171,9 @@ export async function callMcpTool(
       .filter(Boolean)
       .join("\n")
       .trim();
-    const error = mcpToolResultError(
-      text,
-      Boolean((res as { isError?: boolean })?.isError),
-    );
-    if (error) throw new Error(error);
+    if ((res as { isError?: boolean })?.isError) {
+      throw new Error(text || "The MCP server rejected the request.");
+    }
     return text || "Done.";
   } finally {
     await client?.close().catch(() => {});

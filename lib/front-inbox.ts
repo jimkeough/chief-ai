@@ -3,18 +3,15 @@
 // the IMAP/Gmail email triage.
 //
 // Front is reached the same way every other connector is: through the MCP
-// broker (lib/mcp-broker.ts). Front can be wired up either by hand (a
-// `mcp.servers` entry, typically named "frontapp") or through Chief Connect's
-// Pipedream integration (a "pipedream-front"/"pipedream-frontapp" server). We
-// look in both places, find whichever server is Front, list its tools, call its
-// "list conversations" tool, and map the result into a small, UI-friendly shape.
+// broker (lib/mcp-broker.ts). Front is wired up as a direct MCP connection,
+// typically named/app-slugged "frontapp". We find that server, list its tools,
+// call its conversations tool, and map the result into a UI-friendly shape.
 //
 // Everything here is read-only and fails soft: a missing/misbehaving Front
 // connection returns "not connected" or an error string, never throws, so the
 // email inbox keeps working regardless.
 
 import { getMcpServers, type McpServerConfig } from "@/lib/mcp";
-import { getConnectServers } from "@/lib/chief-connect";
 import { listMcpTools, callMcpTool, type McpToolDef } from "@/lib/mcp-broker";
 
 export type FrontConversation = {
@@ -48,18 +45,14 @@ function isFrontServer(s: McpServerConfig): boolean {
   return /(?:^|[^a-z0-9])front(?:app)?(?:$|[^a-z0-9])/.test(name);
 }
 
-/** Find the Front broker server across manual mcp.servers + Chief Connect. */
+/** Find the user's direct Front MCP connection. */
 export async function resolveFrontServer(): Promise<McpServerConfig | null> {
   const manual = await getMcpServers().catch(() => []);
-  const fromManual = manual.find(isFrontServer);
-  if (fromManual) return fromManual;
-  const connect = await getConnectServers().catch(() => []);
-  return connect.find(isFrontServer) ?? null;
+  return manual.find(isFrontServer) ?? null;
 }
 
-/** Choose a read-only tool that lists conversations. Pipedream exposes
- *  `frontapp-list-conversations`; Front's official MCP exposes
- *  `search_conversations`. Never bypass the broker's read-only classification. */
+/** Choose a read-only tool that lists/searches conversations without bypassing
+ *  the broker's read-only classification. */
 function pickListTool(tools: McpToolDef[]): McpToolDef | null {
   const scored = tools
     .filter((t) => t.readOnly)
@@ -94,8 +87,7 @@ function toolArgs(tool: McpToolDef): Record<string, unknown> {
     return { scope: "all_inboxes", filters: { status: "open" } };
   }
 
-  // Pipedream's action paginates internally and exposes only maxResults.
-  // Other list tools commonly expose a direct limit.
+  // Some list tools paginate internally via maxResults; others expose limit.
   if ("maxResults" in properties) return { maxResults: 100 };
   if ("limit" in properties) return { limit: 100 };
   return {};
@@ -200,10 +192,6 @@ function mapConversation(o: Rec): FrontConversation | null {
 
 function parseMcpJson(text: string): unknown {
   const trimmed = text.trim();
-  if (/https:\/\/pipedream\.com\/_static\/connect\.html/i.test(trimmed)) {
-    throw new Error("Front needs to be reconnected in Config.");
-  }
-
   const candidates = [trimmed];
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
   if (fenced) candidates.push(fenced);

@@ -1,6 +1,6 @@
 import ConfigClient from "../ConfigClient";
 
-// Config → Connections: email plus Chief Connect / MCP app connections.
+// Config → Connections: email plus direct MCP connections.
 export const dynamic = "force-dynamic";
 
 export default function ConfigConnectionsPage() {

@@ -8,11 +8,12 @@
 //   "off"  — never expose the tool to the model, and refuse it in the
 //            executor even if proposed.
 //
-// Stored as JSON in the connect.tool_overrides setting, keyed by server name
+// Stored as JSON in the mcp.tool_overrides setting, keyed by server name
 // then tool name; absent = default (reads auto, writes ask). Managed from the
 // Config → Connections tool list.
 
 import { getAppSettings, saveAppSettings } from "@/lib/settings";
+import { createClient } from "@/lib/supabase/server";
 
 export type ToolMode = "auto" | "ask" | "off";
 
@@ -21,7 +22,18 @@ export type ToolOverrides = Record<string, Record<string, ToolMode>>;
 const VALID: ToolMode[] = ["auto", "ask", "off"];
 
 export async function getToolOverrides(): Promise<ToolOverrides> {
-  const raw = (await getAppSettings())["connect.tool_overrides"].trim();
+  let raw = (await getAppSettings())["mcp.tool_overrides"].trim();
+  if (!raw) {
+    // One-way compatibility for installs that used Chief Connect before the
+    // direct-MCP cutover. The next edit writes the new key.
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "connect.tool_overrides")
+      .maybeSingle();
+    raw = typeof data?.value === "string" ? data.value.trim() : "";
+  }
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -57,7 +69,7 @@ export async function saveToolOverride(
   if (Object.keys(forServer).length === 0) delete overrides[server];
   else overrides[server] = forServer;
   await saveAppSettings(
-    { "connect.tool_overrides": JSON.stringify(overrides) },
+    { "mcp.tool_overrides": JSON.stringify(overrides) },
     userId,
   );
   return overrides;

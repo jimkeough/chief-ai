@@ -267,7 +267,7 @@ export default function ManualMcpConnections() {
     setTools(null);
     setToolsError(null);
     const response = await fetch(
-      `/api/connect/tools?server=${encodeURIComponent(server)}`,
+      `/api/mcp/tools?server=${encodeURIComponent(server)}`,
     ).catch(() => null);
     const body = (await response?.json().catch(() => ({}))) as {
       ok?: boolean;
@@ -288,7 +288,7 @@ export default function ManualMcpConnections() {
         current?.map((item) => (item.name === tool ? { ...item, mode } : item)) ??
         null,
     );
-    await fetch("/api/connect/tools", {
+    await fetch("/api/mcp/tools", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ server, tool, mode }),

@@ -6,9 +6,9 @@
 // Sovereignty note: gateway mode is the default because it is the only
 // provider that works with ZERO keys to fetch — each deployment is the user's
 // OWN Vercel project, so gateway traffic authenticates with that project's
-// auto-injected OIDC token and bills to the user's own Vercel account. No
-// operator sits in the path (unlike Chief Connect); the only trust give is
-// that Vercel (the user's own vendor) meters the prompts it routes. The eject
+// auto-injected OIDC token and bills to the user's own Vercel account. The only
+// trust give is that Vercel (the user's own vendor) meters the prompts it
+// routes. The eject
 // path is one setting: flip `ai.provider` to "anthropic" and set
 // ANTHROPIC_API_KEY — prompts then go only to Anthropic. And when gateway mode
 // has no credential at all (e.g. local dev without OIDC) but an Anthropic key

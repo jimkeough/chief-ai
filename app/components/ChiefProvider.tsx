@@ -46,9 +46,6 @@ export type ProposalItem = {
   undo?: UndoDescriptor | null;
 };
 
-/** A Chief-suggested app connection, rendered as a "Connect X" card. */
-export type ConnectSuggestion = { app: string; name: string; reason: string };
-
 export type ProposalPlan = {
   version: number;
   sourceNames: string[];
@@ -60,7 +57,6 @@ export type ChiefMessage = {
   role: "user" | "assistant";
   content: string;
   proposals?: ProposalItem[];
-  connect?: ConnectSuggestion[];
   /** Present when this assistant turn is a reviewable document-import plan. */
   plan?: ProposalPlan;
   /** Files attached to this (user) turn, for display only — name + kind. */
@@ -106,6 +102,9 @@ type ChiefContextValue = {
  *  one — the message itself carries the interview instructions. */
 export const SETUP_INTERVIEW_PROMPT =
   "Interview me about my work — one question at a time — and as real structure emerges, propose the projects, tasks, contacts, and standing instructions to capture it. Start by asking what I do and what's on my plate right now.";
+
+export const MCP_SETUP_PROMPT =
+  "Help me connect a direct MCP server to Chief. Start by asking which service or tool I want to connect. Guide me one step at a time to verify whether it offers an official remote MCP server and find its documented URL and authentication method. Never invent an endpoint or claim one exists without verified details. Never ask me to paste a secret into chat; tell me to enter credentials only in Settings → Connections → Add MCP connection. Once we identify the details, explain exactly what to enter there.";
 
 const ChiefCtx = createContext<ChiefContextValue | null>(null);
 
@@ -274,24 +273,21 @@ export default function ChiefProvider({
           try {
             const blob = JSON.parse(buffer.slice(cut + 1)) as {
               proposals?: ProposedAction[];
-              connect?: ConnectSuggestion[];
             };
             const items: ProposalItem[] = (blob.proposals ?? []).map((p) => ({
               uid: nextUid(),
               proposal: p,
               status: "proposed",
             }));
-            const connect = blob.connect ?? [];
             receivedPlan = items.length > 0;
-            if (items.length > 0 || connect.length > 0) {
+            if (items.length > 0) {
               setMessages((msgs) => {
                 const out = [...msgs];
                 const last = out[out.length - 1];
                 if (last?.role === "assistant") {
                   out[out.length - 1] = {
                     ...last,
-                    ...(items.length > 0 ? { proposals: items } : {}),
-                    ...(connect.length > 0 ? { connect } : {}),
+                    proposals: items,
                   };
                 }
                 return out;

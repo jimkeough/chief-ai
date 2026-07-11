@@ -4,9 +4,6 @@ import { supabaseServiceKey, supabaseUrl } from "@/lib/supabase/env";
 // Service-role Supabase client — the sanctioned exceptions to the
 // session-client rule (see BUILD-BRIEF security rules). It exists solely for
 // trusted server-side paths that have no user session:
-//  - the Pipedream webhook (/api/events/pipedream), which authenticates by
-//    verifying Pipedream's signature and then writes on behalf of the user the
-//    deployed trigger belongs to;
 //  - first-render setup (/api/setup/*), which runs only while the instance is
 //    unclaimed (zero users) and creates the one login;
 //  - the MCP Vault bridge, after session auth + an RLS-owned connection lookup,

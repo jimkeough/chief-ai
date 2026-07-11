@@ -21,10 +21,7 @@ export type SettingKey =
   | "web.fetch_enabled"
   | "connectors.max_chief_tools"
   | "mcp.servers"
-  | "connect.service_url"
-  | "connect.api_key"
-  | "connect.apps"
-  | "connect.tool_overrides"
+  | "mcp.tool_overrides"
   | "updates.enabled";
 
 export type SettingDef = {
@@ -148,52 +145,21 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   {
     key: "mcp.servers",
-    label: "Connectors — MCP servers",
+    label: "MCP — legacy server import",
     description:
-      'JSON array of remote MCP servers Chief can use, e.g. [{"name": "github", "url": "https://…", "authorization_token": "…"}]. Every server is brokered: read-only tools run transparently; anything that writes becomes an approve/reject proposal.',
+      "Legacy storage imported automatically into the secure MCP connection registry.",
     default: "",
     rows: 6,
-    placeholder: '[{"name": "…", "url": "https://…"}]',
-  },
-  // --- Chief Connect (optional paid connector hub) --------------------------
-  // The 2-click alternative to configuring servers by hand: a small operator-
-  // run service (see connect-service/) brokers Pipedream Connect's managed
-  // OAuth. Leave blank to stay fully sovereign — every connector has a DIY
-  // twin (app password, own OAuth client, direct MCP URL above).
-  {
-    key: "connect.service_url",
-    label: "Chief Connect — service URL",
-    description:
-      "The Chief Connect service you subscribe to (e.g. https://connect.example.com). Blank = off.",
-    default: "",
-    singleLine: true,
-    placeholder: "https://…",
+    placeholder: "",
   },
   {
-    key: "connect.api_key",
-    label: "Chief Connect — API key",
-    description: "The key issued with your Chief Connect subscription.",
-    default: "",
-    singleLine: true,
-    placeholder: "ck_…",
-  },
-  {
-    key: "connect.apps",
-    label: "Chief Connect — apps",
-    description:
-      "Comma-separated Pipedream app slugs to offer (e.g. gmail, google_calendar, notion, slack). The Connections search adds to this automatically.",
-    default: "gmail, google_calendar",
-    singleLine: true,
-    placeholder: "gmail, google_calendar",
-  },
-  {
-    key: "connect.tool_overrides",
-    label: "Connectors — per-tool modes (managed)",
+    key: "mcp.tool_overrides",
+    label: "MCP — per-tool modes (managed)",
     description:
       "JSON managed by the tool list under Connections (auto/ask/off per tool). Reads can be auto; writes are always ask or off. Edit by hand only if you know what you're doing.",
     default: "",
     rows: 3,
-    placeholder: '{"pipedream-asana": {"create-task": "off"}}',
+    placeholder: '{"front": {"search_conversations": "ask"}}',
   },
   // Set once the user completes the one-tap "Enable auto-updates" step
   // (see lib/updater-workflow.ts). Gates the "Get this update" button so it

@@ -8,7 +8,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useChief, SETUP_INTERVIEW_PROMPT } from "@/app/components/ChiefProvider";
+import {
+  useChief,
+  MCP_SETUP_PROMPT,
+  SETUP_INTERVIEW_PROMPT,
+} from "@/app/components/ChiefProvider";
 import ManualMcpConnections from "@/app/(app)/config/ManualMcpConnections";
 
 type SettingDef = {
@@ -49,22 +53,6 @@ type Status = {
 };
 
 type KbDoc = { id: string; title: string; updated_at: string };
-
-type ConnectStatus = {
-  configured: boolean;
-  apps?: string[];
-  accounts?: { id: string; app: string; name?: string; healthy: boolean }[];
-  error?: string;
-};
-
-type CatalogApp = { slug: string; name: string; description?: string; img?: string };
-
-type ServerTool = {
-  name: string;
-  description: string;
-  readOnly: boolean;
-  mode: "auto" | "ask" | "off";
-};
 
 const card =
   "flex flex-col gap-3 rounded-card border p-4";
@@ -267,7 +255,6 @@ export default function ConfigClient({
   const [instructions, setInstructions] = useState<KbDoc[]>([]);
   const [memory, setMemory] = useState<KbDoc[]>([]);
   const [newRule, setNewRule] = useState("");
-  const [connect, setConnect] = useState<ConnectStatus | null>(null);
   const [upd, setUpd] = useState<{
     current: string;
     latest: string | null;
@@ -284,12 +271,11 @@ export default function ConfigClient({
   const updatesEnabled = settings["updates.enabled"] === "on";
 
   const refresh = useCallback(async () => {
-    const [s, st, ins, mem, con, up, us] = await Promise.all([
+    const [s, st, ins, mem, up, us] = await Promise.all([
       fetch("/api/settings").then((r) => r.json()).catch(() => null),
       fetch("/api/config/status").then((r) => r.json()).catch(() => null),
       fetch("/api/kb?kind=instruction").then((r) => r.json()).catch(() => null),
       fetch("/api/kb?kind=fact").then((r) => r.json()).catch(() => null),
-      fetch("/api/connect").then((r) => r.json()).catch(() => null),
       fetch("/api/updates/status").then((r) => r.json()).catch(() => null),
       fetch("/api/usage").then((r) => r.json()).catch(() => null),
     ]);
@@ -300,222 +286,9 @@ export default function ConfigClient({
     if (st) setStatus(st as Status);
     if (ins) setInstructions((ins.documents ?? []) as KbDoc[]);
     if (mem) setMemory(((mem.documents ?? []) as KbDoc[]).slice(0, 20));
-    if (con) setConnect(con as ConnectStatus);
     if (up) setUpd(up);
     if (us) setUsage(us);
   }, []);
-
-  // --- Catalog search + per-account tool lists ------------------------------
-  const [appQuery, setAppQuery] = useState("");
-  const [appResults, setAppResults] = useState<CatalogApp[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [toolsFor, setToolsFor] = useState<string | null>(null);
-  const [tools, setTools] = useState<ServerTool[] | null>(null);
-  const [toolsError, setToolsError] = useState<string | null>(null);
-
-  const searchApps = async () => {
-    const q = appQuery.trim();
-    if (!q || searching) return;
-    setSearching(true);
-    try {
-      const res = await fetch(`/api/connect/apps?q=${encodeURIComponent(q)}`);
-      const body = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        apps?: CatalogApp[];
-      };
-      setAppResults(body.ok ? (body.apps ?? []) : []);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const enableApp = async (slug: string) => {
-    const res = await fetch("/api/connect/apps", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug }),
-    }).catch(() => null);
-    const body = (await res?.json().catch(() => ({}))) as {
-      ok?: boolean;
-      url?: string;
-    };
-    if (body?.ok && body.url) window.open(body.url, "_blank", "noopener");
-    setAppResults(null);
-    setAppQuery("");
-    await refresh();
-  };
-
-  const loadTools = async (server: string) => {
-    if (toolsFor === server) {
-      setToolsFor(null);
-      setTools(null);
-      return;
-    }
-    setToolsFor(server);
-    setTools(null);
-    setToolsError(null);
-    const res = await fetch(
-      `/api/connect/tools?server=${encodeURIComponent(server)}`,
-    ).catch(() => null);
-    const body = (await res?.json().catch(() => ({}))) as {
-      ok?: boolean;
-      tools?: ServerTool[];
-      error?: string;
-    };
-    if (body?.ok) setTools(body.tools ?? []);
-    else setToolsError(body?.error ?? "Couldn't list tools.");
-  };
-
-  const setToolMode = async (
-    server: string,
-    tool: string,
-    mode: "auto" | "ask" | "off",
-  ) => {
-    setTools(
-      (ts) => ts?.map((t) => (t.name === tool ? { ...t, mode } : t)) ?? null,
-    );
-    await fetch("/api/connect/tools", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ server, tool, mode }),
-    }).catch(() => {});
-  };
-
-  // --- Proactive triggers ("Notify me when…") -------------------------------
-  const [triggersFor, setTriggersFor] = useState<string | null>(null);
-  const [triggerData, setTriggerData] = useState<{
-    components: { id: string; name: string; description?: string }[];
-    deployed: { id: string; componentId: string | null; name: string | null }[];
-  } | null>(null);
-  const [triggerBusy, setTriggerBusy] = useState<string | null>(null);
-  const [triggerError, setTriggerError] = useState<string | null>(null);
-
-  const loadTriggers = async (app: string) => {
-    if (triggersFor === app) {
-      setTriggersFor(null);
-      setTriggerData(null);
-      return;
-    }
-    setTriggersFor(app);
-    setTriggerData(null);
-    setTriggerError(null);
-    const res = await fetch(`/api/triggers?app=${encodeURIComponent(app)}`).catch(
-      () => null,
-    );
-    const body = (await res?.json().catch(() => ({}))) as {
-      ok?: boolean;
-      components?: { id: string; name: string; description?: string }[];
-      deployed?: { id: string; componentId: string | null; name: string | null }[];
-    };
-    setTriggerData({
-      components: body.components ?? [],
-      deployed: body.deployed ?? [],
-    });
-  };
-
-  const deployTrigger = async (
-    app: string,
-    componentId: string,
-    name: string,
-  ) => {
-    setTriggerBusy(componentId);
-    setTriggerError(null);
-    // Optimistic: show ON immediately with a temporary id; the deploy
-    // round-trip (Pipedream) can take several seconds, and we don't want the
-    // button to sit on a busy dash until a manual refresh.
-    const tempId = `pending:${componentId}`;
-    setTriggerData((prev) =>
-      prev
-        ? { ...prev, deployed: [...prev.deployed, { id: tempId, componentId, name }] }
-        : prev,
-    );
-    const res = await fetch("/api/triggers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ app, componentId, name }),
-    }).catch(() => null);
-    const body = (await res?.json().catch(() => ({}))) as {
-      ok?: boolean;
-      error?: string;
-    };
-    setTriggerBusy(null);
-    if (!res || !res.ok || body.ok === false) {
-      // Revert the optimistic entry and surface why.
-      setTriggerData((prev) =>
-        prev
-          ? { ...prev, deployed: prev.deployed.filter((d) => d.id !== tempId) }
-          : prev,
-      );
-      setTriggerError(body.error || "Couldn't turn on this notification.");
-      return;
-    }
-    await loadTriggersFresh(app);
-  };
-
-  const removeTrigger = async (app: string, id: string) => {
-    const removed = triggerData?.deployed.find((d) => d.id === id) ?? null;
-    setTriggerBusy(id);
-    setTriggerError(null);
-    // Optimistic: drop it now so the button flips to OFF instantly.
-    setTriggerData((prev) =>
-      prev ? { ...prev, deployed: prev.deployed.filter((d) => d.id !== id) } : prev,
-    );
-    const res = await fetch(`/api/triggers?id=${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    }).catch(() => null);
-    const body = (await res?.json().catch(() => ({}))) as {
-      ok?: boolean;
-      error?: string;
-    };
-    setTriggerBusy(null);
-    if (!res || !res.ok || body.ok === false) {
-      // Put it back and surface why.
-      setTriggerData((prev) =>
-        prev && removed && !prev.deployed.some((d) => d.id === removed.id)
-          ? { ...prev, deployed: [...prev.deployed, removed] }
-          : prev,
-      );
-      setTriggerError(body.error || "Couldn't turn off this notification.");
-      return;
-    }
-    await loadTriggersFresh(app);
-  };
-
-  const loadTriggersFresh = async (app: string) => {
-    const res = await fetch(`/api/triggers?app=${encodeURIComponent(app)}`).catch(
-      () => null,
-    );
-    // Never clobber optimistic state on a failed/again-in-flight refetch.
-    if (!res || !res.ok) return;
-    const body = (await res.json().catch(() => null)) as {
-      components?: { id: string; name: string; description?: string }[];
-      deployed?: { id: string; componentId: string | null; name: string | null }[];
-    } | null;
-    if (!body) return;
-    setTriggerData({
-      components: body.components ?? [],
-      deployed: body.deployed ?? [],
-    });
-  };
-
-  const openConnectLink = async (app: string) => {
-    const res = await fetch("/api/connect/link", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ app }),
-    }).catch(() => null);
-    const body = (await res?.json().catch(() => ({}))) as { ok?: boolean; url?: string };
-    if (body?.ok && body.url) window.open(body.url, "_blank", "noopener");
-  };
-
-  const disconnectAccount = async (accountId: string) => {
-    await fetch("/api/connect/disconnect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId }),
-    }).catch(() => {});
-    await refresh();
-  };
 
   useEffect(() => {
     void refresh();
@@ -646,269 +419,23 @@ export default function ConfigClient({
               {status?.mail.connected ? "manage →" : "connect →"}
             </Link>
           </div>
-          <div className="h-px" style={{ background: "var(--hairline)" }} />
-
-          {/* Chief Connect: the optional hub. Falls back to the DIY note. */}
-          {connect?.configured ? (
-            <div className="flex flex-col gap-2.5">
-              <div className="font-mono text-[10px] tracking-[0.1em] text-teal">
-                CHIEF CONNECT
-              </div>
-              {connect.error && (
-                <div className="text-[13px]" style={{ color: "var(--danger)" }}>
-                  {connect.error}
-                </div>
-              )}
-              {(connect.accounts ?? []).map((a) => {
-                const serverName = `pipedream-${a.app}`;
-                const expanded = toolsFor === serverName;
-                return (
-                  <div key={a.id} className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
-                      <Dot ok={a.healthy} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[14.5px] text-ink">{a.app}</div>
-                        {a.name && (
-                          <div className="truncate font-mono text-[11px] text-ink-3">
-                            {a.name}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => void loadTools(serverName)}
-                        className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-teal"
-                      >
-                        TOOLS {expanded ? "▴" : "▾"}
-                      </button>
-                      <button
-                        onClick={() => void loadTriggers(a.app)}
-                        className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-teal"
-                      >
-                        NOTIFY {triggersFor === a.app ? "▴" : "▾"}
-                      </button>
-                      <button
-                        onClick={() => void disconnectAccount(a.id)}
-                        className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-ink-3"
-                      >
-                        DISCONNECT
-                      </button>
-                    </div>
-                    {triggersFor === a.app && (
-                      <div
-                        className="flex flex-col gap-2 rounded-control border p-3"
-                        style={{ borderColor: "var(--hairline)" }}
-                      >
-                        <div className="font-mono text-[10px] tracking-[0.1em] text-ink-3">
-                          NOTIFY ME WHEN…
-                        </div>
-                        {triggerError && (
-                          <div
-                            className="text-[12px]"
-                            style={{ color: "var(--copper, #b4530e)" }}
-                          >
-                            {triggerError}
-                          </div>
-                        )}
-                        {triggerData === null && (
-                          <div className="text-[13px] text-ink-3">Loading…</div>
-                        )}
-                        {triggerData?.components.length === 0 && (
-                          <div className="text-[13px] text-ink-3">
-                            No event triggers for this app.
-                          </div>
-                        )}
-                        {triggerData?.components.map((c) => {
-                          const on = triggerData.deployed.find(
-                            (d) => d.componentId === c.id,
-                          );
-                          return (
-                            <div key={c.id} className="flex items-center gap-2">
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-[13.5px] text-ink">
-                                  {c.name}
-                                </div>
-                                {c.description && (
-                                  <div className="truncate text-[11.5px] text-ink-3">
-                                    {c.description}
-                                  </div>
-                                )}
-                              </div>
-                              <button
-                                onClick={() =>
-                                  on
-                                    ? void removeTrigger(a.app, on.id)
-                                    : void deployTrigger(a.app, c.id, c.name)
-                                }
-                                disabled={triggerBusy === c.id || triggerBusy === on?.id}
-                                className="shrink-0 rounded-chip border px-2.5 py-1 font-mono text-[10px] tracking-[0.06em] disabled:opacity-50"
-                                style={
-                                  on
-                                    ? {
-                                        background: "var(--teal-fill)",
-                                        color: "var(--teal-on-fill)",
-                                        borderColor: "transparent",
-                                      }
-                                    : { borderColor: "var(--hairline)", color: "var(--ink-3)" }
-                                }
-                              >
-                                {on ? "ON" : "OFF"}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {expanded && (
-                      <div
-                        className="flex flex-col gap-2 rounded-control border p-3"
-                        style={{ borderColor: "var(--hairline)" }}
-                      >
-                        {tools === null && !toolsError && (
-                          <div className="text-[13px] text-ink-3">Listing tools…</div>
-                        )}
-                        {toolsError && (
-                          <div className="text-[13px]" style={{ color: "var(--danger)" }}>
-                            {toolsError}
-                          </div>
-                        )}
-                        {tools?.map((t) => (
-                          <div key={t.name} className="flex items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate font-mono text-[12px] text-ink">
-                                {t.name}
-                              </div>
-                              <div className="truncate text-[11.5px] text-ink-3">
-                                {t.readOnly ? "read" : "write — always asks"}
-                              </div>
-                            </div>
-                            {(t.readOnly
-                              ? (["auto", "ask", "off"] as const)
-                              : (["ask", "off"] as const)
-                            ).map((m) => (
-                              <button
-                                key={m}
-                                onClick={() =>
-                                  void setToolMode(`pipedream-${a.app}`, t.name, m)
-                                }
-                                className="rounded-chip border px-2 py-1 font-mono text-[10px] tracking-[0.06em]"
-                                style={
-                                  t.mode === m
-                                    ? {
-                                        background: "var(--teal-fill)",
-                                        color: "var(--teal-on-fill)",
-                                        borderColor: "transparent",
-                                      }
-                                    : {
-                                        borderColor: "var(--hairline)",
-                                        color: "var(--ink-3)",
-                                      }
-                                }
-                              >
-                                {m.toUpperCase()}
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                        {tools && tools.length === 0 && (
-                          <div className="text-[13px] text-ink-3">No tools exposed.</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <div className="flex flex-wrap gap-2">
-                {(connect.apps ?? [])
-                  .filter(
-                    (app) => !(connect.accounts ?? []).some((a) => a.app === app),
-                  )
-                  .map((app) => (
-                    <button
-                      key={app}
-                      onClick={() => void openConnectLink(app)}
-                      className="rounded-control border px-3 py-2 text-[13.5px] text-ink"
-                      style={{ borderColor: "var(--teal-border)" }}
-                    >
-                      Connect {app.replace(/_/g, " ")} →
-                    </button>
-                  ))}
-              </div>
-              {/* Find any app by name (Pipedream catalog). */}
-              <div className="flex gap-2">
-                <input
-                  value={appQuery}
-                  onChange={(e) => setAppQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && void searchApps()}
-                  placeholder="Find an app… (asana, notion, slack)"
-                  className={inputCls}
-                  style={{ borderColor: "var(--hairline)" }}
-                />
-                <button
-                  onClick={() => void searchApps()}
-                  disabled={searching || !appQuery.trim()}
-                  className="h-[42px] shrink-0 rounded-control border px-3.5 text-[13.5px] text-ink disabled:opacity-40"
-                  style={{ borderColor: "var(--teal-border)" }}
-                >
-                  {searching ? "…" : "Search"}
-                </button>
-              </div>
-              {appResults && (
-                <div className="flex flex-col gap-1.5">
-                  {appResults.length === 0 && (
-                    <div className="text-[13px] text-ink-3">No matching apps.</div>
-                  )}
-                  {appResults.map((app) => (
-                    <button
-                      key={app.slug}
-                      onClick={() => void enableApp(app.slug)}
-                      className="flex items-center gap-2.5 rounded-control border px-3 py-2 text-left"
-                      style={{ borderColor: "var(--hairline)" }}
-                    >
-                      {app.img && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={app.img} alt="" className="h-5 w-5 rounded" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[14px] text-ink">{app.name}</div>
-                        {app.description && (
-                          <div className="truncate text-[11.5px] text-ink-3">
-                            {app.description}
-                          </div>
-                        )}
-                      </div>
-                      <span className="shrink-0 text-[13px] font-semibold text-teal">
-                        connect →
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <p className="text-[12.5px] leading-relaxed text-ink-3">
-                Connections run through your Chief Connect subscription (2-click
-                OAuth). Reads marked AUTO run freely; writes always show an
-                approval card (ASK) or can be switched OFF — never auto. Every
-                connection has a do-it-yourself twin — app password, your own
-                OAuth client, or a direct MCP server below — so you can eject any
-                time.
-              </p>
-            </div>
-          ) : (
-            <p className="text-[13px] leading-relaxed text-ink-2">
-              Add a direct MCP server below, or set the{" "}
-              <span className="font-mono text-[12px]">Chief Connect</span> URL +
-              key for 2-click connections. New direct servers ask before every
-              tool until you explicitly trust their read-only annotations.
-            </p>
-          )}
         </div>
       </Section>
       )}
 
-      {/* MCP connectors: direct remote MCP servers, the DIY twin to Chief
-          Connect above. Lives here (not buried in the generic Chief settings
-          list) since this is the page the copy above points to. */}
+      {/* Direct remote MCP servers. Chief can guide discovery, but credentials
+          are entered only in the secure form — never in chat. */}
       {section === "connections" && (
       <Section label="MCP CONNECTORS">
+        <button
+          type="button"
+          onClick={() => openAndSend(MCP_SETUP_PROMPT)}
+          className="flex h-12 items-center justify-center gap-2 rounded-control border text-[15px] font-semibold text-ink"
+          style={{ borderColor: "var(--teal-border)", background: "var(--surface)" }}
+        >
+          <span className="font-serif text-[17px] italic text-teal">C</span>
+          Ask Chief to set up MCP
+        </button>
         <ManualMcpConnections />
       </Section>
       )}
@@ -918,7 +445,12 @@ export default function ConfigClient({
       <Section label="CHIEF SETTINGS">
         <div className={card} style={cardStyle}>
           {defs
-            .filter((d) => d.key !== "updates.enabled" && d.key !== "mcp.servers")
+            .filter(
+              (d) =>
+                d.key !== "updates.enabled" &&
+                d.key !== "mcp.servers" &&
+                d.key !== "mcp.tool_overrides",
+            )
             .map((d) => (
             <div key={d.key} className="flex flex-col gap-1.5">
               <div className="text-[14px] font-medium text-ink">{d.label}</div>

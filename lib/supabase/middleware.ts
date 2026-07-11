@@ -20,10 +20,7 @@ export async function updateSession(request: NextRequest) {
     // First-render setup: the login page's pre-auth concierge. Each route
     // guards itself (health is read-only status; migrate/create-user refuse
     // to run once the instance is claimed).
-    path.startsWith("/api/setup/") ||
-    // Proactive-event ingest: Pipedream posts here with no session; the route
-    // authenticates by the per-trigger token in the URL.
-    path === "/api/events/pipedream";
+    path.startsWith("/api/setup/");
 
   // Env not wired yet (fresh deploy, or vars added without a redeploy): there
   // is no session to refresh. Let the public setup surface render its
