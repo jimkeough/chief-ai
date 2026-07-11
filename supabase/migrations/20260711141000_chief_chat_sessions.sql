@@ -40,8 +40,8 @@ create policy "chief_sessions_delete_own" on public.chief_sessions
   for delete to authenticated
   using (user_id = (select auth.uid()));
 
--- Source files are private Storage objects. Text sources stay inline because
--- they are already bounded to the same 5 MB limit and need no binary decoding.
+-- Source files are private Storage objects so chat requests carry only durable
+-- attachment ids instead of large base64 payloads.
 create table if not exists public.chief_attachments (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid()
