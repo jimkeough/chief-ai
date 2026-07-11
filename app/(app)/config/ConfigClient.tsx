@@ -8,11 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  useChief,
-  MCP_SETUP_PROMPT,
-  SETUP_INTERVIEW_PROMPT,
-} from "@/app/components/ChiefProvider";
+import { useChief } from "@/app/components/ChiefProvider";
 import ManualMcpConnections from "@/app/(app)/config/ManualMcpConnections";
 import { UPSTREAM_REPO } from "@/lib/version";
 
@@ -247,7 +243,7 @@ export default function ConfigClient({
 }: {
   section?: ConfigSection;
 }) {
-  const { openAndSend } = useChief();
+  const { runIntent } = useChief();
   const [status, setStatus] = useState<Status | null>(null);
   const [defs, setDefs] = useState<SettingDef[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -375,7 +371,7 @@ export default function ConfigClient({
           checklist item is satisfied — no card, just the entry point. */}
       {section === "home" && status && !setupDone && (
         <button
-          onClick={() => openAndSend(SETUP_INTERVIEW_PROMPT)}
+          onClick={() => void runIntent({ id: "setup.interview" })}
           className="flex h-12 items-center justify-center rounded-control text-[15px] font-semibold"
           style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
         >
@@ -430,7 +426,7 @@ export default function ConfigClient({
       <Section label="MCP CONNECTORS">
         <button
           type="button"
-          onClick={() => openAndSend(MCP_SETUP_PROMPT)}
+          onClick={() => void runIntent({ id: "setup.mcp" })}
           className="flex h-12 items-center justify-center gap-2 rounded-control border text-[15px] font-semibold text-ink"
           style={{ borderColor: "var(--teal-border)", background: "var(--surface)" }}
         >

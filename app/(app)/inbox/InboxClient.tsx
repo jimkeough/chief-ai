@@ -81,7 +81,7 @@ function dateLabel(iso: string | null): string {
 }
 
 export default function InboxClient() {
-  const { openAndSend } = useChief();
+  const { runIntent } = useChief();
   const [data, setData] = useState<InboxResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [chiefRead, setChiefRead] = useState<string | null>(null);
@@ -190,10 +190,11 @@ export default function InboxClient() {
   }, [data?.provider, refresh]);
 
   const draftReply = useCallback(() => {
-    openAndSend(
-      "Draft a reply to the email I'm looking at, in my voice, then propose sending it.",
-    );
-  }, [openAndSend]);
+    void runIntent({
+      id: "inbox.draft_reply",
+      threadId: email?.threadId,
+    });
+  }, [email?.threadId, runIntent]);
 
   // --- Render states ---------------------------------------------------------
 

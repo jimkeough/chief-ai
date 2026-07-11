@@ -9,7 +9,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   useChief,
-  SETUP_INTERVIEW_PROMPT,
   type ProposalItem,
 } from "@/app/components/ChiefProvider";
 import ChiefPageSnapshot from "@/app/components/ChiefPageSnapshot";
@@ -177,7 +176,7 @@ export default function HomeClient() {
             Nothing on the board yet.
           </div>
           <button
-            onClick={() => chief.openAndSend(SETUP_INTERVIEW_PROMPT)}
+            onClick={() => void chief.runIntent({ id: "setup.interview" })}
             className="flex h-[52px] items-center justify-center gap-2 rounded-card text-[16px] font-semibold"
             style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
           >

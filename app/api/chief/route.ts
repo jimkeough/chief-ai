@@ -28,6 +28,7 @@ import { KB_TOOLS, makeKbToolRunner } from "@/lib/kb/tools";
 import { findRelatedKbEntries } from "@/lib/kb/related";
 import { listProjects } from "@/lib/projects";
 import { applyAttachments, type ChatAttachment } from "@/lib/chat-attachments";
+import { loadChiefAttachments } from "@/lib/chief-attachments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,14 +71,27 @@ export async function POST(req: Request) {
   const webFetchEnabled =
     settings["web.fetch_enabled"].trim().toLowerCase() === "on";
 
-  const { messages, page, attachments, requireProposalPlan } = (await req
+  const { messages, page, attachments, attachmentIds, requireProposalPlan, sessionId } = (await req
     .json()
     .catch(() => ({}))) as {
     messages?: ChatMessage[];
     page?: ChiefPageContext | null;
     attachments?: ChatAttachment[];
+    attachmentIds?: string[];
     requireProposalPlan?: boolean;
+    sessionId?: string | null;
   };
+  let resolvedAttachments = Array.isArray(attachments) ? attachments : [];
+  if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
+    try {
+      resolvedAttachments = await loadChiefAttachments(attachmentIds);
+    } catch (error) {
+      return new Response(
+        error instanceof Error ? error.message : "Could not load documents.",
+        { status: 400 },
+      );
+    }
+  }
 
   // Exfiltration guard (build-brief security rule 2): when the page context or
   // an uploaded file embeds external content, open-world READ tools must not be
@@ -85,7 +99,7 @@ export async function POST(req: Request) {
   // exfiltration channel. Chief can still summarize and propose from the
   // workspace snapshot; connector reads happen on a clean follow-up turn.
   const hasAttachments =
-    Array.isArray(attachments) && attachments.length > 0;
+    resolvedAttachments.length > 0;
   const untrustedTurn = page?.untrusted === true || hasAttachments;
 
   // Broker every configured server so Chief can read across all of them —
@@ -265,8 +279,8 @@ export async function POST(req: Request) {
   // extraction). This is a client-tool turn like any other; the attachment
   // itself carries no elevated trust — see the system prompt's guidance to
   // treat its content as data, never as instructions.
-  if (Array.isArray(attachments) && attachments.length > 0) {
-    applyAttachments(convo, attachments);
+  if (resolvedAttachments.length > 0) {
+    applyAttachments(convo, resolvedAttachments);
   }
 
   // The user's message this turn, for the communications log (channel "chief" —
@@ -520,6 +534,7 @@ export async function POST(req: Request) {
                     channel: "chief",
                     direction: "out",
                     bodyText: outbound,
+                    metadata: sessionId ? { chief_session_id: sessionId } : {},
                   }),
                 ]
               : []),
@@ -529,6 +544,7 @@ export async function POST(req: Request) {
                     channel: "chief",
                     direction: "in",
                     bodyText: inbound,
+                    metadata: sessionId ? { chief_session_id: sessionId } : {},
                   }),
                 ]
               : []),
