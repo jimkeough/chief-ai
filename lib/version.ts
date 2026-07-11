@@ -9,7 +9,7 @@
 import pkg from "@/package.json";
 
 export const APP_VERSION: string = pkg.version;
-export const UPSTREAM_REPO = "jim-homejab/ai-cockpit";
+export const UPSTREAM_REPO = "jimkeough/chief-ai";
 
 /** Parse "1.2.3" / "v1.2.3" into [1,2,3]; non-numeric parts become 0. */
 function parts(v: string): number[] {

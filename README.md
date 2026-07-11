@@ -2,7 +2,7 @@
 
 A self-hosted personal AI chief of staff. One user per deployment (your Vercel + your Supabase + your Anthropic key). Chief proposes; you approve.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit&project-name=chief&repository-name=chief&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%2C%22protocol%22%3A%22storage%22%7D%5D)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjimkeough%2Fchief-ai&project-name=chief&repository-name=chief&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%2C%22protocol%22%3A%22storage%22%7D%5D)
 
 **One-click path — two signups (Vercel + GitHub), zero questions.** This is
 THE link for the landing site. The button clones this repo to your GitHub,
@@ -22,7 +22,7 @@ there; no visit to the Supabase dashboard. Sign in and connect your email from
 the Inbox tab with an app password. Everything runs on accounts you own; see
 `TRUST.md` for exactly what that means.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY&envDescription=Your%20own%20Supabase%20project%20URL%20%2B%20anon%20key%20(bring-your-own-project%20path).&envLink=https%3A%2F%2Fgithub.com%2Fjim-homejab%2Fai-cockpit%2Fblob%2Fmain%2F.env.example)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjimkeough%2Fchief-ai&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY&envDescription=Your%20own%20Supabase%20project%20URL%20%2B%20anon%20key%20(bring-your-own-project%20path).&envLink=https%3A%2F%2Fgithub.com%2Fjimkeough%2Fchief-ai%2Fblob%2Fmain%2F.env.example)
 
 Bring-your-own-Supabase path: click the second button (clones this repo into
 your GitHub and deploys to your Vercel), paste your existing project's URL +
@@ -49,6 +49,20 @@ Git Repository"; if you already deployed private, flip it under your repo's
 Settings → Danger Zone → Change visibility → Public. (Prefer to stay private?
 You'll need Vercel Pro, or to merge updates locally so the commit is authored by
 you.) See `.github/workflows/upstream-updates.yml` and `TRUST.md`.
+
+### Shipping a Chief release
+
+`package.json` is Chief's single version source; the app, update check, and
+GitHub release workflow all read it directly. Every Chief pull request must
+increase that version with `npm run release:patch` (or `release:minor` /
+`release:major`) and pass `npm run release:check`. Merging the version bump to
+`main` creates the matching GitHub release automatically.
+
+Do not copy the current version into helper docs. Instead, update the relevant
+contract when behavior changes: `README.md` for user/setup instructions,
+`TRUST.md` for security/privacy/data-flow changes, and `AGENTS.md` or
+`CLAUDE.md` for coding-agent guidance. The PR template carries this review
+checklist.
 
 ## Start here
 

@@ -14,6 +14,7 @@ import {
   SETUP_INTERVIEW_PROMPT,
 } from "@/app/components/ChiefProvider";
 import ManualMcpConnections from "@/app/(app)/config/ManualMcpConnections";
+import { UPSTREAM_REPO } from "@/lib/version";
 
 type SettingDef = {
   key: string;
@@ -826,7 +827,7 @@ export default function ConfigClient({
             <p className="text-[12px] leading-relaxed text-ink-3">
               Auto-update setup is available on a Vercel + GitHub deployment.
               To update manually, merge upstream{" "}
-              <span className="font-mono">jim-homejab/ai-cockpit</span> into
+              <span className="font-mono">{UPSTREAM_REPO}</span> into
               your repo.
             </p>
           )}

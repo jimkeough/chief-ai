@@ -26,12 +26,12 @@ permissions:
   issues: write
 
 env:
-  UPSTREAM: jim-homejab/ai-cockpit
+  UPSTREAM: jimkeough/chief-ai
 
 jobs:
   check:
     # Never run on the upstream repo itself.
-    if: github.repository != 'jim-homejab/ai-cockpit'
+    if: github.repository != 'jimkeough/chief-ai'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
