@@ -23,6 +23,7 @@ import { usePathname } from "next/navigation";
 import { PROPOSALS_MARKER, type ProposedAction } from "@/lib/actions";
 import type { ChiefPageContext } from "@/lib/chief";
 import type { UndoDescriptor } from "@/lib/undo";
+import type { ChatAttachment } from "@/lib/chat-attachments";
 
 export type ProposalStatus =
   | "proposed"
@@ -52,6 +53,8 @@ export type ChiefMessage = {
   content: string;
   proposals?: ProposalItem[];
   connect?: ConnectSuggestion[];
+  /** Files attached to this (user) turn, for display only — name + kind. */
+  attachments?: { name: string; kind: ChatAttachment["kind"] }[];
 };
 
 type ChiefContextValue = {
@@ -62,7 +65,7 @@ type ChiefContextValue = {
   messages: ChiefMessage[];
   streaming: boolean;
   pendingCount: number;
-  send: (text: string) => Promise<void>;
+  send: (text: string, attachments?: ChatAttachment[]) => Promise<void>;
   /** Open the sheet and immediately send a preset message (no-op if a reply
    *  is already streaming — the sheet still opens). */
   openAndSend: (text: string) => void;
@@ -146,17 +149,28 @@ export default function ChiefProvider({
   );
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, attachments?: ChatAttachment[]) => {
       const trimmed = text.trim();
-      if (!trimmed || streaming) return;
+      const atts = attachments ?? [];
+      if ((!trimmed && atts.length === 0) || streaming) return;
       setStreaming(true);
+      // The transcript re-sent on every future turn must carry non-empty text
+      // for every message — an attachment-only turn still needs a stand-in
+      // line here (the attachment itself only rides along on THIS request).
+      const historyText = trimmed || "(sent a file)";
       historyRef.current = [
         ...historyRef.current,
-        { role: "user", content: trimmed },
+        { role: "user", content: historyText },
       ];
       setMessages((m) => [
         ...m,
-        { role: "user", content: trimmed },
+        {
+          role: "user",
+          content: trimmed,
+          ...(atts.length
+            ? { attachments: atts.map((a) => ({ name: a.name, kind: a.kind })) }
+            : {}),
+        },
         { role: "assistant", content: "" },
       ]);
 
@@ -167,6 +181,7 @@ export default function ChiefProvider({
           body: JSON.stringify({
             messages: historyRef.current,
             page: effectivePage,
+            ...(atts.length ? { attachments: atts } : {}),
           }),
         });
         if (!res.ok || !res.body) {

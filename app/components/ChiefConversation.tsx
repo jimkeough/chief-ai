@@ -12,6 +12,72 @@ import remarkGfm from "remark-gfm";
 import { useChief, type ConnectSuggestion } from "./ChiefProvider";
 import ProposalGroup from "./ProposalCards";
 import ChiefMonogram from "./ChiefMonogram";
+import type { ChatAttachment } from "@/lib/chat-attachments";
+
+// Mirrors the server-side caps in lib/chat-attachments.ts so a bad file is
+// rejected client-side with a clear message instead of silently dropped.
+const MAX_FILES = 10;
+const MAX_FILE_BYTES = 5 * 1024 * 1024; // ~5MB raw ≈ 7MB base64
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      const comma = result.indexOf(",");
+      resolve(comma === -1 ? result : result.slice(comma + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+// Classify + read a single File into the wire attachment shape. Returns null
+// (with an error message) for a type Chief can't use.
+async function toAttachment(
+  file: File,
+): Promise<{ attachment: ChatAttachment } | { error: string }> {
+  if (file.size > MAX_FILE_BYTES) {
+    return { error: `${file.name} is too large (max 5MB).` };
+  }
+  if (IMAGE_TYPES.includes(file.type)) {
+    return {
+      attachment: {
+        kind: "image",
+        name: file.name,
+        mediaType: file.type,
+        data: await readAsBase64(file),
+      },
+    };
+  }
+  if (file.type === "application/pdf") {
+    return {
+      attachment: {
+        kind: "document",
+        name: file.name,
+        mediaType: file.type,
+        data: await readAsBase64(file),
+      },
+    };
+  }
+  if (file.type.startsWith("text/") || /\.(txt|md|markdown|csv)$/i.test(file.name)) {
+    return {
+      attachment: { kind: "text", name: file.name, text: await file.text() },
+    };
+  }
+  return { error: `${file.name}: unsupported file type.` };
+}
+
+// A small icon per attachment kind for the chip/bubble display.
+function AttachmentGlyph({ kind }: { kind: ChatAttachment["kind"] }) {
+  const label = kind === "image" ? "IMG" : kind === "document" ? "PDF" : "TXT";
+  return (
+    <span className="font-mono text-[9px] tracking-[0.06em] text-ink-3">
+      {label}
+    </span>
+  );
+}
 
 // A "Connect X" card Chief offers mid-chat when the request needs an app the
 // user hasn't linked. Tapping enables the app and opens the hosted OAuth flow
@@ -84,7 +150,10 @@ export default function ChiefConversation() {
   const { messages, streaming, send, approve, dismiss, restore, undo } =
     useChief();
   const [draft, setDraft] = useState("");
+  const [pending, setPending] = useState<ChatAttachment[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Keep the newest turn in view while streaming.
   useEffect(() => {
@@ -94,10 +163,35 @@ export default function ChiefConversation() {
 
   const submit = () => {
     const text = draft.trim();
-    if (!text || streaming) return;
+    if ((!text && pending.length === 0) || streaming) return;
     setDraft("");
-    void send(text);
+    const atts = pending;
+    setPending([]);
+    void send(text, atts);
   };
+
+  const addFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setAttachError(null);
+    const room = MAX_FILES - pending.length;
+    if (room <= 0) {
+      setAttachError(`You can attach up to ${MAX_FILES} files.`);
+      return;
+    }
+    const picked = Array.from(files).slice(0, room);
+    const results = await Promise.all(picked.map((f) => toAttachment(f)));
+    const ok: ChatAttachment[] = [];
+    let firstError: string | null = null;
+    for (const r of results) {
+      if ("attachment" in r) ok.push(r.attachment);
+      else firstError ??= r.error;
+    }
+    if (ok.length) setPending((p) => [...p, ...ok]);
+    if (firstError) setAttachError(firstError);
+  };
+
+  const removePending = (index: number) =>
+    setPending((p) => p.filter((_, i) => i !== index));
 
   const handlers = {
     onApprove: (uid: string, mergeTargetId?: string) =>
@@ -124,13 +218,31 @@ export default function ChiefConversation() {
           <div className="flex flex-col gap-4">
             {messages.map((m, i) =>
               m.role === "user" ? (
-                <div key={i} className="flex justify-end">
-                  <div
-                    className="max-w-[85%] rounded-card px-3.5 py-2.5 text-[18px] leading-relaxed text-ink"
-                    style={{ background: "var(--raised)" }}
-                  >
-                    {m.content}
-                  </div>
+                <div key={i} className="flex flex-col items-end gap-1.5">
+                  {m.attachments && m.attachments.length > 0 && (
+                    <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
+                      {m.attachments.map((a, j) => (
+                        <div
+                          key={j}
+                          className="flex items-center gap-1.5 rounded-full border px-2.5 py-1"
+                          style={{ borderColor: "var(--hairline)" }}
+                        >
+                          <AttachmentGlyph kind={a.kind} />
+                          <span className="max-w-[160px] truncate text-[12px] text-ink-2">
+                            {a.name}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {m.content && (
+                    <div
+                      className="max-w-[85%] rounded-card px-3.5 py-2.5 text-[18px] leading-relaxed text-ink"
+                      style={{ background: "var(--raised)" }}
+                    >
+                      {m.content}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div key={i} className="flex flex-col gap-2.5">
@@ -174,7 +286,70 @@ export default function ChiefConversation() {
         className="border-t px-3 pb-3 pt-2.5"
         style={{ borderColor: "var(--hairline)" }}
       >
+        {pending.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {pending.map((a, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-1.5"
+                style={{ borderColor: "var(--hairline)" }}
+              >
+                <AttachmentGlyph kind={a.kind} />
+                <span className="max-w-[140px] truncate text-[12px] text-ink-2">
+                  {a.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removePending(i)}
+                  aria-label={`Remove ${a.name}`}
+                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-ink-3"
+                >
+                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
+                    <path
+                      d="M1 1l6 6m0-6L1 7"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {attachError && (
+          <div className="mb-2 text-[12px] text-copper">{attachError}</div>
+        )}
         <div className="flex items-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/plain,text/markdown,text/csv,.md,.csv"
+            className="hidden"
+            onChange={(e) => {
+              void addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={streaming}
+            aria-label="Attach a document"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control border disabled:opacity-40"
+            style={{ borderColor: "var(--hairline)" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M11 4.5L5.5 10a2 2 0 102.83 2.83l5-5.33a3.5 3.5 0 10-4.95-4.95L3 8.03"
+                stroke="var(--ink-2)"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -191,7 +366,7 @@ export default function ChiefConversation() {
           />
           <button
             onClick={submit}
-            disabled={streaming || !draft.trim()}
+            disabled={streaming || (!draft.trim() && pending.length === 0)}
             aria-label="Send"
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control disabled:opacity-40"
             style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}

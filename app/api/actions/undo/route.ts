@@ -11,6 +11,7 @@ import { createJournalEntry } from "@/lib/journal";
 import { UNDO_KINDS, type UndoDescriptor } from "@/lib/undo";
 import { deleteKbDocument, updateKbDocument } from "@/lib/kb/store";
 import { deleteContact } from "@/lib/contacts";
+import { deleteNote } from "@/lib/notes";
 import { gmailMcpServer, unarchiveThread } from "@/lib/gmail";
 import { getMailAccount, imapUnarchive } from "@/lib/mail";
 import {
@@ -225,6 +226,12 @@ export async function POST(req: Request) {
 
     if (undo.kind === "delete_contact") {
       await deleteContact(String(undo.id ?? ""));
+      await journal(label);
+      return Response.json({ ok: true, result: label });
+    }
+
+    if (undo.kind === "delete_note") {
+      await deleteNote(String(undo.id ?? ""));
       await journal(label);
       return Response.json({ ok: true, result: label });
     }

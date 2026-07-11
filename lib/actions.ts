@@ -31,6 +31,8 @@ export type WriteAction = {
    *  - "kb": save a fact or standing instruction to Memory (the KB).
    *  - "contacts": save a person to the contacts table.
    *  - "projects": create/update a project or its current-state record.
+   *  - "notes": create a free-standing note (reference material, not a task
+   *    or a project's current state).
    *  - "gmail": the inbox actions — archive (label change via the official
    *    Gmail MCP server) and the ONE send path (direct Gmail REST call).
    *
@@ -38,7 +40,7 @@ export type WriteAction = {
    * through the broker and carry their own `server` on the proposal. Curated
    * polish for specific connector tools lives in lib/tool-enrichments.ts.
    */
-  via: "tasks" | "kb" | "contacts" | "projects" | "gmail";
+  via: "tasks" | "kb" | "contacts" | "projects" | "notes" | "gmail";
   /** Informational app/source label for the action. */
   app: string;
   tier: ActionTier;
@@ -306,6 +308,37 @@ export const WRITE_ACTIONS: WriteAction[] = [
       const email = a.email ? ` <${String(a.email)}>` : "";
       const company = a.company ? `\n${String(a.company)}` : "";
       return `${String(a.name ?? "")}${email}${company}\n\n${String(a.notes ?? "")}`;
+    },
+  },
+
+  // --- Notes -----------------------------------------------------------------
+  // Free-standing notes — reference material that isn't itself a task or a
+  // project's current state (background info, a summary of a document, raw
+  // meeting notes). Gated like every write; runs only via the "notes" path in
+  // the executor.
+  {
+    key: "create_note",
+    via: "notes",
+    app: "notes",
+    tier: "yellow",
+    label: "Save note",
+    description:
+      "Propose saving a NOTE — free-standing reference material that isn't itself a task or a project's current state (e.g. a summary of a document you analyzed, raw meeting notes, background info worth keeping around). This does NOT save immediately; it shows an Approve/Dismiss card. Prefer create_project/create_task/update_project_state for anything that's actually a workstream or an action — use create_note for content that's genuinely just reference material.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: str("Short, specific title."),
+        body: str("The note's full content."),
+        pinned: {
+          type: "boolean",
+          description: "Optional: pin this note so it stays at the top of the list.",
+        },
+      },
+      required: ["title", "body"],
+    },
+    preview: (a) => {
+      const pinned = a.pinned ? " (pinned)" : "";
+      return `${String(a.title ?? "")}${pinned}\n\n${String(a.body ?? "")}`;
     },
   },
 

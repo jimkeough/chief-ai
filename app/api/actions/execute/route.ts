@@ -29,6 +29,7 @@ import {
 } from "@/lib/kb/store";
 import { reconcileKbEntry, ReconcileError } from "@/lib/kb/reconcile";
 import { createContact } from "@/lib/contacts";
+import { createNote } from "@/lib/notes";
 import { gmailMcpServer } from "@/lib/gmail";
 import { getMailProvider } from "@/lib/mail";
 import { recordCommunication } from "@/lib/communications";
@@ -410,6 +411,33 @@ export async function POST(req: Request) {
       return Response.json({
         ok: true,
         result: `Contact saved — ${contact.name}`,
+        undo,
+      });
+    }
+
+    if (action.via === "notes") {
+      const title = String(safeArgs.title ?? "").trim();
+      const body = String(safeArgs.body ?? "").trim();
+      if (!title || !body) {
+        return Response.json(
+          { ok: false, error: "A note needs a title and body." },
+          { status: 400 },
+        );
+      }
+      const note = await createNote({
+        title,
+        body,
+        pinned: Boolean(safeArgs.pinned),
+      });
+      await journal("Saved note", note.title);
+      const undo: UndoDescriptor = {
+        kind: "delete_note",
+        id: note.id,
+        label: `Note removed: ${note.title}`,
+      };
+      return Response.json({
+        ok: true,
+        result: `Note saved — ${note.title}`,
         undo,
       });
     }

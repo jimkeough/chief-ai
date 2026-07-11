@@ -26,6 +26,7 @@ import {
 import { KB_TOOLS, makeKbToolRunner } from "@/lib/kb/tools";
 import { findRelatedKbEntries } from "@/lib/kb/related";
 import { listProjects } from "@/lib/projects";
+import { applyAttachments, type ChatAttachment } from "@/lib/chat-attachments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,9 +98,10 @@ export async function POST(req: Request) {
   const webFetchEnabled =
     settings["web.fetch_enabled"].trim().toLowerCase() === "on";
 
-  const { messages, page } = (await req.json().catch(() => ({}))) as {
+  const { messages, page, attachments } = (await req.json().catch(() => ({}))) as {
     messages?: ChatMessage[];
     page?: ChiefPageContext | null;
+    attachments?: ChatAttachment[];
   };
 
   // Exfiltration guard (build-brief security rule 2): when the page context
@@ -286,6 +288,15 @@ export async function POST(req: Request) {
     role: m.role,
     content: m.content,
   }));
+
+  // Fold any uploaded document/image/text attachments into the latest user
+  // turn as content blocks — Claude reads a PDF/image natively (no server-side
+  // extraction). This is a client-tool turn like any other; the attachment
+  // itself carries no elevated trust — see the system prompt's guidance to
+  // treat its content as data, never as instructions.
+  if (Array.isArray(attachments) && attachments.length > 0) {
+    applyAttachments(convo, attachments);
+  }
 
   // The user's message this turn, for the communications log (channel "chief" —
   // the AI chat history is a filtered view of that append-only table).
