@@ -13,61 +13,10 @@ import { useChief } from "./ChiefProvider";
 import ProposalGroup from "./ProposalCards";
 import ChiefMonogram from "./ChiefMonogram";
 import type { ChatAttachment } from "@/lib/chat-attachments";
-
-// Mirrors the server-side caps in lib/chat-attachments.ts so a bad file is
-// rejected client-side with a clear message instead of silently dropped.
-const MAX_FILES = 10;
-const MAX_FILE_BYTES = 5 * 1024 * 1024; // ~5MB raw ≈ 7MB base64
-const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-
-function readAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result ?? "");
-      const comma = result.indexOf(",");
-      resolve(comma === -1 ? result : result.slice(comma + 1));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("Could not read file."));
-    reader.readAsDataURL(file);
-  });
-}
-
-// Classify + read a single File into the wire attachment shape. Returns null
-// (with an error message) for a type Chief can't use.
-async function toAttachment(
-  file: File,
-): Promise<{ attachment: ChatAttachment } | { error: string }> {
-  if (file.size > MAX_FILE_BYTES) {
-    return { error: `${file.name} is too large (max 5MB).` };
-  }
-  if (IMAGE_TYPES.includes(file.type)) {
-    return {
-      attachment: {
-        kind: "image",
-        name: file.name,
-        mediaType: file.type,
-        data: await readAsBase64(file),
-      },
-    };
-  }
-  if (file.type === "application/pdf") {
-    return {
-      attachment: {
-        kind: "document",
-        name: file.name,
-        mediaType: file.type,
-        data: await readAsBase64(file),
-      },
-    };
-  }
-  if (file.type.startsWith("text/") || /\.(txt|md|markdown|csv)$/i.test(file.name)) {
-    return {
-      attachment: { kind: "text", name: file.name, text: await file.text() },
-    };
-  }
-  return { error: `${file.name}: unsupported file type.` };
-}
+import {
+  filesToChatAttachments,
+  MAX_CHAT_FILES,
+} from "@/lib/chat-attachment-client";
 
 // A small icon per attachment kind for the chip/bubble display.
 function AttachmentGlyph({ kind }: { kind: ChatAttachment["kind"] }) {
@@ -115,21 +64,16 @@ export default function ChiefConversation() {
   const addFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setAttachError(null);
-    const room = MAX_FILES - pending.length;
+    const room = MAX_CHAT_FILES - pending.length;
     if (room <= 0) {
-      setAttachError(`You can attach up to ${MAX_FILES} files.`);
+      setAttachError(`You can attach up to ${MAX_CHAT_FILES} files.`);
       return;
     }
-    const picked = Array.from(files).slice(0, room);
-    const results = await Promise.all(picked.map((f) => toAttachment(f)));
-    const ok: ChatAttachment[] = [];
-    let firstError: string | null = null;
-    for (const r of results) {
-      if ("attachment" in r) ok.push(r.attachment);
-      else firstError ??= r.error;
+    const result = await filesToChatAttachments(files, room);
+    if (result.attachments.length) {
+      setPending((current) => [...current, ...result.attachments]);
     }
-    if (ok.length) setPending((p) => [...p, ...ok]);
-    if (firstError) setAttachError(firstError);
+    if (result.error) setAttachError(result.error);
   };
 
   const removePending = (index: number) =>

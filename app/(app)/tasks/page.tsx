@@ -5,6 +5,7 @@
 import AddTask from "@/app/components/AddTask";
 import ChiefPageSnapshot from "@/app/components/ChiefPageSnapshot";
 import TaskList from "@/app/components/TaskList";
+import TasksChiefAction from "@/app/components/TasksChiefAction";
 import { listTasks } from "@/lib/tasks";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export default async function TasksPage() {
       />
       <div className="flex items-center justify-between">
         <div className="text-micro text-ink-3">TASKS · {open.length}</div>
+        {open.length > 0 && <TasksChiefAction />}
       </div>
 
       <AddTask />

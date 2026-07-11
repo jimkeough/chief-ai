@@ -11,7 +11,7 @@ import { useChief } from "./ChiefProvider";
 import ChiefConversation from "./ChiefConversation";
 
 export default function ChiefSheet() {
-  const { open, setOpen, page } = useChief();
+  const { open, setOpen, page, newChat, streaming } = useChief();
   const pathname = usePathname();
 
   // Lock the page scroll behind the sheet.
@@ -65,6 +65,15 @@ export default function ChiefSheet() {
             {label}
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => void newChat()}
+          disabled={streaming}
+          className="shrink-0 rounded-full px-2 py-2 font-mono text-[10px] tracking-[0.08em] text-ink-3 disabled:opacity-40"
+          aria-label="Start a new chat"
+        >
+          NEW CHAT
+        </button>
         <button
           aria-label="Close"
           onClick={() => setOpen(false)}

@@ -7,7 +7,7 @@ import { useChief } from "@/app/components/ChiefProvider";
 import ChiefConversation from "@/app/components/ChiefConversation";
 
 export default function ChiefFull() {
-  const { messages, clear } = useChief();
+  const { messages, newChat, streaming } = useChief();
   return (
     <div
       className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-[480px] flex-col"
@@ -21,7 +21,8 @@ export default function ChiefFull() {
         <div className="text-micro text-ink-3">CHIEF</div>
         {messages.length > 0 && (
           <button
-            onClick={clear}
+            onClick={() => void newChat()}
+            disabled={streaming}
             className="font-mono text-[11px] tracking-[0.08em] text-ink-3"
           >
             NEW CONVERSATION

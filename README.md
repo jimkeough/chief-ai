@@ -90,7 +90,8 @@ migrations, single-user auth) · **2** (core domain: projects with living
 current-state records, tasks with waiting status, settings, journal, contacts,
 communications log, knowledge base with hybrid search; Tasks & Projects
 screens) · **3** (the Chief loop: streaming chat with the approve-first write
-gate, proposal cards with undo, MCP broker, journaled executor).
+gate, resumable chat history and document review, contextual launch actions,
+proposal cards with undo, MCP broker, journaled executor).
 
 **Existing deployments:** after pulling a phase, run the new files in
 `supabase/migrations/` (anything newer than what you've applied) in the SQL

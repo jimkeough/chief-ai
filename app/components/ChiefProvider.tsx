@@ -15,6 +15,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -24,6 +25,18 @@ import { PROPOSALS_MARKER, type ProposedAction } from "@/lib/actions";
 import type { ChiefPageContext } from "@/lib/chief";
 import type { UndoDescriptor } from "@/lib/undo";
 import type { ChatAttachment } from "@/lib/chat-attachments";
+import { storeChiefAttachments } from "@/lib/chat-attachment-client";
+import {
+  DOCUMENT_REVIEW_INTENT,
+  resolveChiefIntent,
+  type ChiefIntent,
+  type ChiefIntentId,
+} from "@/lib/chief-intents";
+import type {
+  ChiefHistoryMessage,
+  ChiefSessionRecord,
+  ChiefSessionSummary,
+} from "@/lib/chief-session-types";
 
 export type ProposalStatus =
   | "proposed"
@@ -50,7 +63,9 @@ export type ProposalPlan = {
   version: number;
   sourceNames: string[];
   /** Kept in memory so a revision can re-read the original source files. */
-  sourceAttachments: ChatAttachment[];
+  sourceAttachments?: ChatAttachment[];
+  /** Durable references used to restore source files after a reload. */
+  sourceAttachmentIds?: string[];
 };
 
 export type ChiefMessage = {
@@ -75,9 +90,17 @@ type ChiefContextValue = {
   setOpen: (open: boolean) => void;
   page: ChiefPageContext | null;
   setPage: (page: ChiefPageContext | null) => void;
+  sessionId: string | null;
+  recentSessions: ChiefSessionSummary[];
+  sessionsLoading: boolean;
   messages: ChiefMessage[];
   streaming: boolean;
   pendingCount: number;
+  refreshRecentSessions: () => Promise<void>;
+  newChat: (intent?: ChiefIntentId, title?: string) => Promise<boolean>;
+  switchSession: (id: string) => Promise<void>;
+  runIntent: (intent: ChiefIntent) => Promise<void>;
+  uploadDocuments: (attachments: ChatAttachment[]) => Promise<void>;
   send: (
     text: string,
     attachments?: ChatAttachment[],
@@ -88,23 +111,12 @@ type ChiefContextValue = {
     instruction: string,
     plan: ProposalPlan,
   ) => Promise<void>;
-  /** Open the sheet and immediately send a preset message (no-op if a reply
-   *  is already streaming — the sheet still opens). */
-  openAndSend: (text: string) => void;
   approve: (uid: string, mergeTargetId?: string) => Promise<void>;
   dismiss: (uid: string) => void;
   restore: (uid: string) => void;
   undo: (uid: string) => Promise<void>;
   clear: () => void;
 };
-
-/** The on-demand concierge opener: works on any workspace, not just an empty
- *  one — the message itself carries the interview instructions. */
-export const SETUP_INTERVIEW_PROMPT =
-  "Interview me about my work — one question at a time — and as real structure emerges, propose the projects, tasks, contacts, and standing instructions to capture it. Start by asking what I do and what's on my plate right now.";
-
-export const MCP_SETUP_PROMPT =
-  "Help me connect a direct MCP server to Chief. Start by asking which service or tool I want to connect. Guide me one step at a time to verify whether it offers an official remote MCP server and find its documented URL and authentication method. Never invent an endpoint or claim one exists without verified details. Never ask me to paste a secret into chat; tell me to enter credentials only in Settings → Connections → Add MCP connection. Once we identify the details, explain exactly what to enter there.";
 
 const ChiefCtx = createContext<ChiefContextValue | null>(null);
 
@@ -114,8 +126,125 @@ export function useChief(): ChiefContextValue {
   return ctx;
 }
 
-let uidCounter = 0;
-const nextUid = () => `p${++uidCounter}`;
+const ACTIVE_SESSION_KEY = "chief.activeSessionId";
+const EXECUTION_INTERRUPTED =
+  "Action status is unknown after an interruption. Check your workspace before acting again.";
+const UNDO_INTERRUPTED =
+  "Undo was interrupted before it could be confirmed. The action may still be applied.";
+
+function pendingProposalCount(messages: ChiefMessage[]): number {
+  return messages.reduce(
+    (count, message) =>
+      count +
+      (message.proposals?.filter((proposal) => proposal.status === "proposed")
+        .length ?? 0),
+    0,
+  );
+}
+
+function cleanTitle(value: string | undefined): string | undefined {
+  const title = value?.trim().replace(/\s+/g, " ");
+  return title ? title.slice(0, 80) : undefined;
+}
+
+function deriveTitle(
+  explicitTitle: string | undefined,
+  userText: string,
+  attachments: ChatAttachment[],
+): string {
+  return (
+    cleanTitle(explicitTitle) ??
+    cleanTitle(userText) ??
+    cleanTitle(attachments[0]?.name) ??
+    "New chat"
+  );
+}
+
+function sessionSummary(
+  session: ChiefSessionRecord<ChiefMessage>,
+): ChiefSessionSummary {
+  const { messages: _messages, history: _history, ...summary } = session;
+  return summary;
+}
+
+function sanitizeMessages(messages: ChiefMessage[]): ChiefMessage[] {
+  return messages.map((message) => {
+    if (!message.plan) return message;
+    const { sourceAttachments: _sourceAttachments, ...plan } = message.plan;
+    return { ...message, plan };
+  });
+}
+
+function isChiefMessage(value: unknown): value is ChiefMessage {
+  if (!value || typeof value !== "object") return false;
+  const message = value as Partial<ChiefMessage>;
+  if (
+    (message.role !== "user" && message.role !== "assistant") ||
+    typeof message.content !== "string"
+  ) {
+    return false;
+  }
+  if (message.proposals !== undefined && !Array.isArray(message.proposals)) {
+    return false;
+  }
+  if (
+    message.proposals?.some(
+      (item) =>
+        !item ||
+        typeof item.uid !== "string" ||
+        typeof item.status !== "string" ||
+        !item.proposal ||
+        typeof item.proposal !== "object",
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function normalizeInterrupted(messages: ChiefMessage[]): {
+  messages: ChiefMessage[];
+  changed: boolean;
+} {
+  let changed = false;
+  const normalized = messages.map((message) => {
+    if (
+      message.role === "assistant" &&
+      !message.content &&
+      !message.proposals?.length
+    ) {
+      changed = true;
+      return {
+        ...message,
+        content:
+          "⚠️ This response was interrupted before Chief finished. Please try again.",
+      };
+    }
+    if (!message.proposals) return message;
+    const proposals = message.proposals.map((proposal) => {
+      if (proposal.status === "executing") {
+        changed = true;
+        return {
+          ...proposal,
+          status: "done" as const,
+          result: EXECUTION_INTERRUPTED,
+          undo: null,
+        };
+      }
+      if (proposal.status === "undoing") {
+        changed = true;
+        return {
+          ...proposal,
+          status: "done" as const,
+          error: UNDO_INTERRUPTED,
+        };
+      }
+      return proposal;
+    });
+    return { ...message, proposals };
+  });
+  return { messages: normalized, changed };
+}
 
 export default function ChiefProvider({
   children,
@@ -127,10 +256,54 @@ export default function ChiefProvider({
   const [page, setPage] = useState<ChiefPageContext | null>(null);
   const [messages, setMessages] = useState<ChiefMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [recentSessions, setRecentSessions] = useState<ChiefSessionSummary[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   // The transcript sent to the API: assistant turns as plain text (tool_use
   // blocks and proposals live server-side per turn; the follow-up transcript
   // is text-only, same as the app this was ported from).
-  const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>(
+  const historyRef = useRef<ChiefHistoryMessage[]>([]);
+  const messagesRef = useRef<ChiefMessage[]>([]);
+  const streamingRef = useRef(false);
+  const operationRef = useRef(false);
+  const transitionRef = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
+  const sessionIntentRef = useRef<ChiefIntentId>("general");
+  const sessionTitleRef = useRef("New chat");
+  const desiredTitleRef = useRef<string | undefined>(undefined);
+  const ensureSessionPromiseRef =
+    useRef<Promise<string | null> | null>(null);
+  const patchQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const hydrationPromiseRef = useRef<Promise<void> | null>(null);
+  const hydrationStartedRef = useRef(false);
+  const sessionEpochRef = useRef(0);
+
+  const replaceMessages = useCallback((next: ChiefMessage[]) => {
+    messagesRef.current = next;
+    setMessages(next);
+  }, []);
+
+  const updateMessages = useCallback(
+    (updater: (current: ChiefMessage[]) => ChiefMessage[]) => {
+      const next = updater(messagesRef.current);
+      replaceMessages(next);
+      return next;
+    },
+    [replaceMessages],
+  );
+
+  const setStreamingValue = useCallback((next: boolean) => {
+    streamingRef.current = next;
+    setStreaming(next);
+  }, []);
+
+  const upsertRecentSession = useCallback(
+    (summary: ChiefSessionSummary, moveToFront = true) => {
+      setRecentSessions((current) => {
+        const rest = current.filter((item) => item.id !== summary.id);
+        return moveToFront ? [summary, ...rest] : [...rest, summary];
+      });
+    },
     [],
   );
 
@@ -144,9 +317,46 @@ export default function ChiefProvider({
     [page, pathname],
   );
 
+  const queueSnapshot = useCallback(
+    (
+      targetId = sessionIdRef.current,
+      snapshotMessages = messagesRef.current,
+      snapshotHistory = historyRef.current,
+    ): Promise<void> => {
+      if (!targetId) return Promise.resolve();
+      const body = {
+        title: sessionTitleRef.current,
+        messages: sanitizeMessages(snapshotMessages),
+        history: snapshotHistory.map((item) => ({ ...item })),
+        pendingCount: pendingProposalCount(snapshotMessages),
+      };
+      patchQueueRef.current = patchQueueRef.current
+        .catch(() => {
+          /* A failed save must not block later snapshots. */
+        })
+        .then(async () => {
+          const response = await fetch(`/api/chief/sessions/${targetId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!response.ok) return;
+          const data = (await response.json().catch(() => ({}))) as {
+            session?: ChiefSessionSummary;
+          };
+          if (data.session) upsertRecentSession(data.session);
+        })
+        .catch(() => {
+          /* Session persistence is best-effort; chat remains usable. */
+        });
+      return patchQueueRef.current;
+    },
+    [upsertRecentSession],
+  );
+
   const patchProposal = useCallback(
     (uid: string, patch: Partial<ProposalItem>) => {
-      setMessages((msgs) =>
+      const next = updateMessages((msgs) =>
         msgs.map((m) =>
           m.proposals?.some((p) => p.uid === uid)
             ? {
@@ -158,19 +368,261 @@ export default function ChiefProvider({
             : m,
         ),
       );
+      void queueSnapshot(sessionIdRef.current, next, historyRef.current);
     },
-    [],
+    [queueSnapshot, updateMessages],
   );
 
   const findProposal = useCallback(
     (uid: string): ProposalItem | undefined => {
-      for (const m of messages) {
+      for (const m of messagesRef.current) {
         const hit = m.proposals?.find((p) => p.uid === uid);
         if (hit) return hit;
       }
       return undefined;
     },
-    [messages],
+    [],
+  );
+
+  const refreshRecentSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const response = await fetch("/api/chief/sessions?limit=20");
+      if (!response.ok) return;
+      const data = (await response.json().catch(() => ({}))) as {
+        sessions?: ChiefSessionSummary[];
+      };
+      if (Array.isArray(data.sessions)) setRecentSessions(data.sessions);
+    } catch {
+      /* Recent chats are optional; the active chat still works. */
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  const restoreSession = useCallback(
+    (
+      record: ChiefSessionRecord<ChiefMessage>,
+      options?: { openSheet?: boolean; moveToFront?: boolean },
+    ) => {
+      const restored = normalizeInterrupted(
+        Array.isArray(record.messages)
+          ? record.messages.filter(isChiefMessage)
+          : [],
+      );
+      const history = Array.isArray(record.history) ? record.history : [];
+      sessionIdRef.current = record.id;
+      sessionIntentRef.current = record.intent;
+      sessionTitleRef.current = record.title;
+      desiredTitleRef.current = record.title;
+      historyRef.current = history;
+      setSessionId(record.id);
+      replaceMessages(restored.messages);
+      try {
+        window.localStorage.setItem(ACTIVE_SESSION_KEY, record.id);
+      } catch {
+        /* Storage can be unavailable in privacy-restricted browsers. */
+      }
+      upsertRecentSession(
+        sessionSummary(record),
+        options?.moveToFront !== false,
+      );
+      if (options?.openSheet) setOpen(true);
+      if (restored.changed) {
+        void queueSnapshot(record.id, restored.messages, history);
+      }
+    },
+    [queueSnapshot, replaceMessages, upsertRecentSession],
+  );
+
+  useEffect(() => {
+    if (hydrationStartedRef.current) return;
+    hydrationStartedRef.current = true;
+    const epoch = sessionEpochRef.current;
+    const hydrate = async () => {
+      setSessionsLoading(true);
+      try {
+        const listResponse = await fetch("/api/chief/sessions?limit=20");
+        const listData = listResponse.ok
+          ? ((await listResponse.json().catch(() => ({}))) as {
+              sessions?: ChiefSessionSummary[];
+            })
+          : {};
+        const recent = Array.isArray(listData.sessions)
+          ? listData.sessions
+          : [];
+        setRecentSessions(recent);
+        if (sessionEpochRef.current !== epoch) return;
+
+        let storedId: string | null = null;
+        try {
+          storedId = window.localStorage.getItem(ACTIVE_SESSION_KEY);
+        } catch {
+          /* Fall back to the newest session. */
+        }
+        const candidates = [storedId, recent[0]?.id].filter(
+          (id, index, all): id is string =>
+            Boolean(id) && all.indexOf(id) === index,
+        );
+        for (const id of candidates) {
+          const response = await fetch(`/api/chief/sessions/${id}`);
+          if (!response.ok) continue;
+          const data = (await response.json().catch(() => ({}))) as {
+            session?: ChiefSessionRecord<ChiefMessage>;
+          };
+          if (!data.session || sessionEpochRef.current !== epoch) return;
+          restoreSession(data.session);
+          return;
+        }
+      } catch {
+        /* Hydration is best-effort; sending can still create a new chat. */
+      } finally {
+        setSessionsLoading(false);
+      }
+    };
+    const promise = hydrate();
+    hydrationPromiseRef.current = promise;
+    void promise.finally(() => {
+      if (hydrationPromiseRef.current === promise) {
+        hydrationPromiseRef.current = null;
+      }
+    });
+  }, [restoreSession]);
+
+  const ensureSession = useCallback(
+    async (
+      userText: string,
+      attachments: ChatAttachment[],
+    ): Promise<string | null> => {
+      if (sessionIdRef.current) return sessionIdRef.current;
+      if (hydrationPromiseRef.current) await hydrationPromiseRef.current;
+      if (sessionIdRef.current) return sessionIdRef.current;
+      if (ensureSessionPromiseRef.current) return ensureSessionPromiseRef.current;
+
+      const epoch = sessionEpochRef.current;
+      const title = deriveTitle(
+        desiredTitleRef.current,
+        userText,
+        attachments,
+      );
+      const create = (async () => {
+        try {
+          const response = await fetch("/api/chief/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              intent: sessionIntentRef.current,
+              title,
+              pageLabel: effectivePage.label,
+            }),
+          });
+          if (!response.ok) return null;
+          const data = (await response.json().catch(() => ({}))) as {
+            session?: ChiefSessionRecord<ChiefMessage>;
+          };
+          if (!data.session || sessionEpochRef.current !== epoch) {
+            return sessionIdRef.current;
+          }
+          sessionIdRef.current = data.session.id;
+          sessionTitleRef.current = data.session.title;
+          desiredTitleRef.current = data.session.title;
+          setSessionId(data.session.id);
+          try {
+            window.localStorage.setItem(ACTIVE_SESSION_KEY, data.session.id);
+          } catch {
+            /* The database session remains the source of truth. */
+          }
+          upsertRecentSession(sessionSummary(data.session));
+          return data.session.id;
+        } catch {
+          return null;
+        }
+      })();
+      ensureSessionPromiseRef.current = create;
+      try {
+        return await create;
+      } finally {
+        if (ensureSessionPromiseRef.current === create) {
+          ensureSessionPromiseRef.current = null;
+        }
+      }
+    },
+    [effectivePage.label, upsertRecentSession],
+  );
+
+  const newChat = useCallback(
+    async (
+      intent: ChiefIntentId = "general",
+      title?: string,
+    ): Promise<boolean> => {
+      if (
+        streamingRef.current ||
+        operationRef.current ||
+        transitionRef.current
+      ) {
+        return false;
+      }
+      if (
+        pendingProposalCount(messagesRef.current) > 0 &&
+        !window.confirm(
+          "This chat has pending proposals. They will remain saved in the previous chat. Start a new chat?",
+        )
+      ) {
+        return false;
+      }
+      sessionEpochRef.current += 1;
+      sessionIdRef.current = null;
+      sessionIntentRef.current = intent;
+      desiredTitleRef.current = cleanTitle(title);
+      sessionTitleRef.current = desiredTitleRef.current ?? "New chat";
+      ensureSessionPromiseRef.current = null;
+      historyRef.current = [];
+      setSessionId(null);
+      replaceMessages([]);
+      try {
+        window.localStorage.removeItem(ACTIVE_SESSION_KEY);
+      } catch {
+        /* A fresh in-memory chat still works without localStorage. */
+      }
+      return true;
+    },
+    [replaceMessages],
+  );
+
+  const switchSession = useCallback(
+    async (id: string): Promise<void> => {
+      if (
+        !id ||
+        streamingRef.current ||
+        operationRef.current ||
+        transitionRef.current ||
+        id === sessionIdRef.current
+      ) {
+        if (id === sessionIdRef.current) setOpen(true);
+        return;
+      }
+      transitionRef.current = true;
+      const epoch = ++sessionEpochRef.current;
+      setSessionsLoading(true);
+      try {
+        await patchQueueRef.current.catch(() => {});
+        if (sessionEpochRef.current !== epoch) return;
+        const response = await fetch(`/api/chief/sessions/${id}`);
+        if (!response.ok) return;
+        const data = (await response.json().catch(() => ({}))) as {
+          session?: ChiefSessionRecord<ChiefMessage>;
+        };
+        if (!data.session || sessionEpochRef.current !== epoch) return;
+        ensureSessionPromiseRef.current = null;
+        restoreSession(data.session, { openSheet: true });
+      } catch {
+        /* Leave the current conversation intact when restoration fails. */
+      } finally {
+        transitionRef.current = false;
+        setSessionsLoading(false);
+      }
+    },
+    [restoreSession],
   );
 
   const send = useCallback(
@@ -180,17 +632,96 @@ export default function ChiefProvider({
       options?: SendOptions,
     ): Promise<boolean> => {
       const trimmed = text.trim();
-      const apiText = options?.apiText?.trim() || trimmed;
       const atts = attachments ?? [];
-      if ((!apiText && atts.length === 0) || streaming) return false;
-      setStreaming(true);
-      const plan =
+      const suppliedApiText = options?.apiText?.trim();
+      if (
+        (!trimmed && !suppliedApiText && atts.length === 0) ||
+        streamingRef.current ||
+        operationRef.current ||
+        transitionRef.current
+      ) {
+        return false;
+      }
+      setStreamingValue(true);
+
+      const activeSessionId = await ensureSession(trimmed, atts);
+      const documentOnly =
+        !trimmed &&
+        atts.length > 0 &&
+        !suppliedApiText;
+      const visibleText = documentOnly
+        ? DOCUMENT_REVIEW_INTENT.displayText
+        : trimmed;
+      const apiText =
+        suppliedApiText ||
+        (documentOnly ? DOCUMENT_REVIEW_INTENT.apiText : trimmed);
+      let sourceAttachmentIds: string[] = [];
+      if (!options?.plan && atts.length > 0) {
+        if (!activeSessionId) {
+          updateMessages((current) => [
+            ...current,
+            {
+              role: "user",
+              content: visibleText,
+              attachments: atts.map((attachment) => ({
+                name: attachment.name,
+                kind: attachment.kind,
+              })),
+            },
+            {
+              role: "assistant",
+              content:
+                "⚠️ I couldn't start a saved chat for these documents. Apply the latest database migration and try again.",
+            },
+          ]);
+          setStreamingValue(false);
+          return false;
+        }
+        try {
+          sourceAttachmentIds = await storeChiefAttachments(
+            activeSessionId,
+            atts,
+          );
+          if (sourceAttachmentIds.length !== atts.length) {
+            throw new Error("Not every document was saved.");
+          }
+        } catch (error) {
+          const failedMessages = updateMessages((current) => [
+            ...current,
+            {
+              role: "user",
+              content: visibleText,
+              attachments: atts.map((attachment) => ({
+                name: attachment.name,
+                kind: attachment.kind,
+              })),
+            },
+            {
+              role: "assistant",
+              content: `⚠️ I couldn't save these documents. ${
+                error instanceof Error ? error.message : "Please try again."
+              }`,
+            },
+          ]);
+          void queueSnapshot(
+            activeSessionId,
+            failedMessages,
+            historyRef.current,
+          );
+          setStreamingValue(false);
+          return false;
+        }
+      }
+      const plan: ProposalPlan | undefined =
         options?.plan ??
         (atts.length > 0
           ? {
               version: 1,
               sourceNames: atts.map((attachment) => attachment.name),
               sourceAttachments: atts,
+              ...(sourceAttachmentIds.length
+                ? { sourceAttachmentIds }
+                : {}),
             }
           : undefined);
       // The transcript re-sent on every future turn must carry non-empty text
@@ -199,13 +730,13 @@ export default function ChiefProvider({
       const historyText = apiText || "(sent a file)";
       historyRef.current = [
         ...historyRef.current,
-        { role: "user", content: historyText },
-      ];
-      setMessages((m) => [
-        ...m,
+        { role: "user", content: historyText } satisfies ChiefHistoryMessage,
+      ].slice(-40);
+      const optimisticMessages = updateMessages((m) => [
+        ...m.slice(-198),
         {
           role: "user",
-          content: trimmed,
+          content: visibleText,
           ...(atts.length && options?.showAttachments !== false
             ? { attachments: atts.map((a) => ({ name: a.name, kind: a.kind })) }
             : {}),
@@ -216,6 +747,11 @@ export default function ChiefProvider({
           ...(plan ? { plan } : {}),
         },
       ]);
+      void queueSnapshot(
+        activeSessionId,
+        optimisticMessages,
+        historyRef.current,
+      );
 
       let succeeded = true;
       let receivedPlan = false;
@@ -226,7 +762,12 @@ export default function ChiefProvider({
           body: JSON.stringify({
             messages: historyRef.current,
             page: effectivePage,
-            ...(atts.length ? { attachments: atts } : {}),
+            sessionId: activeSessionId,
+            ...(plan?.sourceAttachmentIds?.length
+              ? { attachmentIds: plan.sourceAttachmentIds }
+              : atts.length
+                ? { attachments: atts }
+                : {}),
             ...(plan ? { requireProposalPlan: true } : {}),
           }),
         });
@@ -244,7 +785,7 @@ export default function ChiefProvider({
         const render = () => {
           const cut = buffer.indexOf(PROPOSALS_MARKER);
           const textPart = cut === -1 ? buffer : buffer.slice(0, cut);
-          setMessages((msgs) => {
+          updateMessages((msgs) => {
             const out = [...msgs];
             const last = out[out.length - 1];
             if (last?.role === "assistant") {
@@ -266,8 +807,11 @@ export default function ChiefProvider({
         const finalText = (cut === -1 ? buffer : buffer.slice(0, cut)).trim();
         historyRef.current = [
           ...historyRef.current,
-          { role: "assistant", content: finalText || "(cards below)" },
-        ];
+          {
+            role: "assistant",
+            content: finalText || "(cards below)",
+          } satisfies ChiefHistoryMessage,
+        ].slice(-40);
 
         if (cut !== -1) {
           try {
@@ -275,13 +819,13 @@ export default function ChiefProvider({
               proposals?: ProposedAction[];
             };
             const items: ProposalItem[] = (blob.proposals ?? []).map((p) => ({
-              uid: nextUid(),
+              uid: crypto.randomUUID(),
               proposal: p,
               status: "proposed",
             }));
             receivedPlan = items.length > 0;
             if (items.length > 0) {
-              setMessages((msgs) => {
+              updateMessages((msgs) => {
                 const out = [...msgs];
                 const last = out[out.length - 1];
                 if (last?.role === "assistant") {
@@ -301,7 +845,7 @@ export default function ChiefProvider({
       } catch (e) {
         succeeded = false;
         const detail = e instanceof Error ? e.message : "Something went wrong.";
-        setMessages((msgs) => {
+        updateMessages((msgs) => {
           const out = [...msgs];
           const last = out[out.length - 1];
           if (last?.role === "assistant") {
@@ -313,11 +857,22 @@ export default function ChiefProvider({
           return out;
         });
       } finally {
-        setStreaming(false);
+        setStreamingValue(false);
+        void queueSnapshot(
+          activeSessionId,
+          messagesRef.current,
+          historyRef.current,
+        );
       }
       return succeeded;
     },
-    [effectivePage, streaming],
+    [
+      effectivePage,
+      ensureSession,
+      queueSnapshot,
+      setStreamingValue,
+      updateMessages,
+    ],
   );
 
   const revisePlan = useCallback(
@@ -330,13 +885,20 @@ export default function ChiefProvider({
       const replaceable = items.filter(
         (item) => item.status === "proposed" || item.status === "error",
       );
-      if (!request || replaceable.length === 0 || streaming) return;
-
+      if (
+        !request ||
+        replaceable.length === 0 ||
+        streamingRef.current ||
+        operationRef.current ||
+        transitionRef.current
+      ) {
+        return;
+      }
       const ids = new Set(replaceable.map((item) => item.uid));
       const previous = new Map(
         replaceable.map((item) => [item.uid, item.status] as const),
       );
-      setMessages((msgs) =>
+      const superseded = updateMessages((msgs) =>
         msgs.map((message) =>
           message.proposals?.some((item) => ids.has(item.uid))
             ? {
@@ -350,6 +912,32 @@ export default function ChiefProvider({
             : message,
         ),
       );
+      void queueSnapshot(
+        sessionIdRef.current,
+        superseded,
+        historyRef.current,
+      );
+
+      const rollBack = () => {
+        const rolledBack = updateMessages((msgs) =>
+          msgs.map((message) =>
+            message.proposals?.some((item) => ids.has(item.uid))
+              ? {
+                  ...message,
+                  proposals: message.proposals.map((item) => {
+                    const status = previous.get(item.uid);
+                    return status ? { ...item, status } : item;
+                  }),
+                }
+              : message,
+          ),
+        );
+        void queueSnapshot(
+          sessionIdRef.current,
+          rolledBack,
+          historyRef.current,
+        );
+      };
 
       const currentPlan = replaceable.map((item) => ({
         key: item.proposal.key,
@@ -366,40 +954,56 @@ export default function ChiefProvider({
         `User's requested changes: ${request}`,
       ].join("\n\n");
 
-      const succeeded = await send(request, plan.sourceAttachments, {
+      const sourceAttachments = plan.sourceAttachments ?? [];
+      if (
+        sourceAttachments.length === 0 &&
+        (plan.sourceAttachmentIds?.length ?? 0) === 0
+      ) {
+        rollBack();
+        return;
+      }
+
+      const succeeded = await send(request, sourceAttachments, {
         apiText,
         showAttachments: false,
         plan: {
           version: plan.version + 1,
           sourceNames: plan.sourceNames,
-          sourceAttachments: plan.sourceAttachments,
+          sourceAttachments,
+          sourceAttachmentIds: plan.sourceAttachmentIds,
         },
       });
-      if (!succeeded) {
-        setMessages((msgs) =>
-          msgs.map((message) =>
-            message.proposals?.some((item) => ids.has(item.uid))
-              ? {
-                  ...message,
-                  proposals: message.proposals.map((item) => {
-                    const status = previous.get(item.uid);
-                    return status ? { ...item, status } : item;
-                  }),
-                }
-              : message,
-          ),
-        );
-      }
+      if (!succeeded) rollBack();
     },
-    [send, streaming],
+    [queueSnapshot, send, updateMessages],
   );
 
-  const openAndSend = useCallback(
-    (text: string) => {
+  const runIntent = useCallback(
+    async (intent: ChiefIntent): Promise<void> => {
+      const resolved = resolveChiefIntent(intent);
+      if (!(await newChat(intent.id, resolved.title))) return;
       setOpen(true);
-      if (!streaming) void send(text);
+      await send(resolved.displayText, undefined, {
+        apiText: resolved.apiText,
+      });
     },
-    [send, streaming],
+    [newChat, send],
+  );
+
+  const uploadDocuments = useCallback(
+    async (attachments: ChatAttachment[]): Promise<void> => {
+      if (
+        attachments.length === 0 ||
+        !(await newChat("document.review", DOCUMENT_REVIEW_INTENT.title))
+      ) {
+        return;
+      }
+      setOpen(true);
+      await send(DOCUMENT_REVIEW_INTENT.displayText, attachments, {
+        apiText: DOCUMENT_REVIEW_INTENT.apiText,
+      });
+    },
+    [newChat, send],
   );
 
   const approve = useCallback(
@@ -407,10 +1011,13 @@ export default function ChiefProvider({
       const item = findProposal(uid);
       if (
         !item ||
+        streamingRef.current ||
+        operationRef.current ||
         (item.status !== "proposed" && item.status !== "error")
       ) {
         return;
       }
+      operationRef.current = true;
       patchProposal(uid, { status: "executing", error: undefined });
       try {
         const res = await fetch("/api/actions/execute", {
@@ -443,6 +1050,8 @@ export default function ChiefProvider({
         }
       } catch {
         patchProposal(uid, { status: "error", error: "Action failed." });
+      } finally {
+        operationRef.current = false;
       }
     },
     [findProposal, patchProposal],
@@ -460,7 +1069,16 @@ export default function ChiefProvider({
   const undo = useCallback(
     async (uid: string) => {
       const item = findProposal(uid);
-      if (!item || item.status !== "done" || !item.undo) return;
+      if (
+        !item ||
+        streamingRef.current ||
+        operationRef.current ||
+        item.status !== "done" ||
+        !item.undo
+      ) {
+        return;
+      }
+      operationRef.current = true;
       patchProposal(uid, { status: "undoing" });
       try {
         const res = await fetch("/api/actions/undo", {
@@ -483,25 +1101,18 @@ export default function ChiefProvider({
         }
       } catch {
         patchProposal(uid, { status: "done", error: "Undo failed." });
+      } finally {
+        operationRef.current = false;
       }
     },
     [findProposal, patchProposal],
   );
 
   const clear = useCallback(() => {
-    historyRef.current = [];
-    setMessages([]);
-  }, []);
+    void newChat();
+  }, [newChat]);
 
-  const pendingCount = useMemo(
-    () =>
-      messages.reduce(
-        (n, m) =>
-          n + (m.proposals?.filter((p) => p.status === "proposed").length ?? 0),
-        0,
-      ),
-    [messages],
-  );
+  const pendingCount = useMemo(() => pendingProposalCount(messages), [messages]);
 
   const value = useMemo<ChiefContextValue>(
     () => ({
@@ -509,12 +1120,19 @@ export default function ChiefProvider({
       setOpen,
       page,
       setPage,
+      sessionId,
+      recentSessions,
+      sessionsLoading,
       messages,
       streaming,
       pendingCount,
+      refreshRecentSessions,
+      newChat,
+      switchSession,
+      runIntent,
+      uploadDocuments,
       send,
       revisePlan,
-      openAndSend,
       approve,
       dismiss,
       restore,
@@ -524,12 +1142,19 @@ export default function ChiefProvider({
     [
       open,
       page,
+      sessionId,
+      recentSessions,
+      sessionsLoading,
       messages,
       streaming,
       pendingCount,
+      refreshRecentSessions,
+      newChat,
+      switchSession,
+      runIntent,
+      uploadDocuments,
       send,
       revisePlan,
-      openAndSend,
       approve,
       dismiss,
       restore,

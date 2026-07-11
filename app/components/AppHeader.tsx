@@ -7,9 +7,11 @@
 // as the last item. Bigger, readable type throughout — menu rows are 16–17px
 // with generous touch targets.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useChief } from "./ChiefProvider";
+import { filesToChatAttachments } from "@/lib/chat-attachment-client";
 
 type IconProps = { stroke: string };
 
@@ -59,6 +61,13 @@ function ContactsIcon({ stroke }: IconProps) {
     </svg>
   );
 }
+function UploadIcon({ stroke }: IconProps) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8.5 12.5l6.1-6.1a3.2 3.2 0 014.5 4.5l-8.2 8.2a5 5 0 01-7.1-7.1l8-8" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 const NAV = [
   { href: "/", label: "Home", Icon: HomeIcon },
@@ -69,6 +78,18 @@ const NAV = [
   { href: "/contacts", label: "Contacts", Icon: ContactsIcon },
 ] as const;
 
+function relativeTime(iso: string): string {
+  const elapsed = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(elapsed) || elapsed < 0) return "";
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return days < 7 ? `${days}d` : new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 export default function AppHeader({
   initial,
   email,
@@ -77,7 +98,17 @@ export default function AppHeader({
   email: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
+  const {
+    sessionId,
+    recentSessions,
+    sessionsLoading,
+    refreshRecentSessions,
+    switchSession,
+    uploadDocuments,
+  } = useChief();
 
   // Close the drawer on navigation and on Escape.
   useEffect(() => setOpen(false), [pathname]);
@@ -87,6 +118,9 @@ export default function AppHeader({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+  useEffect(() => {
+    if (open) void refreshRecentSessions();
+  }, [open, refreshRecentSessions]);
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -152,6 +186,82 @@ export default function AppHeader({
                   </Link>
                 );
               })}
+              <input
+                ref={uploadInputRef}
+                type="file"
+                multiple
+                accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/plain,text/markdown,text/csv,.md,.csv"
+                className="hidden"
+                onChange={(event) => {
+                  const files = Array.from(event.currentTarget.files ?? []);
+                  event.currentTarget.value = "";
+                  if (!files.length) return;
+                  setUploadError(null);
+                  void filesToChatAttachments(files).then((result) => {
+                    if (result.error) setUploadError(result.error);
+                    if (result.attachments.length === 0) return;
+                    setOpen(false);
+                    void uploadDocuments(result.attachments);
+                  });
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => uploadInputRef.current?.click()}
+                className="flex items-center gap-3 rounded-control px-3 py-3 text-left"
+              >
+                <UploadIcon stroke="var(--ink-2)" />
+                <span className="text-[16.5px] text-ink">Upload documents</span>
+              </button>
+              {uploadError && (
+                <div className="px-3 pb-2 text-[12px] text-copper">
+                  {uploadError}
+                </div>
+              )}
+
+              <div
+                className="mx-3 mb-2 mt-3 h-px"
+                style={{ background: "var(--hairline)" }}
+              />
+              <div className="px-3 pb-1 font-mono text-[10px] tracking-[0.12em] text-ink-3">
+                RECENT CHATS
+              </div>
+              {sessionsLoading && recentSessions.length === 0 ? (
+                <div className="px-3 py-3 text-[13px] text-ink-3">Loading…</div>
+              ) : recentSessions.length === 0 ? (
+                <div className="px-3 py-3 text-[13px] leading-snug text-ink-3">
+                  Your conversations with Chief will appear here.
+                </div>
+              ) : (
+                recentSessions.map((session) => {
+                  const active = session.id === sessionId;
+                  return (
+                    <button
+                      key={session.id}
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        void switchSession(session.id);
+                      }}
+                      className="flex min-w-0 items-center gap-2 rounded-control px-3 py-2.5 text-left"
+                      style={active ? { background: "var(--teal-dim)" } : undefined}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[14.5px] text-ink">
+                        {session.title}
+                      </span>
+                      {session.pending_count > 0 && (
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full bg-notification"
+                          aria-label={`${session.pending_count} pending proposal${session.pending_count === 1 ? "" : "s"}`}
+                        />
+                      )}
+                      <span className="shrink-0 font-mono text-[10px] text-ink-3">
+                        {relativeTime(session.updated_at)}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
             </nav>
 
             {/* Profile → full-screen Settings, then Sign out as the last item. */}

@@ -2,11 +2,13 @@
 
 // CURRENT STATE — the living record's headline block, editable in place
 // (pencil → textarea → save), with the copper stale strip when the record
-// hasn't been verified recently. "Ask Chief to refresh" activates in Phase 3.
+// hasn't been verified recently. Chief can use the surrounding project
+// snapshot to propose a refreshed state without writing until approval.
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { daysSince } from "@/lib/format";
+import { useChief } from "./ChiefProvider";
 
 export default function StateCard({
   projectId,
@@ -20,6 +22,7 @@ export default function StateCard({
   agingDays: number;
 }) {
   const router = useRouter();
+  const { runIntent } = useChief();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(currentState ?? "");
   const [busy, setBusy] = useState(false);
@@ -120,9 +123,15 @@ export default function StateCard({
           <span className="flex-1 whitespace-nowrap text-[13px] text-copper">
             Verified {verifiedDays} days ago
           </span>
-          <span className="shrink-0 text-[13px] font-semibold text-ink">
+          <button
+            type="button"
+            onClick={() =>
+              void runIntent({ id: "project.refresh_state", projectId })
+            }
+            className="shrink-0 text-[13px] font-semibold text-ink"
+          >
             Ask Chief to refresh →
-          </span>
+          </button>
         </div>
       )}
     </div>

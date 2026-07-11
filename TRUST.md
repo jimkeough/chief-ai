@@ -16,9 +16,10 @@ Everything below runs on infrastructure **you** own and bill:
   updates "just work" (see *Updates*, below). Your data plane stays private
   regardless of repo visibility.
 - **Your data** — your Supabase project: tasks, projects, memory, contacts,
-  the communications log, the journal, settings, and any credentials you
-  paste (email app password, Google refresh token). Row-level security on
-  every table.
+  Chief chat history and privately stored document sources, the communications
+  log, the journal, settings, and any credentials you paste (email app password,
+  Google refresh token). Row-level security on every table and user-scoped
+  policies on Chief's private Storage bucket.
 - **Your AI** — by default, routed through Vercel AI Gateway on **your own**
   Vercel project: the deployment's OIDC token authenticates and usage bills
   to your Vercel account, so there is no key to fetch. Prefer prompts that go
