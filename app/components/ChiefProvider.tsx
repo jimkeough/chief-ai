@@ -1,7 +1,7 @@
 "use client";
 
 // Chief's client-side brain: one conversation shared by every surface (the
-// bar-opened sheet and the /chief page), plus the proposal state machine.
+// launcher-opened sheet and the /chief page), plus the proposal state machine.
 //
 // The provider owns:
 //  - the message list (streamed text + attached proposal cards),

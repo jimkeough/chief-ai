@@ -47,10 +47,10 @@ Port the existing schema for projects, tasks, kb_documents/kb_chunks, settings, 
 ## Design implementation (source of truth: `handoff/HANDOFF.md`)
 
 - Implement all color tokens (dark primary + light), type scale, spacing/radii as CSS variables. Fonts: Newsreader (Chief's voice only), Instrument Sans (user content), IBM Plex Mono (machine facts: dates, counts, `CREATE TASK` labels).
-- **Semantic color rule is law:** teal = Chief + reversible; copper = irreversible/attention-aging; green = confirmation only; red = destructive text only. No gradients-as-AI, no sparkles, no badge-red urgency.
-- **Chief bar**: global, docked above bottom nav on every page. Three states per spec (idle / pending with teal border + count pill / expanded full-height sheet with `LOOKING AT:` context header). Desktop: 360px right panel.
+- **Semantic color rule is law:** teal = Chief + reversible; copper = irreversible/attention-aging; green = confirmation only; red = destructive text or an actionable notification dot. No gradients-as-AI or sparkles.
+- **Chief launcher**: global 44px circular `C`, floating at top-right opposite the hamburger on every signed-in page. A red dot marks pending proposals/events; tapping opens the full-height sheet with `LOOKING AT:` context.
 - **Proposal card**: build exactly to spec — standard (teal, one-tap Approve, executing spinner, done→receipt row with persistent Undo, dismissed with Restore) and irreversible (copper frame, exact-payload preview expandable, **slide-to-send** 56px track, never batched). Batch card = standard-tier only with per-row ✓/✕.
-- **Screens**: Home (narrative → top-3 → waiting-on → proposals), Inbox (one email + Chief's one-line serif read + thumb-zone actions), Project detail (state block, stale strip, linked next action, reorderable task rows), Chief sheet, Tasks list, Config. Bottom nav: Home · Inbox · C (raised teal circle) · Projects · Tasks.
+- **Screens**: Home (narrative → top-3 → waiting-on → proposals), Inbox (one email + Chief's one-line serif read + thumb-zone actions), Project detail (state block, stale strip, linked next action, reorderable task rows), Chief sheet, Tasks list, Config. Navigation lives in the top-left drawer.
 - PWA: manifest, icons, standalone display, `env(safe-area-inset-*)`, `prefers-reduced-motion` respected (static glow, fade transitions).
 
 ## Chief runtime
@@ -65,7 +65,7 @@ Port the existing schema for projects, tasks, kb_documents/kb_chunks, settings, 
 
 ## Build phases (each ends runnable)
 
-1. **Skeleton + design system**: new repo `chief`; Next.js app; tokens/fonts/nav/Chief bar (static); PWA shell; Supabase project with migrations; single-user auth.
+1. **Skeleton + design system**: new repo `chief`; Next.js app; tokens/fonts/nav/Chief launcher; PWA shell; Supabase project with migrations; single-user auth.
 2. **Core domain**: port projects/tasks/settings/journal/KB libs + APIs; Tasks & Projects pages to spec; communications table.
 3. **Chief loop**: port chief.ts + broker + actions gate; Chief sheet UI; proposal cards end-to-end (propose → approve → execute → receipt → undo → journal).
 4. **Inbox**: Gmail remote MCP integration; one-email view; archive (standard) + reply (irreversible, slide-to-send).

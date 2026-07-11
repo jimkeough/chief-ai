@@ -1,9 +1,7 @@
 "use client";
 
-// The /chief route: the conversation as a full screen (the center-C nav
-// destination). Same shared conversation as the bar-opened sheet — opening one
-// after the other continues where you left off. Fixed panel that stops above
-// the bottom nav (the Chief bar itself is hidden on this route).
+// The /chief route: the conversation as a full screen. It shares state with the
+// launcher-opened sheet and leaves the persistent floating controls visible.
 
 import { useChief } from "@/app/components/ChiefProvider";
 import ChiefConversation from "@/app/components/ChiefConversation";
@@ -12,11 +10,11 @@ export default function ChiefFull() {
   const { messages, clear } = useChief();
   return (
     <div
-      className="fixed inset-x-0 top-0 z-30 mx-auto flex max-w-[480px] flex-col"
+      className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-[480px] flex-col"
       style={{
-        bottom: "calc(max(30px, env(safe-area-inset-bottom)) + 66px)",
+        top: "calc(env(safe-area-inset-top) + 66px)",
         background: "var(--bg)",
-        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
       <div className="flex items-center justify-between px-4 pb-2 pt-4">

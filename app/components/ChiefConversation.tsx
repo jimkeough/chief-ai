@@ -1,7 +1,7 @@
 "use client";
 
-// The Chief conversation surface — shared by the overlay sheet (opened from
-// the Chief bar) and the /chief page, both bound to the one conversation in
+// The Chief conversation surface — shared by the launcher-opened overlay sheet
+// and the /chief page, both bound to the one conversation in
 // ChiefProvider. User turns render as compact sans bubbles; Chief speaks in
 // the serif voice; proposals render as approve/dismiss cards inline under the
 // turn that produced them.

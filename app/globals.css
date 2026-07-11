@@ -5,8 +5,8 @@
  * Dark is the primary theme; light keeps the same hue positions, paper-warm
  * (never pure white page bg).
  *
- * Semantic rule (law): teal = Chief + reversible · copper = irreversible /
- * attention-aging · green = confirmation only · red = destructive only, text-level.
+ * Semantic rule: teal = Chief + reversible · copper = irreversible /
+ * attention-aging · green = confirmation · red = destructive or notification.
  */
 
 :root {
@@ -32,14 +32,9 @@
 
   --ok: #8cbe93;
   --danger: #ce8577;
+  --notification: #ef5350;
 
-  /* Chief bar / surface effects */
-  --bar-gradient: linear-gradient(180deg, #232826, #1c201d);
-  --bar-gradient-pending: linear-gradient(180deg, #243029, #1c221e);
-  --bar-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --bar-shadow-pending: 0 10px 30px rgba(51, 99, 90, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
-
-  /* Floating controls (menu button) over full-bleed content — glassy, no bar. */
+  /* Floating controls over full-bleed content — glassy, no bar. */
   --float-surface: rgba(26, 29, 27, 0.6);
   --float-shadow: 0 2px 8px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.2);
 }
@@ -68,11 +63,7 @@
 
     --ok: #77a683;
     --danger: #b4584a;
-
-    --bar-gradient: linear-gradient(180deg, #ffffff, #f8f7f3);
-    --bar-gradient-pending: linear-gradient(180deg, #f2f5f2, #eaefec);
-    --bar-shadow: 0 8px 24px rgba(28, 32, 29, 0.12);
-    --bar-shadow-pending: 0 10px 30px rgba(44, 95, 86, 0.18), 0 8px 24px rgba(28, 32, 29, 0.12);
+    --notification: #d93636;
 
     --float-surface: rgba(252, 252, 250, 0.66);
     --float-shadow: 0 2px 8px rgba(28, 32, 29, 0.1), 0 1px 2px rgba(28, 32, 29, 0.08);
@@ -100,6 +91,7 @@
   --color-copper-border: var(--copper-border);
   --color-ok: var(--ok);
   --color-danger: var(--danger);
+  --color-notification: var(--notification);
 
   /* Three voices, three typefaces (loaded via next/font in app/layout.tsx):
      serif = Chief speaking · sans = user content · mono = machine facts */
@@ -107,11 +99,10 @@
   --font-sans: var(--font-instrument), system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), monospace;
 
-  /* Radii: 6 chip · 12 control · 16 card · 20 Chief bar · 24 sheet top */
+  /* Radii: 6 chip · 12 control · 16 card · 24 sheet top */
   --radius-chip: 6px;
   --radius-control: 12px;
   --radius-card: 16px;
-  --radius-bar: 20px;
   --radius-sheet: 24px;
 }
 

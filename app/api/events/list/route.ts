@@ -1,5 +1,5 @@
-// GET /api/events/list — pending proactive proposals/summaries for Home + the
-// Chief bar count.
+// GET /api/events/list — pending proactive proposals/summaries for Home and
+// the Chief launcher's notification state.
 import { getAuthed, unauthorized } from "@/lib/auth";
 import { listPendingEvents } from "@/lib/events";
 

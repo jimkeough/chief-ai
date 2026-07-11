@@ -1,7 +1,7 @@
 "use client";
 
 // The expanded Chief conversation — a full-screen overlay opened from the
-// Chief bar on any screen. Header per spec: monogram, "LOOKING AT" mono label
+// floating Chief launcher on any screen. Header: monogram, "LOOKING AT" label
 // + the page context it was opened over, close X. Body is the shared
 // conversation surface.
 
