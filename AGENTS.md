@@ -39,6 +39,15 @@ startup script runs `npm install`. To bring the app up:
 Useful: `http://localhost:3000/api/setup/health` reports env wiring, `schema`
 (`ready`/`missing`), and user count. Supabase Studio is at http://localhost:54323.
 
+### UI testing artifacts
+
+- Use screenshots as the default user-facing evidence for UI changes. Do not
+  create or attach screen recordings solely as a walkthrough for the user.
+- Screen recordings are still appropriate as temporary debugging tools when
+  motion or interaction behavior needs investigation.
+- The user manually tests changes, so keep visual evidence concise and focused
+  on the final rendered state.
+
 ### Non-obvious gotchas
 
 - **Grants / `supabase/seed.sql`:** the SQL migrations intentionally contain **no
@@ -51,7 +60,7 @@ Useful: `http://localhost:3000/api/setup/health` reports env wiring, `schema`
   auto-applied by `supabase start` / `supabase db reset`. Do not delete it for local
   dev, and do not add grants to the migrations (they belong only in local seed).
 - **AI features need a credential.** Chief chat (the `/chief` conversation, the
-  bottom "ASK CHIEF" bar, Home narrative, and the approve-first proposal loop)
+  floating `C` launcher, Home narrative, and the approve-first proposal loop)
   needs one of `AI_GATEWAY_API_KEY`, `VERCEL_OIDC_TOKEN` (`vercel env pull`), or
   `ANTHROPIC_API_KEY`; the default provider is the Vercel AI Gateway
   (`lib/ai.ts`). The core loop (auth, projects, tasks, notes, inbox triage) works
