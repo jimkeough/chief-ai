@@ -193,9 +193,9 @@ export default function AppHeader({
                 accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/plain,text/markdown,text/csv,.md,.csv"
                 className="hidden"
                 onChange={(event) => {
-                  const files = event.currentTarget.files;
+                  const files = Array.from(event.currentTarget.files ?? []);
                   event.currentTarget.value = "";
-                  if (!files?.length) return;
+                  if (!files.length) return;
                   setUploadError(null);
                   void filesToChatAttachments(files).then((result) => {
                     if (result.error) setUploadError(result.error);
