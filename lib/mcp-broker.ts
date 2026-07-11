@@ -7,8 +7,9 @@
 // transparently, and turn every other (writing) tool into an approve/reject
 // proposal that only executes on an explicit click.
 //
-// Read vs. write is decided by each tool's MCP `readOnlyHint` annotation, with a
-// safe default: anything not clearly read-only is treated as a write (gated).
+// Managed servers classify reads from MCP `readOnlyHint`; direct user-supplied
+// servers default every tool to gated until the user explicitly trusts those
+// annotations. Anything not clearly read-only is always treated as a write.
 // An optional per-server `allowedTools` SCOPES which tools are exposed at all
 // (handy to keep a big server's tool count — and token cost — down).
 

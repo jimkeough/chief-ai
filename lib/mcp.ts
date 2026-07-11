@@ -10,7 +10,11 @@
 // broker treatment is unconditional.
 
 import { getSetting } from "@/lib/settings";
-import { getRuntimeMcpConnections } from "@/lib/mcp-connections";
+import {
+  getRuntimeMcpConnections,
+  migrateLegacyMcpConnections,
+} from "@/lib/mcp-connections";
+import { createClient } from "@/lib/supabase/server";
 
 export type McpServerConfig = {
   /** Stable database id for structured manual connections. */
@@ -107,7 +111,29 @@ export async function getMcpServers(): Promise<McpServerConfig[]> {
     console.error("Secure MCP connections unavailable:", error);
   }
 
-  const legacy = parseMcpServers(await getSetting("mcp.servers"));
+  let legacy = parseMcpServers(await getSetting("mcp.servers"));
+  if (legacy.length > 0) {
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const migration = await migrateLegacyMcpConnections(user.id, legacy);
+        legacy = migration.remaining;
+        if (migration.imported > 0) {
+          secure = await getRuntimeMcpConnections();
+        }
+        if (migration.errors.length > 0) {
+          console.error("Some legacy MCP connections could not be migrated:", migration.errors);
+        }
+      }
+    } catch (error) {
+      // Keep the legacy path alive if Vault or the new table is temporarily
+      // unavailable; successful entries are removed from plaintext as they move.
+      console.error("Legacy MCP migration unavailable:", error);
+    }
+  }
   const names = new Set(secure.map((server) => server.name.toLowerCase()));
   return [
     ...secure,

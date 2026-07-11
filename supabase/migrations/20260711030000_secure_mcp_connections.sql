@@ -68,6 +68,7 @@ end;
 $$;
 
 revoke all on function private.delete_mcp_vault_secret() from public, anon, authenticated;
+alter function private.delete_mcp_vault_secret() owner to postgres;
 
 create trigger mcp_connection_secrets_delete_vault
   before delete on private.mcp_connection_secrets
@@ -142,36 +143,92 @@ as $$
   where connection_id = p_connection_id and user_id = p_user_id;
 $$;
 
+create or replace function public.chief_mcp_update_connection(
+  p_connection_id uuid,
+  p_user_id uuid,
+  p_name text,
+  p_url text,
+  p_auth_type text,
+  p_app text,
+  p_allowed_tools text[],
+  p_trust_read_annotations boolean,
+  p_secret text,
+  p_clear_secret boolean
+)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  update public.mcp_connections
+  set
+    name = p_name,
+    url = p_url,
+    auth_type = p_auth_type,
+    app = nullif(btrim(p_app), ''),
+    allowed_tools = p_allowed_tools,
+    trust_read_annotations = p_trust_read_annotations
+  where id = p_connection_id and user_id = p_user_id;
+
+  if not found then
+    raise exception 'mcp connection not found';
+  end if;
+
+  if p_auth_type = 'none' or p_clear_secret then
+    perform public.chief_mcp_delete_secret(p_connection_id, p_user_id);
+  elsif p_secret is not null and btrim(p_secret) <> '' then
+    perform public.chief_mcp_set_secret(p_connection_id, p_user_id, p_secret);
+  elsif not exists (
+    select 1
+    from private.mcp_connection_secrets
+    where connection_id = p_connection_id and user_id = p_user_id
+  ) then
+    raise exception 'bearer connection requires a stored credential';
+  end if;
+end;
+$$;
+
 create or replace function public.chief_mcp_runtime_secrets(
-  p_connection_ids uuid[]
+  p_connection_ids uuid[],
+  p_user_id uuid
 )
 returns table (
   connection_id uuid,
   authorization_token text
 )
 language sql
-stable
 security invoker
 set search_path = ''
 as $$
   select s.connection_id, d.decrypted_secret
   from private.mcp_connection_secrets s
   join vault.decrypted_secrets d on d.id = s.vault_secret_id
-  where s.connection_id = any(coalesce(p_connection_ids, array[]::uuid[]));
+  where
+    s.user_id = p_user_id
+    and s.connection_id = any(coalesce(p_connection_ids, array[]::uuid[]));
 $$;
 
 revoke all on function public.chief_mcp_set_secret(uuid, uuid, text)
   from public, anon, authenticated;
 revoke all on function public.chief_mcp_delete_secret(uuid, uuid)
   from public, anon, authenticated;
-revoke all on function public.chief_mcp_runtime_secrets(uuid[])
+revoke all on function public.chief_mcp_update_connection(
+  uuid, uuid, text, text, text, text, text[], boolean, text, boolean
+)
+  from public, anon, authenticated;
+revoke all on function public.chief_mcp_runtime_secrets(uuid[], uuid)
   from public, anon, authenticated;
 
 grant execute on function public.chief_mcp_set_secret(uuid, uuid, text)
   to service_role;
 grant execute on function public.chief_mcp_delete_secret(uuid, uuid)
   to service_role;
-grant execute on function public.chief_mcp_runtime_secrets(uuid[])
+grant execute on function public.chief_mcp_update_connection(
+  uuid, uuid, text, text, text, text, text[], boolean, text, boolean
+)
+  to service_role;
+grant execute on function public.chief_mcp_runtime_secrets(uuid[], uuid)
   to service_role;
 
 grant select, insert, update, delete on vault.secrets to service_role;

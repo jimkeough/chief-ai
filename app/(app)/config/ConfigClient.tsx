@@ -896,8 +896,8 @@ export default function ConfigClient({
             <p className="text-[13px] leading-relaxed text-ink-2">
               Add a direct MCP server below, or set the{" "}
               <span className="font-mono text-[12px]">Chief Connect</span> URL +
-              key for 2-click connections. Reads run freely; anything that writes
-              becomes an approval card.
+              key for 2-click connections. New direct servers ask before every
+              tool until you explicitly trust their read-only annotations.
             </p>
           )}
         </div>

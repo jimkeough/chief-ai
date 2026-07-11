@@ -1,11 +1,8 @@
 import { getAuthed, unauthorized } from "@/lib/auth";
-import {
-  createMcpConnection,
-  listMcpConnections,
-} from "@/lib/mcp-connections";
+import { migrateLegacyMcpConnections } from "@/lib/mcp-connections";
 import { parseMcpServers } from "@/lib/mcp";
-import { parseMcpConnectionInput } from "@/lib/mcp-connection-input";
-import { getSetting, saveAppSettings } from "@/lib/settings";
+import { getSetting } from "@/lib/settings";
+import { publicMcpError } from "@/lib/mcp-public-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,35 +17,24 @@ export async function POST() {
     return Response.json({ ok: true, imported: 0 });
   }
 
-  const existing = await listMcpConnections();
-  const names = new Set(existing.map((connection) => connection.name.toLowerCase()));
-  let imported = 0;
-
   try {
-    for (const server of legacy) {
-      if (names.has(server.name.toLowerCase())) continue;
-      const input = await parseMcpConnectionInput({
-        name: server.name,
-        url: server.url,
-        authType: server.authorization_token ? "bearer" : "none",
-        authorizationToken: server.authorization_token,
-        app: server.app,
-        allowedTools: server.allowedTools,
-        // Preserve the legacy behavior; new connections default to ask.
-        trustReadAnnotations: true,
-      });
-      await createMcpConnection(authed.userId, input);
-      names.add(server.name.toLowerCase());
-      imported++;
+    const migration = await migrateLegacyMcpConnections(authed.userId, legacy);
+    if (migration.errors.length > 0) {
+      return Response.json(
+        {
+          ok: false,
+          imported: migration.imported,
+          remaining: migration.remaining.length,
+          error: "Some legacy connections could not be migrated securely.",
+        },
+        { status: 400 },
+      );
     }
-
-    // The plaintext legacy blob is removed only after every entry is safely
-    // represented in the Vault-backed store.
-    await saveAppSettings({ "mcp.servers": "" }, authed.userId);
-    return Response.json({ ok: true, imported });
+    return Response.json({ ok: true, imported: migration.imported });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Legacy migration failed.";
-    return Response.json({ ok: false, imported, error: message }, { status: 400 });
+    console.error("Legacy MCP migration failed:", error);
+    const message = publicMcpError(error, "Legacy migration failed.");
+    return Response.json({ ok: false, imported: 0, error: message }, { status: 400 });
   }
 }
 

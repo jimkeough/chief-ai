@@ -139,8 +139,19 @@ export default function ManualMcpConnections() {
   useEffect(() => {
     let active = true;
     void fetch("/api/mcp/connections/migrate", { method: "POST" })
-      .catch(() => null)
-      .then(() => {
+      .then(async (response) => {
+        const body = (await response.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+        };
+        if (active && (!response.ok || body.ok === false)) {
+          setError(body.error ?? "Legacy MCP connections could not be migrated.");
+        }
+      })
+      .catch(() => {
+        if (active) setError("Legacy MCP connections could not be migrated.");
+      })
+      .finally(() => {
         if (active) void refresh();
       });
     return () => {
@@ -204,7 +215,6 @@ export default function ManualMcpConnections() {
       }
       setDraft(null);
       await refresh();
-      if (draft.id) await testConnection(draft.id);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Couldn't save MCP connection.");
     } finally {

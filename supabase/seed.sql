@@ -26,12 +26,20 @@ revoke all on function public.chief_mcp_set_secret(uuid, uuid, text)
   from public, anon, authenticated;
 revoke all on function public.chief_mcp_delete_secret(uuid, uuid)
   from public, anon, authenticated;
-revoke all on function public.chief_mcp_runtime_secrets(uuid[])
+revoke all on function public.chief_mcp_update_connection(
+  uuid, uuid, text, text, text, text, text[], boolean, text, boolean
+)
+  from public, anon, authenticated;
+revoke all on function public.chief_mcp_runtime_secrets(uuid[], uuid)
   from public, anon, authenticated;
 
 grant execute on function public.chief_mcp_set_secret(uuid, uuid, text)
   to service_role;
 grant execute on function public.chief_mcp_delete_secret(uuid, uuid)
   to service_role;
-grant execute on function public.chief_mcp_runtime_secrets(uuid[])
+grant execute on function public.chief_mcp_update_connection(
+  uuid, uuid, text, text, text, text, text[], boolean, text, boolean
+)
+  to service_role;
+grant execute on function public.chief_mcp_runtime_secrets(uuid[], uuid)
   to service_role;

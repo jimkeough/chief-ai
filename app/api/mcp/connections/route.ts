@@ -4,7 +4,8 @@ import {
   listMcpConnections,
 } from "@/lib/mcp-connections";
 import { parseMcpConnectionInput } from "@/lib/mcp-connection-input";
-import { listMcpTools } from "@/lib/mcp-broker";
+import { invalidateMcpToolCache, listMcpTools } from "@/lib/mcp-broker";
+import { publicMcpError } from "@/lib/mcp-public-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,8 @@ export async function GET() {
   try {
     return Response.json({ connections: await listMcpConnections() });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Couldn't load connections.";
+    console.error("Could not load MCP connections:", error);
+    const message = publicMcpError(error, "Couldn't load connections.");
     return Response.json({ error: message }, { status: 500 });
   }
 }
@@ -41,6 +43,7 @@ export async function POST(req: Request) {
     );
 
     const connection = await createMcpConnection(authed.userId, input);
+    invalidateMcpToolCache();
     return Response.json(
       {
         connection,
@@ -53,10 +56,11 @@ export async function POST(req: Request) {
       { status: 201 },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Couldn't connect MCP server.";
-    const duplicate = /duplicate key|unique constraint/i.test(message);
+    console.error("Could not create MCP connection:", error);
+    const message = publicMcpError(error, "Couldn't connect MCP server.");
+    const duplicate = /already exists/i.test(message);
     return Response.json(
-      { error: duplicate ? "A connection with that name already exists." : message },
+      { error: message },
       { status: duplicate ? 409 : 400 },
     );
   }

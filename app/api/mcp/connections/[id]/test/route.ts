@@ -1,6 +1,7 @@
 import { getAuthed, unauthorized } from "@/lib/auth";
-import { getRuntimeMcpConnections } from "@/lib/mcp-connections";
+import { getRuntimeMcpConnection } from "@/lib/mcp-connections";
 import { listMcpTools } from "@/lib/mcp-broker";
+import { publicMcpError } from "@/lib/mcp-public-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,9 +14,7 @@ export async function POST(_req: Request, { params }: Params) {
   const { id } = await params;
 
   try {
-    const connection = (await getRuntimeMcpConnections()).find(
-      (server) => server.id === id,
-    );
+    const connection = await getRuntimeMcpConnection(id);
     if (!connection) {
       return Response.json({ error: "MCP connection not found." }, { status: 404 });
     }
@@ -29,7 +28,8 @@ export async function POST(_req: Request, { params }: Params) {
       latencyMs: Date.now() - startedAt,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Connection test failed.";
+    console.error("MCP connection test failed:", error);
+    const message = publicMcpError(error, "Connection test failed.");
     return Response.json({ ok: false, error: message }, { status: 502 });
   }
 }
