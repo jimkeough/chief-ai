@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useChief, SETUP_INTERVIEW_PROMPT } from "@/app/components/ChiefProvider";
+import ManualMcpConnections from "@/app/(app)/config/ManualMcpConnections";
 
 type SettingDef = {
   key: string;
@@ -583,8 +584,6 @@ export default function ConfigClient({
       ]
     : [];
   const setupDone = setupItems.every((i) => i.ok);
-  const mcpServersDef = defs.find((d) => d.key === "mcp.servers");
-
   return (
     <div className="flex flex-col gap-6 pt-2 pb-8">
       {section === "home" ? (
@@ -895,12 +894,10 @@ export default function ConfigClient({
             </div>
           ) : (
             <p className="text-[13px] leading-relaxed text-ink-2">
-              Remote MCP connectors (calendar, tickets, …) are configured in the
-              <span className="font-mono text-[12px]"> Connectors — MCP servers </span>
-              setting below — or set the{" "}
+              Add a direct MCP server below, or set the{" "}
               <span className="font-mono text-[12px]">Chief Connect</span> URL +
-              key for 2-click connections. Reads run freely; anything that writes
-              becomes an approval card.
+              key for 2-click connections. New direct servers ask before every
+              tool until you explicitly trust their read-only annotations.
             </p>
           )}
         </div>
@@ -910,31 +907,9 @@ export default function ConfigClient({
       {/* MCP connectors: direct remote MCP servers, the DIY twin to Chief
           Connect above. Lives here (not buried in the generic Chief settings
           list) since this is the page the copy above points to. */}
-      {section === "connections" && mcpServersDef && (
+      {section === "connections" && (
       <Section label="MCP CONNECTORS">
-        <div className={card} style={cardStyle}>
-          <div className="text-[12.5px] leading-snug text-ink-3">
-            {mcpServersDef.description}
-          </div>
-          <textarea
-            value={settings["mcp.servers"] ?? ""}
-            placeholder={mcpServersDef.placeholder}
-            rows={mcpServersDef.rows ?? 6}
-            onChange={(e) =>
-              setSettings((s) => ({ ...s, "mcp.servers": e.target.value }))
-            }
-            className={`${inputCls} resize-y font-mono text-[12.5px]`}
-            style={{ borderColor: "var(--hairline)" }}
-          />
-          <button
-            onClick={() => void saveSettings()}
-            disabled={saving}
-            className="flex h-11 items-center justify-center rounded-control text-[14.5px] font-semibold disabled:opacity-50"
-            style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
-          >
-            {saving ? "Saving…" : savedFlash ? "Saved" : "Save"}
-          </button>
-        </div>
+        <ManualMcpConnections />
       </Section>
       )}
 

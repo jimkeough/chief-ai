@@ -8,13 +8,13 @@ import { supabaseServiceKey, supabaseUrl } from "@/lib/supabase/env";
 //    verifying Pipedream's signature and then writes on behalf of the user the
 //    deployed trigger belongs to;
 //  - first-render setup (/api/setup/*), which runs only while the instance is
-//    unclaimed (zero users) and creates the one login.
-// Every call here MUST scope itself out-of-band (a verified trigger row, or
-// the zero-users gate) — RLS is bypassed, so the scoping is manual and
-// non-negotiable.
-//
-// Never import this from a request path that has a session; use lib/supabase/
-// server.ts there so RLS does the work.
+//    unclaimed (zero users) and creates the one login;
+//  - the MCP Vault bridge, after session auth + an RLS-owned connection lookup,
+//    to call service-role-only secret RPCs. Metadata still uses the session
+//    client; decrypted credentials never cross the API boundary.
+// Every call here MUST scope itself out-of-band (a verified trigger row, the
+// zero-users gate, or an authenticated RLS-owned connection id) — RLS is
+// bypassed, so the scoping is manual and non-negotiable.
 
 export function createAdminClient() {
   const url = supabaseUrl();

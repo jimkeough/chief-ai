@@ -7,12 +7,15 @@
 // transparently, and turn every other (writing) tool into an approve/reject
 // proposal that only executes on an explicit click.
 //
-// Read vs. write is decided by each tool's MCP `readOnlyHint` annotation, with a
-// safe default: anything not clearly read-only is treated as a write (gated).
+// Managed servers classify reads from MCP `readOnlyHint`; direct user-supplied
+// servers default every tool to gated until the user explicitly trusts those
+// annotations. Anything not clearly read-only is always treated as a write.
 // An optional per-server `allowedTools` SCOPES which tools are exposed at all
 // (handy to keep a big server's tool count — and token cost — down).
 
 import type { McpServerConfig } from "@/lib/mcp";
+import { createHash } from "node:crypto";
+import { safeMcpFetch, validateMcpUrl } from "@/lib/mcp-url";
 
 export type McpToolDef = {
   name: string;
@@ -51,7 +54,9 @@ async function connect(server: McpServerConfig) {
   const { StreamableHTTPClientTransport } = await import(
     "@modelcontextprotocol/sdk/client/streamableHttp.js"
   );
-  const transport = new StreamableHTTPClientTransport(new URL(server.url), {
+  const url = await validateMcpUrl(server.url);
+  const transport = new StreamableHTTPClientTransport(url, {
+    fetch: safeMcpFetch,
     requestInit: server.authorization_token
       ? { headers: { Authorization: `Bearer ${server.authorization_token}` } }
       : undefined,
@@ -70,10 +75,37 @@ type CacheEntry = { tools: McpToolDef[]; at: number };
 const TOOL_CACHE = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 60_000;
 
+function toolCacheKey(server: McpServerConfig): string {
+  const tokenFingerprint = server.authorization_token
+    ? createHash("sha256").update(server.authorization_token).digest("hex")
+    : "";
+  return JSON.stringify({
+    url: server.url,
+    tokenFingerprint,
+    allowedTools: server.allowedTools ?? null,
+    toolPrefix: server.toolPrefix ?? "",
+    trustAnnotations: server.trustAnnotations ?? null,
+  });
+}
+
+export function invalidateMcpToolCache(): void {
+  TOOL_CACHE.clear();
+}
+
 /** List a server's tools, classified read vs. write. Cached briefly. */
-export async function listMcpTools(server: McpServerConfig): Promise<McpToolDef[]> {
-  const cached = TOOL_CACHE.get(server.url);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.tools;
+export async function listMcpTools(
+  server: McpServerConfig,
+  options?: { bypassCache?: boolean },
+): Promise<McpToolDef[]> {
+  const cacheKey = toolCacheKey(server);
+  const cached = TOOL_CACHE.get(cacheKey);
+  if (
+    !options?.bypassCache &&
+    cached &&
+    Date.now() - cached.at < CACHE_TTL_MS
+  ) {
+    return cached.tools;
+  }
 
   // When set, allowedTools scopes WHICH tools are exposed (not their read/write
   // classification — that's always the readOnlyHint).
@@ -116,6 +148,7 @@ export async function listMcpTools(server: McpServerConfig): Promise<McpToolDef[
         }
       ).annotations;
       const readOnly =
+        server.trustAnnotations !== false &&
         annotations?.readOnlyHint === true &&
         annotations?.destructiveHint !== true;
       defs.push({
@@ -128,7 +161,7 @@ export async function listMcpTools(server: McpServerConfig): Promise<McpToolDef[
         readOnly,
       });
     }
-    TOOL_CACHE.set(server.url, { tools: defs, at: Date.now() });
+    TOOL_CACHE.set(cacheKey, { tools: defs, at: Date.now() });
     return defs;
   } finally {
     await client?.close().catch(() => {});

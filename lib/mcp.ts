@@ -10,8 +10,15 @@
 // broker treatment is unconditional.
 
 import { getSetting } from "@/lib/settings";
+import {
+  getRuntimeMcpConnections,
+  migrateLegacyMcpConnections,
+} from "@/lib/mcp-connections";
+import { createClient } from "@/lib/supabase/server";
 
 export type McpServerConfig = {
+  /** Stable database id for structured manual connections. */
+  id?: string;
   name: string;
   url: string;
   authorization_token?: string;
@@ -40,6 +47,12 @@ export type McpServerConfig = {
    * tool names would otherwise collide.
    */
   toolPrefix?: string;
+  /**
+   * Manual servers default false: remote read-only annotations are only trusted
+   * after the user opts in. Managed/built-in servers omit this and retain their
+   * annotation-based behavior.
+   */
+  trustAnnotations?: boolean;
 };
 
 export function parseMcpServers(raw: string): McpServerConfig[] {
@@ -89,5 +102,41 @@ export function parseMcpServers(raw: string): McpServerConfig[] {
 }
 
 export async function getMcpServers(): Promise<McpServerConfig[]> {
-  return parseMcpServers(await getSetting("mcp.servers"));
+  let secure: McpServerConfig[] = [];
+  try {
+    secure = await getRuntimeMcpConnections();
+  } catch (error) {
+    // Deployments briefly running new code before the migration lands retain
+    // legacy connector access instead of breaking Chief.
+    console.error("Secure MCP connections unavailable:", error);
+  }
+
+  let legacy = parseMcpServers(await getSetting("mcp.servers"));
+  if (legacy.length > 0) {
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const migration = await migrateLegacyMcpConnections(user.id, legacy);
+        legacy = migration.remaining;
+        if (migration.imported > 0) {
+          secure = await getRuntimeMcpConnections();
+        }
+        if (migration.errors.length > 0) {
+          console.error("Some legacy MCP connections could not be migrated:", migration.errors);
+        }
+      }
+    } catch (error) {
+      // Keep the legacy path alive if Vault or the new table is temporarily
+      // unavailable; successful entries are removed from plaintext as they move.
+      console.error("Legacy MCP migration unavailable:", error);
+    }
+  }
+  const names = new Set(secure.map((server) => server.name.toLowerCase()));
+  return [
+    ...secure,
+    ...legacy.filter((server) => !names.has(server.name.toLowerCase())),
+  ];
 }

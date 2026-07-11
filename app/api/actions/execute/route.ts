@@ -120,7 +120,8 @@ export async function POST(req: Request) {
     }
     try {
       const tools = await listMcpTools(cfg);
-      if (!tools.some((t) => t.name === key)) {
+      const tool = tools.find((candidate) => candidate.name === key);
+      if (!tool) {
         return Response.json(
           { ok: false, error: "Unknown or not-permitted tool." },
           { status: 400 },
@@ -128,12 +129,19 @@ export async function POST(req: Request) {
       }
       // Respect the user's per-tool dial: a tool switched off is refused even
       // on an approval click.
-      const { getToolOverrides } = await import("@/lib/tool-overrides");
+      const { effectiveMode, getToolOverrides } = await import("@/lib/tool-overrides");
       const overrides = await getToolOverrides().catch(() => ({} as import("@/lib/tool-overrides").ToolOverrides));
-      if (overrides[server]?.[key] === "off") {
+      const mode = effectiveMode(tool.readOnly, overrides[server]?.[key]);
+      if (mode === "off") {
         return Response.json(
           { ok: false, error: "That tool is switched off in Config." },
           { status: 403 },
+        );
+      }
+      if (tool.readOnly && mode !== "ask") {
+        return Response.json(
+          { ok: false, error: "Automatic read tools cannot use the write executor." },
+          { status: 400 },
         );
       }
       const result = await callMcpTool(cfg, key, safeArgs);

@@ -18,3 +18,28 @@ grant all on all functions in schema public to anon, authenticated, service_role
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+
+-- Secret-bearing MCP RPCs are server-only. The broad local grants above mirror
+-- hosted defaults for ordinary app objects, then these explicit revokes restore
+-- the production boundary for credentials.
+revoke all on function public.chief_mcp_set_secret(uuid, uuid, text)
+  from public, anon, authenticated;
+revoke all on function public.chief_mcp_delete_secret(uuid, uuid)
+  from public, anon, authenticated;
+revoke all on function public.chief_mcp_update_connection(
+  uuid, uuid, text, text, text, text, text[], boolean, text, boolean
+)
+  from public, anon, authenticated;
+revoke all on function public.chief_mcp_runtime_secrets(uuid[], uuid)
+  from public, anon, authenticated;
+
+grant execute on function public.chief_mcp_set_secret(uuid, uuid, text)
+  to service_role;
+grant execute on function public.chief_mcp_delete_secret(uuid, uuid)
+  to service_role;
+grant execute on function public.chief_mcp_update_connection(
+  uuid, uuid, text, text, text, text, text[], boolean, text, boolean
+)
+  to service_role;
+grant execute on function public.chief_mcp_runtime_secrets(uuid[], uuid)
+  to service_role;
