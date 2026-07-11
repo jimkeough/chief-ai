@@ -585,6 +585,7 @@ function RevisionControl({
       </label>
       <textarea
         autoFocus
+        aria-label="Changes to the document plan"
         rows={3}
         value={instruction}
         onChange={(event) => setInstruction(event.target.value)}

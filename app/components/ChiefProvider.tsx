@@ -219,6 +219,7 @@ export default function ChiefProvider({
       ]);
 
       let succeeded = true;
+      let receivedPlan = false;
       try {
         const res = await fetch("/api/chief", {
           method: "POST",
@@ -281,6 +282,7 @@ export default function ChiefProvider({
               status: "proposed",
             }));
             const connect = blob.connect ?? [];
+            receivedPlan = items.length > 0;
             if (items.length > 0 || connect.length > 0) {
               setMessages((msgs) => {
                 const out = [...msgs];
@@ -299,6 +301,7 @@ export default function ChiefProvider({
             /* malformed blob — leave the text as-is */
           }
         }
+        if (plan && !receivedPlan) succeeded = false;
       } catch (e) {
         succeeded = false;
         const detail = e instanceof Error ? e.message : "Something went wrong.";
