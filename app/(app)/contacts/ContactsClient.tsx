@@ -193,8 +193,12 @@ export default function ContactsClient({ initial }: { initial: Contact[] }) {
               value={draft.emails}
               onChange={(event) => setDraft({ ...draft, emails: event.target.value })}
               placeholder="joe@company.com, joe@gmail.com"
+              aria-describedby="contact-emails-help"
               className="w-full bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3"
             />
+            <span id="contact-emails-help" className="text-[12px] text-ink-3">
+              Separate multiple addresses with commas.
+            </span>
           </label>
           <div style={{ borderTop: "1px solid var(--hairline)" }} />
           <label className="flex flex-col gap-1.5">
