@@ -15,11 +15,17 @@ export async function POST(request: Request) {
   if (!name) {
     return NextResponse.json({ error: "Name is required." }, { status: 400 });
   }
+  if (body.emails !== undefined && !Array.isArray(body.emails)) {
+    return NextResponse.json(
+      { error: "Emails must be a list." },
+      { status: 400 },
+    );
+  }
   const contact = await createContact({
     name,
-    emails: Array.isArray(body.emails) ? body.emails : [],
-    company: body.company ?? null,
-    notes: body.notes ?? null,
+    emails: Array.isArray(body.emails) ? body.emails.map(String) : [],
+    company: String(body.company ?? "").trim() || null,
+    notes: String(body.notes ?? "").trim() || null,
   });
   return NextResponse.json({ contact }, { status: 201 });
 }

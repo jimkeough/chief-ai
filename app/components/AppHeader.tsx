@@ -51,6 +51,14 @@ function NotesIcon({ stroke }: IconProps) {
     </svg>
   );
 }
+function ContactsIcon({ stroke }: IconProps) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="9" cy="8" r="3.5" stroke={stroke} strokeWidth="1.7" />
+      <path d="M3.5 19c.4-3.2 2.5-5 5.5-5s5.1 1.8 5.5 5M15 7h5M16.5 11h3.5M17 15h3" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 const NAV = [
   { href: "/", label: "Home", Icon: HomeIcon },
@@ -58,6 +66,7 @@ const NAV = [
   { href: "/projects", label: "Projects", Icon: ProjectsIcon },
   { href: "/tasks", label: "Tasks", Icon: TasksIcon },
   { href: "/notes", label: "Notes", Icon: NotesIcon },
+  { href: "/contacts", label: "Contacts", Icon: ContactsIcon },
 ] as const;
 
 export default function AppHeader({
