@@ -217,7 +217,7 @@ function accountArray(data: unknown): PipedreamAccountApi[] {
 
 async function listRemoteAccounts(
   userId: string,
-  config = await requireRuntimeConfig(userId),
+  suppliedConfig?: RuntimeConfig,
 ): Promise<Array<{
   accountId: string;
   appSlug: string;
@@ -225,6 +225,7 @@ async function listRemoteAccounts(
   accountName: string | null;
   healthy: boolean;
 }>> {
+  const config = suppliedConfig ?? (await requireRuntimeConfig(userId));
   const data = await pipedreamFetch(
     config,
     `/connect/${encodeURIComponent(config.projectId)}/users/${encodeURIComponent(userId)}/accounts`,
