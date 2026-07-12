@@ -42,6 +42,8 @@ export type PipedreamTriggerComponent = {
   id: string;
   name: string;
   description: string | null;
+  supported: boolean;
+  unsupportedReason: string | null;
 };
 
 type RuntimeConfig = {
@@ -253,12 +255,12 @@ async function pipedreamFetch(
   return response.json().catch(() => null);
 }
 
-function accountArray(data: unknown): PipedreamAccountApi[] {
+function accountArray(data: unknown): PipedreamAccountApi[] | null {
   if (Array.isArray(data)) return data as PipedreamAccountApi[];
   if (data && typeof data === "object" && Array.isArray((data as { data?: unknown }).data)) {
     return (data as { data: PipedreamAccountApi[] }).data;
   }
-  return [];
+  return null;
 }
 
 async function listRemoteAccounts(
@@ -287,7 +289,9 @@ async function listRemoteAccounts(
     }
     throw error;
   }
-  return accountArray(data)
+  const accounts = accountArray(data);
+  if (!accounts) throw new Error("Pipedream returned an invalid account list.");
+  return accounts
     .map((account) => {
       const accountId = clean(account.id);
       const appSlug = clean(account.app?.name_slug ?? account.app?.nameSlug);
@@ -459,6 +463,27 @@ export async function syncPipedreamConnections(
   }
 
   const remoteIds = accounts.map((account) => account.accountId);
+  const { data: localConnections, error: localConnectionsError } = await supabase
+    .from("pipedream_connections")
+    .select("id,account_id")
+    .eq("user_id", userId);
+  if (localConnectionsError) throw new Error(localConnectionsError.message);
+  const staleConnectionIds = ((localConnections ?? []) as Array<{
+    id: string;
+    account_id: string;
+  }>)
+    .filter((connection) => !remoteIds.includes(connection.account_id))
+    .map((connection) => connection.id);
+  if (staleConnectionIds.length > 0) {
+    const { data: staleTriggers, error: staleTriggersError } = await supabase
+      .from("chief_triggers")
+      .select("id")
+      .in("connection_id", staleConnectionIds);
+    if (staleTriggersError) throw new Error(staleTriggersError.message);
+    for (const trigger of (staleTriggers ?? []) as Array<{ id: string }>) {
+      await deletePipedreamTrigger(userId, trigger.id);
+    }
+  }
   let stale = supabase.from("pipedream_connections").delete().eq("user_id", userId);
   if (remoteIds.length > 0) stale = stale.not("account_id", "in", `(${remoteIds.join(",")})`);
   const { error: staleError } = await stale;
@@ -520,11 +545,36 @@ async function triggerComponents(
         appProp && typeof appProp === "object"
           ? (appProp as Record<string, unknown>)
           : {};
+      const unsupportedProps = props.filter((rawProp) => {
+        const candidate =
+          rawProp && typeof rawProp === "object"
+            ? (rawProp as Record<string, unknown>)
+            : {};
+        const type = clean(candidate.type);
+        if (
+          !type ||
+          candidate === prop ||
+          candidate.optional === true ||
+          candidate.disabled === true ||
+          candidate.readOnly === true ||
+          ["alert", "dir", "$.interface.apphook", "$.interface.http"].includes(type) ||
+          Object.prototype.hasOwnProperty.call(candidate, "default") ||
+          Object.prototype.hasOwnProperty.call(candidate, "static")
+        ) {
+          return false;
+        }
+        return true;
+      });
       return {
         id: clean(component.key ?? component.id),
         name: clean(component.name),
         description: clean(component.description) || null,
         appPropName: clean(prop.name) || null,
+        supported: unsupportedProps.length === 0,
+        unsupportedReason:
+          unsupportedProps.length === 0
+            ? null
+            : "Requires additional setup in Pipedream.",
       };
     })
     .filter((component) => component.id && component.name);
@@ -573,6 +623,11 @@ export async function deployPipedreamTrigger(
     (candidate) => candidate.id === componentId,
   );
   if (!component) throw new Error("Choose an available Pipedream notification.");
+  if (!component.supported) {
+    throw new Error(
+      component.unsupportedReason ?? "Choose a Pipedream notification Chief can configure.",
+    );
+  }
   const config = await requireRuntimeConfig(userId);
   const configuredProps = component.appPropName
     ? {
@@ -603,11 +658,20 @@ export async function deployPipedreamTrigger(
   if (!/^dc_[a-zA-Z0-9]+$/.test(id)) {
     throw new Error("Pipedream returned an invalid deployed trigger.");
   }
+  const signingKey = clean(raw.webhook_signing_key);
+  if (!signingKey) {
+    await pipedreamFetch(
+      config,
+      `/connect/${encodeURIComponent(config.projectId)}/deployed-triggers/${encodeURIComponent(id)}?external_user_id=${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    ).catch(() => {});
+    throw new Error("Pipedream did not return a webhook signing key.");
+  }
   return {
     id,
     app: connection.app_slug as string,
     name: clean(raw.name) || component.name || null,
-    signingKey: clean(raw.webhook_signing_key) || null,
+    signingKey,
   };
 }
 
@@ -648,6 +712,20 @@ export async function disconnectPipedreamAccount(
 
   const config = await requireRuntimeConfig(userId);
   const accounts = await listRemoteAccounts(userId, config);
+  const { data: triggers, error: triggerError } = await supabase
+    .from("chief_triggers")
+    .select("id")
+    .eq("connection_id", connectionId);
+  if (triggerError) throw new Error(triggerError.message);
+  for (const trigger of (triggers ?? []) as Array<{ id: string }>) {
+    await deletePipedreamTrigger(userId, trigger.id);
+    const { error: deleteTriggerError } = await supabase
+      .from("chief_triggers")
+      .delete()
+      .eq("id", trigger.id)
+      .eq("user_id", userId);
+    if (deleteTriggerError) throw new Error(deleteTriggerError.message);
+  }
   if (!accounts.some((account) => account.accountId === data.account_id)) {
     await supabase.from("pipedream_connections").delete().eq("id", connectionId);
     return;

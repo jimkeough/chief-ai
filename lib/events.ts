@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getWriteAction, type ProposedAction } from "@/lib/actions";
 import { resolveAi } from "@/lib/ai";
+import type { AppSettings } from "@/lib/settings";
 
 export type ChiefTrigger = {
   id: string;
@@ -134,8 +135,9 @@ export type Classification = {
 export async function classifyEvent(
   app: string,
   eventBody: unknown,
+  settings?: AppSettings,
 ): Promise<Classification | null> {
-  const ai = await resolveAi();
+  const ai = await resolveAi({ settings });
   if (!ai) return null;
 
   let payload = "";

@@ -35,6 +35,8 @@ type TriggerComponent = {
   id: string;
   name: string;
   description: string | null;
+  supported: boolean;
+  unsupportedReason: string | null;
 };
 
 type DeployedTrigger = {
@@ -68,10 +70,12 @@ const inputClass =
 function ToolModes({
   server,
   tools,
+  busy,
   onChange,
 }: {
   server: string;
   tools: ServerTool[];
+  busy: boolean;
   onChange: (server: string, tool: string, mode: "auto" | "ask" | "off") => void;
 }) {
   return (
@@ -95,7 +99,8 @@ function ToolModes({
               key={mode}
               type="button"
               onClick={() => onChange(server, tool.name, mode)}
-              className="rounded-chip border px-2 py-1 font-mono text-[10px] tracking-[0.06em]"
+              disabled={busy}
+              className="rounded-chip border px-2 py-1 font-mono text-[10px] tracking-[0.06em] disabled:opacity-50"
               style={
                 tool.mode === mode
                   ? {
@@ -391,6 +396,7 @@ export default function PipedreamConnections() {
   const [toolsFor, setToolsFor] = useState<string | null>(null);
   const [tools, setTools] = useState<ServerTool[] | null>(null);
   const [toolsError, setToolsError] = useState<string | null>(null);
+  const [toolBusy, setToolBusy] = useState(false);
   const [notificationsFor, setNotificationsFor] = useState<string | null>(null);
   const [notificationData, setNotificationData] = useState<NotificationData | null>(
     null,
@@ -434,6 +440,9 @@ export default function PipedreamConnections() {
     tool: string,
     mode: "auto" | "ask" | "off",
   ) => {
+    if (toolBusy) return;
+    setToolBusy(true);
+    setToolsError(null);
     const previous = tools;
     setTools(
       (current) =>
@@ -450,6 +459,7 @@ export default function PipedreamConnections() {
       setTools(previous);
       setToolsError(body.error ?? "Couldn't update that tool.");
     }
+    setToolBusy(false);
   };
 
   const fetchNotifications = async (
@@ -513,10 +523,11 @@ export default function PipedreamConnections() {
     ).catch(() => null);
     const body = (await response?.json().catch(() => ({}))) as {
       ok?: boolean;
+      id?: string;
       error?: string;
     };
     setNotificationBusy(null);
-    if (!response?.ok || !body.ok) {
+    if (!response?.ok || !body.ok || !body.id) {
       setNotificationData((current) =>
         current
           ? {
@@ -528,6 +539,16 @@ export default function PipedreamConnections() {
       setNotificationError(body.error ?? "Couldn't turn on that notification.");
       return;
     }
+    setNotificationData((current) =>
+      current
+        ? {
+            ...current,
+            deployed: current.deployed.map((item) =>
+              item.id === temporaryId ? { ...item, id: body.id! } : item,
+            ),
+          }
+        : current,
+    );
     const fresh = await fetchNotifications(connectionId);
     if (fresh) setNotificationData(fresh);
   };
@@ -1039,6 +1060,11 @@ export default function PipedreamConnections() {
                                   {component.description}
                                 </div>
                               )}
+                              {!component.supported && component.unsupportedReason && (
+                                <div className="text-[11.5px] text-ink-3">
+                                  {component.unsupportedReason}
+                                </div>
+                              )}
                             </div>
                             <button
                               type="button"
@@ -1048,6 +1074,7 @@ export default function PipedreamConnections() {
                                   : void enableNotification(connection.id, component)
                               }
                               disabled={
+                                !component.supported ||
                                 notificationBusy === enablingKey ||
                                 notificationBusy === disablingKey
                               }
@@ -1070,6 +1097,42 @@ export default function PipedreamConnections() {
                           </div>
                         );
                       })}
+                      {notificationData?.deployed
+                        .filter(
+                          (trigger) =>
+                            !notificationData.components.some(
+                              (component) => component.id === trigger.componentId,
+                            ),
+                        )
+                        .map((trigger) => (
+                          <div key={trigger.id} className="flex items-center gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[13.5px] text-ink">
+                                {trigger.name ?? "Existing notification"}
+                              </div>
+                              <div className="truncate text-[11.5px] text-ink-3">
+                                No longer in Pipedream&apos;s catalog
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void disableNotification(connection.id, trigger)
+                              }
+                              disabled={
+                                notificationBusy === `${connection.id}:${trigger.id}`
+                              }
+                              className="shrink-0 rounded-chip border px-2.5 py-1 font-mono text-[10px] tracking-[0.06em] disabled:opacity-50"
+                              style={{
+                                background: "var(--teal-fill)",
+                                color: "var(--teal-on-fill)",
+                                borderColor: "transparent",
+                              }}
+                            >
+                              ON
+                            </button>
+                          </div>
+                        ))}
                     </div>
                   )}
 
@@ -1087,6 +1150,7 @@ export default function PipedreamConnections() {
                         <ToolModes
                           server={connection.serverName}
                           tools={tools}
+                          busy={toolBusy}
                           onChange={(server, tool, mode) =>
                             void setToolMode(server, tool, mode)
                           }

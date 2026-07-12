@@ -184,6 +184,16 @@ const DEFAULTS = Object.fromEntries(
 
 const VALID_KEYS = new Set<string>(SETTING_DEFS.map((d) => d.key));
 
+export function appSettingsFromRows(
+  rows: Array<{ key: string; value: string }>,
+): AppSettings {
+  const merged: AppSettings = { ...DEFAULTS };
+  for (const row of rows) {
+    if (VALID_KEYS.has(row.key)) merged[row.key as SettingKey] = row.value;
+  }
+  return merged;
+}
+
 /** All settings, with the user's DB overrides layered over the defaults. */
 export async function getAppSettings(): Promise<AppSettings> {
   const supabase = await createClient();
@@ -193,11 +203,7 @@ export async function getAppSettings(): Promise<AppSettings> {
     console.error("Failed to load settings:", error.message);
     return { ...DEFAULTS };
   }
-  const merged: AppSettings = { ...DEFAULTS };
-  for (const row of (data ?? []) as { key: string; value: string }[]) {
-    if (VALID_KEYS.has(row.key)) merged[row.key as SettingKey] = row.value;
-  }
-  return merged;
+  return appSettingsFromRows((data ?? []) as { key: string; value: string }[]);
 }
 
 /** A single setting value (override or default). */

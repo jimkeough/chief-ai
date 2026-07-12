@@ -1,5 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { classifyEvent } from "@/lib/events";
+import { appSettingsFromRows } from "@/lib/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -7,14 +8,14 @@ export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 1_000_000;
 const MAX_SIGNATURE_AGE_SECONDS = 300;
+const CLASSIFICATION_TIMEOUT_MS = 8_000;
 
 function validSignature(
   signingKey: string | null,
   signatureHeader: string | null,
   rawBody: string,
 ): boolean {
-  if (!signingKey) return true;
-  if (!signatureHeader) return false;
+  if (!signingKey || !signatureHeader) return false;
   const fields = Object.fromEntries(
     signatureHeader.split(",").map((part) => {
       const [key, ...value] = part.trim().split("=");
@@ -94,41 +95,64 @@ export async function POST(request: Request) {
       ? (record.event as Record<string, unknown>)
       : {};
   const candidateId =
-    record.id ?? nestedEvent.id ?? request.headers.get("x-pd-event-id");
+    request.headers.get("x-pd-event-id") ?? record.id ?? nestedEvent.id;
   const eventId =
     typeof candidateId === "string" && candidateId.trim()
       ? candidateId.trim().slice(0, 500)
-      : null;
+      : `sha256:${createHash("sha256").update(raw).digest("hex")}`;
   const userId = trigger.user_id as string;
   const app = (trigger.app as string) || "";
 
-  if (eventId) {
-    const { data: existing, error } = await admin
-      .from("chief_events")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("external_event_id", eventId)
-      .maybeSingle();
-    if (error) {
-      console.error("chief_events dedup lookup failed:", error.message);
-      return new Response("Event lookup failed.", { status: 500 });
-    }
-    if (existing) return new Response("ok (duplicate)", { status: 200 });
+  const fallbackSummary = `New activity in ${app || "a connected app"}.`;
+  const { data: inserted, error: insertError } = await admin
+    .from("chief_events")
+    .insert({
+      user_id: userId,
+      trigger_id: trigger.id,
+      app,
+      external_event_id: eventId,
+      summary: fallbackSummary,
+      proposal: null,
+      status: "new",
+    })
+    .select("id")
+    .single();
+  if (insertError?.code === "23505") {
+    return new Response("ok (duplicate)", { status: 200 });
+  }
+  if (insertError || !inserted) {
+    console.error("chief_events insert failed:", insertError?.message ?? "No row returned.");
+    return new Response("Event insert failed.", { status: 500 });
   }
 
-  const classified = await classifyEvent(app, body).catch(() => null);
-  const { error } = await admin.from("chief_events").insert({
-    user_id: userId,
-    trigger_id: trigger.id,
-    app,
-    external_event_id: eventId,
-    summary: classified?.summary ?? `New activity in ${app || "a connected app"}.`,
-    proposal: classified?.proposal ?? null,
-    status: "new",
-  });
-  if (error && error.code !== "23505") {
-    console.error("chief_events insert failed:", error.message);
-    return new Response("Event insert failed.", { status: 500 });
+  const { data: settingRows, error: settingsError } = await admin
+    .from("settings")
+    .select("key,value")
+    .eq("user_id", userId);
+  if (settingsError) {
+    console.error("Event settings lookup failed:", settingsError.message);
+  }
+  const settings = appSettingsFromRows(
+    ((settingRows ?? []) as Array<{ key: string; value: string }>),
+  );
+  const classified = await Promise.race([
+    classifyEvent(app, body, settings).catch(() => null),
+    new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), CLASSIFICATION_TIMEOUT_MS),
+    ),
+  ]);
+  if (classified) {
+    const { error: updateError } = await admin
+      .from("chief_events")
+      .update({
+        summary: classified.summary,
+        proposal: classified.proposal,
+      })
+      .eq("id", inserted.id)
+      .eq("user_id", userId);
+    if (updateError) {
+      console.error("chief_events classification update failed:", updateError.message);
+    }
   }
   return new Response("ok", { status: 200 });
 }
