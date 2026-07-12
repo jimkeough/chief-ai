@@ -2,7 +2,7 @@
 
 // The expanded Chief conversation — a full-screen overlay opened from the
 // floating Chief launcher on any screen. Header: monogram, "LOOKING AT" label
-// + the page context it was opened over, close X. Body is the shared
+// + the page context it was opened over, new chat, and minimize. Body is the shared
 // conversation surface.
 
 import { useEffect } from "react";
@@ -45,7 +45,7 @@ export default function ChiefSheet() {
       aria-modal="true"
       aria-label="Chief"
     >
-      {/* Header: monogram · LOOKING AT + context · close */}
+      {/* Header: monogram · LOOKING AT + context · new chat · minimize */}
       <div className="flex items-center gap-3 px-4 pb-3 pt-4">
         <div
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control border font-serif text-[19px] font-medium text-teal"
@@ -69,20 +69,21 @@ export default function ChiefSheet() {
           type="button"
           onClick={() => void newChat()}
           disabled={streaming}
-          className="shrink-0 rounded-full px-2 py-2 font-mono text-[10px] tracking-[0.08em] text-ink-3 disabled:opacity-40"
+          className="shrink-0 rounded-control bg-teal-fill px-3 py-2 font-mono text-[11px] font-medium tracking-[0.08em] text-teal-on-fill transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Start a new chat"
         >
-          NEW CHAT
+          + NEW CHAT
         </button>
         <button
-          aria-label="Close"
+          type="button"
+          aria-label="Minimize chat"
           onClick={() => setOpen(false)}
           className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border"
           style={{ borderColor: "var(--hairline)" }}
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path
-              d="M1.5 1.5l9 9m0-9l-9 9"
+              d="M1.5 9.5h9"
               stroke="var(--ink-2)"
               strokeWidth="1.8"
               strokeLinecap="round"
