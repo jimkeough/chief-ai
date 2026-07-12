@@ -25,7 +25,10 @@ import { PROPOSALS_MARKER, type ProposedAction } from "@/lib/actions";
 import type { ChiefPageContext } from "@/lib/chief";
 import type { UndoDescriptor } from "@/lib/undo";
 import type { ChatAttachment } from "@/lib/chat-attachments";
-import type { DocumentImportSummary } from "@/lib/document-import/contract";
+import type {
+  DocumentEntity,
+  DocumentImportSummary,
+} from "@/lib/document-import/contract";
 import { storeChiefAttachments } from "@/lib/chat-attachment-client";
 import {
   DOCUMENT_REVIEW_INTENT,
@@ -134,6 +137,21 @@ const EXECUTION_INTERRUPTED =
   "Action status is unknown after an interruption. Check your workspace before acting again.";
 const UNDO_INTERRUPTED =
   "Undo was interrupted before it could be confirmed. The action may still be applied.";
+
+async function importRequest<T>(body: Record<string, unknown>): Promise<T> {
+  const response = await fetch("/api/chief/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+  };
+  if (!response.ok) {
+    throw new Error(payload.error || `Document import failed (${response.status}).`);
+  }
+  return payload as T;
+}
 
 function pendingProposalCount(messages: ChiefMessage[]): number {
   return messages.reduce(
@@ -759,6 +777,113 @@ export default function ChiefProvider({
       let succeeded = true;
       let receivedPlan = false;
       try {
+        if (plan) {
+          const attachmentIds = plan.sourceAttachmentIds ?? [];
+          if (attachmentIds.length === 0) {
+            throw new Error("Saved source documents are required for this import.");
+          }
+          const entities: DocumentEntity[] = [];
+          let batchIndex = 0;
+          let totalBatches = 1;
+          const setImportProgress = (content: string) => {
+            updateMessages((msgs) => {
+              const out = [...msgs];
+              const last = out[out.length - 1];
+              if (last?.role === "assistant") {
+                out[out.length - 1] = { ...last, content };
+              }
+              return out;
+            });
+          };
+          while (batchIndex < totalBatches) {
+            setImportProgress(
+              `Reading document batch ${batchIndex + 1}${
+                totalBatches > 1 ? ` of ${totalBatches}` : ""
+              }…`,
+            );
+            type BatchResult = {
+              entities: DocumentEntity[];
+              batchIndex: number;
+              totalBatches: number;
+              label: string;
+            };
+            let extracted: BatchResult | null = null;
+            let lastError: unknown;
+            for (let attempt = 0; attempt < 2 && !extracted; attempt += 1) {
+              try {
+                extracted = await importRequest<BatchResult>({
+                  operation: "extract",
+                  attachmentIds,
+                  batchIndex,
+                  instruction: options?.plan ? visibleText : "",
+                });
+              } catch (error) {
+                lastError = error;
+              }
+            }
+            if (!extracted) throw lastError;
+            entities.push(...extracted.entities);
+            totalBatches = extracted.totalBatches;
+            batchIndex += 1;
+            const progressMessages = updateMessages((msgs) => {
+              const out = [...msgs];
+              const last = out[out.length - 1];
+              if (last?.role === "assistant") {
+                out[out.length - 1] = {
+                  ...last,
+                  content: `Read ${batchIndex} of ${totalBatches} document batches · ${entities.length} records found…`,
+                };
+              }
+              return out;
+            });
+            void queueSnapshot(
+              activeSessionId,
+              progressMessages,
+              historyRef.current,
+            );
+          }
+          setImportProgress(`Reconciling ${entities.length} extracted records…`);
+          const compiled = await importRequest<{
+            proposals: ProposedAction[];
+            importSummary: DocumentImportSummary;
+            verification: string;
+          }>({
+            operation: "compile",
+            entities,
+          });
+          const items: ProposalItem[] = compiled.proposals.map((proposal) => ({
+            uid: crypto.randomUUID(),
+            proposal,
+            status: "proposed",
+          }));
+          const finalText = compiled.verification;
+          historyRef.current = [
+            ...historyRef.current,
+            {
+              role: "assistant",
+              content: finalText,
+            } satisfies ChiefHistoryMessage,
+          ].slice(-40);
+          updateMessages((msgs) => {
+            const out = [...msgs];
+            const last = out[out.length - 1];
+            if (last?.role === "assistant") {
+              out[out.length - 1] = {
+                ...last,
+                content: finalText,
+                proposals: items,
+                plan: {
+                  ...plan,
+                  verification: compiled.importSummary,
+                },
+              };
+            }
+            return out;
+          });
+          receivedPlan = true;
+          return true;
+        }
+
         const res = await fetch("/api/chief", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -974,7 +1099,7 @@ export default function ChiefProvider({
       }));
       const apiText = [
         "Revise the pending DOCUMENT IMPORT PLAN.",
-        "The old cards are now superseded. Submit one COMPLETE replacement import manifest, not just changed actions.",
+        "The old cards are now superseded. Re-extract the source batches and compile one COMPLETE replacement plan, not just changed actions.",
         "Re-read the attached source files and compare them with the current saved projects and tasks.",
         "Inventory every source record again. A removed write remains represented with an appropriate no_change, ignore, or ambiguous disposition so coverage stays complete.",
         "Do not execute anything. If the request exposes an unresolved conflict, explain it and mark the record ambiguous until the user resolves it.",

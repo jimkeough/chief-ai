@@ -718,7 +718,7 @@ export default function ProposalGroup({
               </div>
               {plan.verification && (
                 <div className="mb-1.5 font-mono text-[10px] tracking-[0.07em] text-teal">
-                  VERIFIED · {plan.verification.recordCount} SOURCE RECORDS ·{" "}
+                  EXTRACTED · {plan.verification.recordCount} SOURCE RECORDS ·{" "}
                   {plan.verification.proposalCount} CHANGES
                   {plan.verification.ambiguousCount
                     ? ` · ${plan.verification.ambiguousCount} NEED REVIEW`
@@ -752,7 +752,7 @@ export default function ProposalGroup({
               </div>
               {plan.verification && (
                 <div className="mt-1 font-mono text-[10px] tracking-[0.07em] text-teal">
-                  VERIFIED · {plan.verification.recordCount} SOURCE RECORDS
+                  EXTRACTED · {plan.verification.recordCount} SOURCE RECORDS
                 </div>
               )}
             </div>

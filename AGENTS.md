@@ -26,12 +26,12 @@ the only static check. `.env.local` is gitignored; general setup is in `README.m
 - Changes to `.github/workflows/upstream-updates.yml` must also update the embedded
   copy in `lib/updater-workflow.ts`; run `npm run release:sync-updater`, and
   `release:check` will enforce exact parity.
-- The document-import domain contract derives action argument schemas directly
-  from `WRITE_ACTIONS` in `lib/actions.ts`. When adding or renaming a write
-  action, classify it explicitly in `DOCUMENT_IMPORT_ACTION_POLICY`; its
-  exhaustive `WriteActionKey` mapping must keep typechecking, and
-  `npm run import:check` must pass. Never duplicate action field schemas in the
-  import prompt or compiler.
+- The document importer extracts bounded semantic entities, then compiles them
+  through `toProposedAction`; it never asks the model for executable action
+  payloads. When adding or renaming a write action, classify it explicitly in
+  `DOCUMENT_IMPORT_ACTION_POLICY`. Its exhaustive `WriteActionKey` mapping must
+  keep typechecking. Never duplicate write-action argument schemas in the
+  extraction contract.
 
 ### Running the app locally (Supabase runs locally via the CLI)
 

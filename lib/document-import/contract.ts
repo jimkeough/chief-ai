@@ -1,33 +1,27 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import {
-  WRITE_ACTIONS,
-  type WriteAction,
   type WriteActionKey,
 } from "@/lib/actions";
 
-/** Bump only when the persisted manifest envelope changes incompatibly.
- * Action argument schemas stay current automatically because the tool schema
- * below is built directly from WRITE_ACTIONS, the executor's allowlist. */
-export const DOCUMENT_IMPORT_CONTRACT_VERSION = 1;
-export const DOCUMENT_IMPORT_TOOL_NAME = "submit_document_import_manifest";
+export const DOCUMENT_ENTITY_TOOL_NAME = "submit_document_entities";
 
-/** Exhaustive by design: adding a write action requires an explicit decision
- * about whether documents may propose it. This is the contract drift gate. */
+/** Exhaustive drift gate: every write action must be intentionally available
+ * to document compilation or explicitly excluded. */
 export const DOCUMENT_IMPORT_ACTION_POLICY = {
-  create_task: "import",
-  update_task: "import",
-  save_kb_fact: "import",
-  save_instruction: "import",
-  save_contact: "import",
-  create_note: "import",
-  create_project: "import",
-  update_project: "import",
-  update_project_state: "import",
+  create_task: "compile",
+  update_task: "compile",
+  save_kb_fact: "compile",
+  save_instruction: "compile",
+  save_contact: "compile",
+  create_note: "compile",
+  create_project: "compile",
+  update_project: "compile",
+  update_project_state: "compile",
   archive_email: "exclude",
   reply_email: "exclude",
-} as const satisfies Record<WriteActionKey, "import" | "exclude">;
+} as const satisfies Record<WriteActionKey, "compile" | "exclude">;
 
-export const DOCUMENT_IMPORT_ENTITY_KINDS = [
+export const DOCUMENT_ENTITY_KINDS = [
   "project",
   "task",
   "contact",
@@ -35,192 +29,323 @@ export const DOCUMENT_IMPORT_ENTITY_KINDS = [
   "instruction",
   "note",
 ] as const;
-export type DocumentImportEntityKind =
-  (typeof DOCUMENT_IMPORT_ENTITY_KINDS)[number];
+export type DocumentEntityKind = (typeof DOCUMENT_ENTITY_KINDS)[number];
 
-export const DOCUMENT_IMPORT_DISPOSITIONS = [
-  "change",
-  "no_change",
-  "ambiguous",
-  "ignore",
-] as const;
-export type DocumentImportDisposition =
-  (typeof DOCUMENT_IMPORT_DISPOSITIONS)[number];
-
-export type DocumentImportAction = {
-  key: WriteActionKey;
-  args: Record<string, unknown>;
+type SourceEvidence = {
+  sourceId: string;
+  sourceName: string;
+  locator?: string;
+  excerpt: string;
 };
 
-export type DocumentImportRecord = {
-  source_id: string;
-  entity_kind: DocumentImportEntityKind;
-  disposition: DocumentImportDisposition;
-  source: {
-    name: string;
-    locator?: string;
-    excerpt: string;
-  };
-  reason: string;
-  actions: DocumentImportAction[];
+export type ProjectEntity = SourceEvidence & {
+  kind: "project";
+  name: string;
+  summary?: string;
+  status?: "active" | "paused" | "done" | "archived";
+  owner?: string;
+  currentState?: string;
+  nextAction?: string;
+  openLoops?: string;
+  blockers?: string;
+  waitingOn?: string;
+  decisions?: string;
+  recentChanges?: string;
+  confidence?: "low" | "medium" | "high";
 };
 
-export type DocumentImportManifest = {
-  contract_version: number;
-  source_reports: {
-    source_name: string;
-    status: "processed" | "failed";
-    summary: string;
-  }[];
-  records: DocumentImportRecord[];
+export type TaskEntity = SourceEvidence & {
+  kind: "task";
+  title: string;
+  notes?: string;
+  status?: "not_started" | "in_progress" | "blocked" | "waiting" | "done";
+  priority?: "P0" | "P1" | "P2" | "P3" | "P4";
+  impact?: "low" | "medium" | "high";
+  effort?: "s" | "m" | "l";
+  category?: string;
+  delegateTo?: string;
+  dueAt?: string;
+  projectName?: string;
 };
+
+export type ContactEntity = SourceEvidence & {
+  kind: "contact";
+  name: string;
+  email?: string;
+  company?: string;
+  notes: string;
+};
+
+export type MemoryEntity = SourceEvidence & {
+  kind: "memory";
+  title: string;
+  body: string;
+  tags?: string[];
+};
+
+export type InstructionEntity = SourceEvidence & {
+  kind: "instruction";
+  title: string;
+  body: string;
+};
+
+export type NoteEntity = SourceEvidence & {
+  kind: "note";
+  title: string;
+  body: string;
+  pinned?: boolean;
+};
+
+export type DocumentEntity =
+  | ProjectEntity
+  | TaskEntity
+  | ContactEntity
+  | MemoryEntity
+  | InstructionEntity
+  | NoteEntity;
 
 export type DocumentImportSummary = {
-  contractVersion: number;
   sourceCount: number;
   recordCount: number;
   proposalCount: number;
   noChangeCount: number;
   ambiguousCount: number;
   ignoredCount: number;
-  byKind: Partial<Record<DocumentImportEntityKind, number>>;
+  byKind: Partial<Record<DocumentEntityKind, number>>;
 };
 
-export type DocumentSourceHint = {
-  sourceName: string;
-  entityKind?: "project" | "task";
-  expectedRecords?: number;
-  description: string;
+const string = { type: "string" };
+const sourceProperties = {
+  sourceId: {
+    type: "string",
+    description: "Stable ID supplied by the source chunk.",
+  },
+  sourceName: { type: "string" },
+  locator: { type: "string" },
+  excerpt: {
+    type: "string",
+    description: "Short verbatim source evidence.",
+  },
 };
 
-export function documentImportActions(): readonly WriteAction[] {
-  return WRITE_ACTIONS.filter(
-    (action) => DOCUMENT_IMPORT_ACTION_POLICY[action.key] === "import",
-  );
-}
-
-function actionBranch(action: WriteAction): Record<string, unknown> {
+function objectSchema(
+  kind: DocumentEntityKind,
+  properties: Record<string, unknown>,
+  required: string[],
+): Record<string, unknown> {
   return {
     type: "object",
     additionalProperties: false,
     properties: {
-      key: {
-        type: "string",
-        enum: [action.key],
-        description: action.description,
-      },
-      args: {
-        ...action.input_schema,
-        additionalProperties: false,
-      },
+      ...sourceProperties,
+      kind: { type: "string", enum: [kind] },
+      ...properties,
     },
-    required: ["key", "args"],
+    required: ["sourceId", "sourceName", "excerpt", "kind", ...required],
   };
 }
 
-/** The model sees one typed manifest tool, not dozens of executable-looking
- * write tools. Its action branches are derived from the live write registry. */
-export function documentImportTool(
-  hints: DocumentSourceHint[],
-): Anthropic.Tool {
-  const inventory = hints.map((hint) => hint.description).join("\n");
+const ENTITY_SCHEMAS = [
+  objectSchema(
+    "project",
+    {
+      name: string,
+      summary: string,
+      status: {
+        type: "string",
+        enum: ["active", "paused", "done", "archived"],
+      },
+      owner: string,
+      currentState: string,
+      nextAction: string,
+      openLoops: string,
+      blockers: string,
+      waitingOn: string,
+      decisions: string,
+      recentChanges: string,
+      confidence: { type: "string", enum: ["low", "medium", "high"] },
+    },
+    ["name"],
+  ),
+  objectSchema(
+    "task",
+    {
+      title: string,
+      notes: string,
+      status: {
+        type: "string",
+        enum: ["not_started", "in_progress", "blocked", "waiting", "done"],
+      },
+      priority: { type: "string", enum: ["P0", "P1", "P2", "P3", "P4"] },
+      impact: { type: "string", enum: ["low", "medium", "high"] },
+      effort: { type: "string", enum: ["s", "m", "l"] },
+      category: string,
+      delegateTo: string,
+      dueAt: string,
+      projectName: string,
+    },
+    ["title"],
+  ),
+  objectSchema(
+    "contact",
+    { name: string, email: string, company: string, notes: string },
+    ["name", "notes"],
+  ),
+  objectSchema(
+    "memory",
+    {
+      title: string,
+      body: string,
+      tags: { type: "array", items: string },
+    },
+    ["title", "body"],
+  ),
+  objectSchema(
+    "instruction",
+    { title: string, body: string },
+    ["title", "body"],
+  ),
+  objectSchema(
+    "note",
+    { title: string, body: string, pinned: { type: "boolean" } },
+    ["title", "body"],
+  ),
+];
+
+export function documentEntityTool(): Anthropic.Tool {
   return {
-    name: DOCUMENT_IMPORT_TOOL_NAME,
-    description: [
-      "Submit the complete replacement document-import manifest.",
-      "Inventory every source entity exactly once, even when it needs no change, is ambiguous, or should be ignored.",
-      "A change record may contain multiple ordered domain actions (for example create_project followed by update_project_state).",
-      "Use source-local IDs that remain stable across revisions, and include a faithful evidence excerpt.",
-      "Do not call ordinary write tools; trusted application code validates and compiles this manifest into approval cards.",
-      inventory ? `Deterministic source inventory:\n${inventory}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
+    name: DOCUMENT_ENTITY_TOOL_NAME,
+    description:
+      "Extract only the entities present in this bounded source chunk. Preserve source wording and relationships. Do not reconcile against the workspace and do not produce database actions.",
     input_schema: {
       type: "object",
       additionalProperties: false,
       properties: {
-        contract_version: {
-          type: "integer",
-          enum: [DOCUMENT_IMPORT_CONTRACT_VERSION],
-          description: "The document import contract version.",
-        },
-        source_reports: {
+        entities: {
           type: "array",
-          description:
-            "Exactly one report per attached source. A failed source makes the plan incomplete.",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              source_name: { type: "string" },
-              status: { type: "string", enum: ["processed", "failed"] },
-              summary: { type: "string" },
-            },
-            required: ["source_name", "status", "summary"],
-          },
-        },
-        records: {
-          type: "array",
-          description:
-            "Complete source ledger. Every discovered project, task, person, durable fact, instruction, or note appears exactly once.",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              source_id: {
-                type: "string",
-                description:
-                  "Stable source-local ID such as tasks.md#homejab-marketing/task-1.",
-              },
-              entity_kind: {
-                type: "string",
-                enum: DOCUMENT_IMPORT_ENTITY_KINDS,
-              },
-              disposition: {
-                type: "string",
-                enum: DOCUMENT_IMPORT_DISPOSITIONS,
-              },
-              source: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  name: { type: "string" },
-                  locator: {
-                    type: "string",
-                    description: "Page, heading, row, or other source location.",
-                  },
-                  excerpt: {
-                    type: "string",
-                    description: "Short verbatim evidence from the source.",
-                  },
-                },
-                required: ["name", "excerpt"],
-              },
-              reason: {
-                type: "string",
-                description:
-                  "Why this disposition and these actions faithfully represent the source.",
-              },
-              actions: {
-                type: "array",
-                description:
-                  "One or more actions for change; empty for every other disposition.",
-                items: { oneOf: documentImportActions().map(actionBranch) },
-              },
-            },
-            required: [
-              "source_id",
-              "entity_kind",
-              "disposition",
-              "source",
-              "reason",
-              "actions",
-            ],
-          },
+          items: { oneOf: ENTITY_SCHEMAS },
         },
       },
-      required: ["contract_version", "source_reports", "records"],
+      required: ["entities"],
     } as Anthropic.Tool["input_schema"],
   };
+}
+
+const ENUMS: Record<string, readonly string[]> = {
+  kind: DOCUMENT_ENTITY_KINDS,
+  status: [
+    "active",
+    "paused",
+    "done",
+    "archived",
+    "not_started",
+    "in_progress",
+    "blocked",
+    "waiting",
+  ],
+  priority: ["P0", "P1", "P2", "P3", "P4"],
+  impact: ["low", "medium", "high"],
+  effort: ["s", "m", "l"],
+  confidence: ["low", "medium", "high"],
+};
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(
+  value: Record<string, unknown>,
+  key: string,
+  errors: string[],
+): string {
+  const field = value[key];
+  if (typeof field !== "string" || !field.trim()) {
+    errors.push(`${key} is required.`);
+    return "";
+  }
+  return field.trim();
+}
+
+/** Fail closed, but keep extraction validation deliberately small. The final
+ * compiler still emits only registered write actions. */
+export function parseDocumentEntities(
+  raw: unknown,
+  expected: {
+    sourceName: string;
+    sourceIds: string[];
+    sourceIdPrefix: string;
+    strictCount: boolean;
+    entityKind?: DocumentEntityKind;
+  },
+): { entities?: DocumentEntity[]; errors: string[] } {
+  const errors: string[] = [];
+  if (!isObject(raw) || !Array.isArray(raw.entities)) {
+    return { errors: ["The extraction response needs an entities array."] };
+  }
+  const allowedSourceIds = new Set(expected.sourceIds);
+  const entities: DocumentEntity[] = [];
+  for (const [index, candidate] of raw.entities.entries()) {
+    if (!isObject(candidate)) {
+      errors.push(`Entity ${index + 1} is not an object.`);
+      continue;
+    }
+    const kind = candidate.kind;
+    if (
+      typeof kind !== "string" ||
+      !DOCUMENT_ENTITY_KINDS.includes(kind as DocumentEntityKind)
+    ) {
+      errors.push(`Entity ${index + 1} has an invalid kind.`);
+      continue;
+    }
+    if (expected.entityKind && kind !== expected.entityKind) {
+      errors.push(`Entity ${index + 1} must be a ${expected.entityKind}.`);
+    }
+    const sourceId = requiredString(candidate, "sourceId", errors);
+    if (
+      expected.strictCount
+        ? !allowedSourceIds.has(sourceId)
+        : !sourceId.startsWith(`${expected.sourceIdPrefix}#`)
+    ) {
+      errors.push(`Entity ${index + 1} has an unknown sourceId.`);
+    }
+    const sourceName = requiredString(candidate, "sourceName", errors);
+    if (sourceName !== expected.sourceName) {
+      errors.push(`Entity ${index + 1} has the wrong sourceName.`);
+    }
+    requiredString(candidate, "excerpt", errors);
+
+    for (const [field, allowed] of Object.entries(ENUMS)) {
+      const fieldValue = candidate[field];
+      if (
+        fieldValue !== undefined &&
+        !allowed?.includes(String(fieldValue))
+      ) {
+        errors.push(`Entity ${index + 1} has an invalid ${field}.`);
+      }
+    }
+    const requiredByKind: Record<DocumentEntityKind, string[]> = {
+      project: ["name"],
+      task: ["title"],
+      contact: ["name", "notes"],
+      memory: ["title", "body"],
+      instruction: ["title", "body"],
+      note: ["title", "body"],
+    };
+    for (const field of requiredByKind[kind as DocumentEntityKind]) {
+      requiredString(candidate, field, errors);
+    }
+    entities.push(candidate as DocumentEntity);
+  }
+  if (expected.strictCount && entities.length !== expected.sourceIds.length) {
+    errors.push(
+      `Expected ${expected.sourceIds.length} entities, received ${entities.length}.`,
+    );
+  }
+  if (expected.strictCount) {
+    const returnedIds = new Set(entities.map((entity) => entity.sourceId));
+    for (const sourceId of expected.sourceIds) {
+      if (!returnedIds.has(sourceId)) errors.push(`Missing sourceId ${sourceId}.`);
+    }
+  }
+  return errors.length ? { errors } : { entities, errors: [] };
 }

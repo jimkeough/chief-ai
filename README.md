@@ -93,11 +93,12 @@ screens) · **3** (the Chief loop: streaming chat with the approve-first write
 gate, resumable chat history and document review, contextual launch actions,
 proposal cards with undo, MCP broker, journaled executor).
 
-Document review uses a typed source ledger before it creates approval cards.
-Chief accounts for every structured source record as a change, no-change,
-ambiguity, or intentional omission; trusted application code validates that
-ledger against the live action registry and displays verified coverage counts.
-The model never writes database inserts or supplies unregistered fields.
+Document review splits sources into bounded batches and shows progress as it
+extracts typed projects, tasks, and other product entities. Each batch is an
+independent request that can be retried without rebuilding the whole plan.
+Trusted application code reconciles the extracted entities with the workspace
+and compiles approval cards through the live action registry; the model never
+writes database inserts or supplies executable action payloads.
 
 **Existing deployments:** after pulling a phase, run the new files in
 `supabase/migrations/` (anything newer than what you've applied) in the SQL

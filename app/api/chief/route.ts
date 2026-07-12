@@ -27,20 +27,8 @@ import {
 import { KB_TOOLS, makeKbToolRunner } from "@/lib/kb/tools";
 import { findRelatedKbEntries } from "@/lib/kb/related";
 import { listProjects } from "@/lib/projects";
-import { listTasks } from "@/lib/tasks";
 import { applyAttachments, type ChatAttachment } from "@/lib/chat-attachments";
 import { loadChiefAttachments } from "@/lib/chief-attachments";
-import {
-  DOCUMENT_IMPORT_TOOL_NAME,
-  documentImportTool,
-  type DocumentImportSummary,
-} from "@/lib/document-import/contract";
-import { inspectDocumentSources } from "@/lib/document-import/source-inventory";
-import { validateDocumentImportManifest } from "@/lib/document-import/validate";
-import {
-  compileDocumentImportManifest,
-  formatDocumentImportVerification,
-} from "@/lib/document-import/compile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,14 +71,13 @@ export async function POST(req: Request) {
   const webFetchEnabled =
     settings["web.fetch_enabled"].trim().toLowerCase() === "on";
 
-  const { messages, page, attachments, attachmentIds, requireProposalPlan, sessionId } = (await req
+  const { messages, page, attachments, attachmentIds, sessionId } = (await req
     .json()
     .catch(() => ({}))) as {
     messages?: ChatMessage[];
     page?: ChiefPageContext | null;
     attachments?: ChatAttachment[];
     attachmentIds?: string[];
-    requireProposalPlan?: boolean;
     sessionId?: string | null;
   };
   let resolvedAttachments = Array.isArray(attachments) ? attachments : [];
@@ -235,10 +222,6 @@ export async function POST(req: Request) {
   // what's saved instead of re-proposing), plus the brokered connector tools
   // (reads always, writes when enabled).
   const writeTools = actionsEnabled ? writeActionTools() : [];
-  const mustEmitDocumentPlan =
-    requireProposalPlan === true && hasAttachments && writeTools.length > 0;
-  const sourceHints = inspectDocumentSources(resolvedAttachments);
-  const importTool = documentImportTool(sourceHints);
   // Anthropic's native web_fetch — server-side, returns results inline (never a
   // client tool_use block, so the dispatch loop ignores it). Placed first so it
   // stays inside the cached tool prefix. Typed loosely (the SDK's Tool union
@@ -250,15 +233,13 @@ export async function POST(req: Request) {
           { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 },
         ] as unknown as Anthropic.Tool[])
       : [];
-  const clientTools = mustEmitDocumentPlan
-    ? [importTool, ...CHIEF_READ_TOOLS, ...KB_TOOLS]
-    : [
-        ...serverTools,
-        ...writeTools,
-        ...CHIEF_READ_TOOLS,
-        ...KB_TOOLS,
-        ...brokerToolDefs,
-      ];
+  const clientTools = [
+    ...serverTools,
+    ...writeTools,
+    ...CHIEF_READ_TOOLS,
+    ...KB_TOOLS,
+    ...brokerToolDefs,
+  ];
   const runKbTool = makeKbToolRunner();
 
   // Prompt caching: the tool list + system prompt are re-sent verbatim on every
@@ -310,30 +291,14 @@ export async function POST(req: Request) {
     async start(controller) {
       // Everything Chief says this exchange, for the communications log.
       let assistantText = "";
-      let forcingDocumentPlan = false;
       try {
         for (let turn = 0; turn < MAX_TURNS; turn++) {
-          const toolsForTurn = forcingDocumentPlan
-            ? [importTool]
-            : cachedClientTools;
           const stream = client.messages.stream({
             model,
-            // A complete import manifest can legitimately contain dozens of
-            // rich records. It gets a dedicated budget; ordinary chat keeps
-            // the low-latency interactive budget.
-            max_tokens: mustEmitDocumentPlan ? 20_000 : 4096,
+            max_tokens: 4096,
             ...(thinking ? { thinking } : {}),
             system: systemBlocks,
-            ...(toolsForTurn.length ? { tools: toolsForTurn } : {}),
-            ...(forcingDocumentPlan
-              ? {
-                  tool_choice: {
-                    type: "tool",
-                    name: DOCUMENT_IMPORT_TOOL_NAME,
-                    disable_parallel_tool_use: true,
-                  },
-                }
-              : {}),
+            ...(cachedClientTools.length ? { tools: cachedClientTools } : {}),
             messages: convo,
             // Gateway routing (free-model fallback + BYOK) when in gateway mode.
             // `providerOptions` is a gateway extension the SDK types don't know.
@@ -370,20 +335,6 @@ export async function POST(req: Request) {
           // transcript so the API resumes rather than ending the turn early.
           if (final.stop_reason === "pause_turn") continue;
           if (final.stop_reason !== "tool_use") {
-            if (mustEmitDocumentPlan && !forcingDocumentPlan) {
-              convo.push({
-                role: "user",
-                content:
-                  "Finish the review now by submitting one complete document-import manifest. Inventory every source entity exactly once, including no-change, ambiguous, and ignored records. Do not call ordinary write tools or stop with another question.",
-              });
-              forcingDocumentPlan = true;
-              continue;
-            }
-            if (mustEmitDocumentPlan && forcingDocumentPlan) {
-              throw new Error(
-                "Chief could not produce the required document review cards. Please retry.",
-              );
-            }
             break;
           }
 
@@ -392,45 +343,8 @@ export async function POST(req: Request) {
           // their results back. Unknown names are default-denied.
           const proposals: ProposedAction[] = [];
           const results: Anthropic.ToolResultBlockParam[] = [];
-          let importSummary: DocumentImportSummary | undefined;
-          let documentPlanVerified = false;
           for (const block of toolUses) {
             const argsObj = (block.input ?? {}) as Record<string, unknown>;
-            if (block.name === DOCUMENT_IMPORT_TOOL_NAME) {
-              const [projects, tasks] = await Promise.all([
-                listProjects(),
-                listTasks(),
-              ]);
-              const validation = validateDocumentImportManifest(
-                argsObj,
-                resolvedAttachments.map((attachment) => attachment.name),
-                sourceHints,
-                {
-                  projects: projects.map(({ id, name }) => ({ id, name })),
-                  tasks: tasks.map(({ id, status }) => ({ id, status })),
-                },
-              );
-              if (!validation.ok) {
-                results.push({
-                  type: "tool_result",
-                  tool_use_id: block.id,
-                  content: [
-                    "The manifest is incomplete or violates the live domain contract. Correct every issue and resubmit the COMPLETE replacement manifest:",
-                    ...validation.errors.slice(0, 40).map((error) => `- ${error}`),
-                  ].join("\n"),
-                  is_error: true,
-                });
-                forcingDocumentPlan = true;
-                continue;
-              }
-              const compiled = compileDocumentImportManifest(
-                validation.manifest,
-              );
-              proposals.push(...compiled.proposals);
-              importSummary = compiled.summary;
-              documentPlanVerified = true;
-              continue;
-            }
             // Static registered write action -> proposal.
             if (getWriteAction(block.name)) {
               // A no-op update (only an id, nothing to change) isn't worth an
@@ -533,7 +447,7 @@ export async function POST(req: Request) {
 
           // A proposed write ends the turn: emit the trailing blob for the UI
           // to render as cards. Nothing runs until the user approves it.
-          if (proposals.length > 0 || documentPlanVerified) {
+          if (proposals.length > 0) {
             // Lead project cards with the project name (args carry only its id).
             // Resolve names only when a project-update proposal is present, so
             // normal turns don't pay for an extra query.
@@ -550,20 +464,10 @@ export async function POST(req: Request) {
             } else {
               named = nameProjectProposals(proposals, () => undefined);
             }
-            if (importSummary) {
-              const verification = formatDocumentImportVerification(importSummary);
-              const prefix = assistantText.trim() ? "\n\n" : "";
-              controller.enqueue(encoder.encode(`${prefix}${verification}`));
-              assistantText += `${prefix}${verification}`;
-            }
             controller.enqueue(
               encoder.encode(
                 PROPOSALS_MARKER +
-                  JSON.stringify({
-                    proposals: named,
-                    planVerified: documentPlanVerified,
-                    importSummary,
-                  }),
+                  JSON.stringify({ proposals: named }),
               ),
             );
             break;
@@ -572,21 +476,7 @@ export async function POST(req: Request) {
           if (results.length === 0) {
             break;
           }
-          if (mustEmitDocumentPlan && !forcingDocumentPlan) {
-            convo.push({
-              role: "user",
-              content: [
-                ...results,
-                {
-                  type: "text",
-                  text: "Now submit one complete document-import manifest. Inventory every source entity exactly once, including no-change, ambiguous, and ignored records. Do not call ordinary write tools or stop with another question.",
-                },
-              ],
-            });
-            forcingDocumentPlan = true;
-          } else {
-            convo.push({ role: "user", content: results });
-          }
+          convo.push({ role: "user", content: results });
         }
 
         // Logging is post-response work: a slow database must never hold the
