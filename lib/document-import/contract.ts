@@ -186,7 +186,7 @@ export function documentEntityTool(): Anthropic.Tool {
             type: "object",
             additionalProperties: false,
             properties: entityProperties,
-            required: ["sourceId", "sourceName", "excerpt", "kind"],
+            required: ["sourceId", "excerpt", "kind"],
           },
         },
       },
@@ -298,10 +298,6 @@ export function parseDocumentEntities(
     ) {
       errors.push(`Entity ${index + 1} has an unknown sourceId.`);
     }
-    const sourceName = requiredString(candidate, "sourceName", errors);
-    if (sourceName !== expected.sourceName) {
-      errors.push(`Entity ${index + 1} has the wrong sourceName.`);
-    }
     requiredString(candidate, "excerpt", errors);
 
     for (const [field, allowed] of Object.entries(ENUMS)) {
@@ -324,7 +320,12 @@ export function parseDocumentEntities(
     for (const field of requiredByKind[kind as DocumentEntityKind]) {
       requiredString(candidate, field, errors);
     }
-    entities.push(candidate as DocumentEntity);
+    // The attachment name is request provenance, not semantic model output.
+    // Stamp the server-known value so a model cannot mislabel or spoof it.
+    entities.push({
+      ...candidate,
+      sourceName: expected.sourceName,
+    } as DocumentEntity);
   }
   if (expected.strictCount && entities.length !== expected.sourceIds.length) {
     errors.push(

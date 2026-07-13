@@ -53,6 +53,22 @@ test("still fails closed when no entity collection exists", () => {
   });
 });
 
+test("stamps server-known source names over model output", () => {
+  const mislabeled = { ...task, sourceName: "HomeJab product" };
+  assert.deepEqual(parseDocumentEntities({ entities: [mislabeled] }, expected), {
+    entities: [task],
+    errors: [],
+  });
+  const { sourceName: _sourceName, ...missingSourceName } = task;
+  assert.deepEqual(
+    parseDocumentEntities({ entities: [missingSourceName] }, expected),
+    {
+      entities: [task],
+      errors: [],
+    },
+  );
+});
+
 test("splits multiline CSV task rows into bounded strict batches", () => {
   const rows = [
     "Task,Status,Notes,Brand,Priority",
