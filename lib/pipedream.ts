@@ -44,6 +44,16 @@ export type PipedreamTriggerComponent = {
   description: string | null;
   supported: boolean;
   unsupportedReason: string | null;
+  configProps: PipedreamTriggerConfigProp[];
+};
+
+export type PipedreamTriggerConfigProp = {
+  name: string;
+  label: string;
+  description: string | null;
+  multiple: boolean;
+  required: boolean;
+  options: Array<{ label: string; value: string }>;
 };
 
 type RuntimeConfig = {
@@ -524,6 +534,73 @@ type RuntimeTriggerComponent = PipedreamTriggerComponent & {
   appPropName: string | null;
 };
 
+function triggerConfigProp(raw: unknown): PipedreamTriggerConfigProp | null {
+  const prop = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const type = clean(prop.type);
+  const name = clean(prop.name);
+  if (!name || !["string", "string[]"].includes(type) || !Array.isArray(prop.options)) {
+    return null;
+  }
+  const options = prop.options
+    .map((rawOption) => {
+      if (typeof rawOption === "string") {
+        return {
+          label: rawOption
+            .split("_")
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(" "),
+          value: rawOption,
+        };
+      }
+      const option =
+        rawOption && typeof rawOption === "object"
+          ? (rawOption as Record<string, unknown>)
+          : {};
+      const value = clean(option.value);
+      if (!value) return null;
+      return { label: clean(option.label) || value, value };
+    })
+    .filter((option): option is { label: string; value: string } => Boolean(option));
+  if (options.length === 0) return null;
+  return {
+    name,
+    label: clean(prop.label) || name,
+    description: clean(prop.description) || null,
+    multiple: type === "string[]",
+    required: prop.optional !== true,
+    options,
+  };
+}
+
+function presentTrigger(
+  app: string,
+  component: RuntimeTriggerComponent,
+): RuntimeTriggerComponent {
+  if (app !== "frontapp") return component;
+  if (component.id === "frontapp-new-conversation-created") {
+    return {
+      ...component,
+      name: "New conversation",
+      description: "Pipedream's current Front cursor can miss new conversations.",
+      supported: false,
+      unsupportedReason:
+        "Chief will offer this when Pipedream's Front cursor is safe to use.",
+    };
+  }
+  if (component.id === "frontapp-new-conversation-state-change") {
+    return {
+      ...component,
+      name: "Front activity",
+      description: "Mention and inbound-message events are not reliable upstream yet.",
+      supported: false,
+      unsupportedReason:
+        "Chief will offer this when Pipedream's Front event cursor is safe to use.",
+      configProps: [],
+    };
+  }
+  return component;
+}
+
 async function triggerComponents(
   userId: string,
   appSlug: string,
@@ -567,19 +644,34 @@ async function triggerComponents(
         appProp && typeof appProp === "object"
           ? (appProp as Record<string, unknown>)
           : {};
+      const id = clean(component.key ?? component.id);
+      const configProps = props
+        .map(triggerConfigProp)
+        .filter((configProp): configProp is PipedreamTriggerConfigProp =>
+          Boolean(configProp),
+        );
       const unsupportedProps = props.filter((rawProp) => {
         const candidate =
           rawProp && typeof rawProp === "object"
             ? (rawProp as Record<string, unknown>)
             : {};
         const type = clean(candidate.type);
+        const name = clean(candidate.name);
         if (
           !type ||
           candidate === prop ||
           candidate.optional === true ||
           candidate.disabled === true ||
           candidate.readOnly === true ||
-          ["alert", "dir", "$.interface.apphook", "$.interface.http"].includes(type) ||
+          [
+            "alert",
+            "dir",
+            "$.interface.apphook",
+            "$.interface.http",
+            "$.interface.timer",
+            "$.service.db",
+          ].includes(type) ||
+          configProps.some((configProp) => configProp.name === name) ||
           Object.prototype.hasOwnProperty.call(candidate, "default") ||
           Object.prototype.hasOwnProperty.call(candidate, "static")
         ) {
@@ -587,8 +679,8 @@ async function triggerComponents(
         }
         return true;
       });
-      return {
-        id: clean(component.key ?? component.id),
+      const presented = presentTrigger(app, {
+        id,
         name: clean(component.name),
         description: clean(component.description) || null,
         appPropName: clean(prop.name) || null,
@@ -596,7 +688,18 @@ async function triggerComponents(
         unsupportedReason:
           unsupportedProps.length === 0
             ? null
-            : "Requires additional setup in Pipedream.",
+            : "This event needs configuration Chief does not support yet.",
+        configProps,
+      });
+      const missingPresentedOptions = presented.configProps.some(
+        (configProp) => configProp.required && configProp.options.length === 0,
+      );
+      return {
+        ...presented,
+        supported: presented.supported && !missingPresentedOptions,
+        unsupportedReason: missingPresentedOptions
+          ? "This event needs configuration Chief does not support yet."
+          : presented.unsupportedReason,
       };
     })
     .filter((component) => component.id && component.name);
@@ -615,9 +718,46 @@ export async function listPipedreamTriggerComponents(
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Pipedream connection not found.");
-  return (await triggerComponents(userId, data.app_slug as string)).map(
-    ({ appPropName: _appPropName, ...component }) => component,
-  );
+  const appSlug = data.app_slug as string;
+  return (await triggerComponents(userId, appSlug))
+    .filter(
+      (component) =>
+        component.supported &&
+        !(
+          appSlug === "frontapp" &&
+          component.id === "frontapp-new-message-template-created"
+        ),
+    )
+    .map(({ appPropName: _appPropName, ...component }) => component);
+}
+
+function configuredTriggerProps(
+  component: RuntimeTriggerComponent,
+  raw: unknown,
+): Record<string, string | string[]> {
+  const input = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const configured: Record<string, string | string[]> = {};
+  for (const prop of component.configProps) {
+    const allowed = new Set(prop.options.map((option) => option.value));
+    if (prop.multiple) {
+      const values = Array.isArray(input[prop.name])
+        ? (input[prop.name] as unknown[])
+            .map(clean)
+            .filter((value) => value && allowed.has(value))
+        : [];
+      if (prop.required && values.length === 0) {
+        throw new Error(`Choose at least one ${prop.label.toLowerCase()}.`);
+      }
+      if (values.length > 0) configured[prop.name] = [...new Set(values)];
+      continue;
+    }
+    const value = clean(input[prop.name]);
+    if (prop.required && !allowed.has(value)) {
+      throw new Error(`Choose ${prop.label.toLowerCase()}.`);
+    }
+    if (allowed.has(value)) configured[prop.name] = value;
+  }
+  return configured;
 }
 
 export async function deployPipedreamTrigger(
@@ -625,6 +765,7 @@ export async function deployPipedreamTrigger(
   connectionId: string,
   componentId: string,
   webhookUrl: string,
+  rawConfiguredProps?: unknown,
 ): Promise<{
   id: string;
   app: string;
@@ -651,13 +792,26 @@ export async function deployPipedreamTrigger(
     );
   }
   const config = await requireRuntimeConfig(userId);
-  const configuredProps = component.appPropName
-    ? {
-        [component.appPropName]: {
-          authProvisionId: connection.account_id as string,
-        },
-      }
-    : {};
+  const configuredProps: Record<string, unknown> = configuredTriggerProps(
+    component,
+    rawConfiguredProps,
+  );
+  const selectedLabels = component.configProps.flatMap((prop) => {
+    const configured = configuredProps[prop.name];
+    const values = Array.isArray(configured)
+      ? configured
+      : typeof configured === "string"
+        ? [configured]
+        : [];
+    return prop.options
+      .filter((option) => values.includes(option.value))
+      .map((option) => option.label);
+  });
+  if (component.appPropName) {
+    configuredProps[component.appPropName] = {
+      authProvisionId: connection.account_id as string,
+    };
+  }
   const response = (await pipedreamFetch(
     config,
     `/connect/${encodeURIComponent(config.projectId)}/triggers/deploy`,
@@ -692,7 +846,10 @@ export async function deployPipedreamTrigger(
   return {
     id,
     app: connection.app_slug as string,
-    name: clean(raw.name) || component.name || null,
+    name:
+      selectedLabels.length > 0
+        ? `${component.name}: ${selectedLabels.join(", ")}`
+        : clean(raw.name) || component.name || null,
     signingKey,
   };
 }

@@ -71,8 +71,9 @@ export async function POST(request: Request, { params }: Params) {
   const authed = await getAuthed();
   if (!authed) return unauthorized();
   const { id: connectionId } = await params;
-  const { componentId } = (await request.json().catch(() => ({}))) as {
+  const { componentId, configuredProps } = (await request.json().catch(() => ({}))) as {
     componentId?: string;
+    configuredProps?: unknown;
   };
   const component = componentId?.trim() ?? "";
   if (!component || component.length > 300) {
@@ -97,6 +98,7 @@ export async function POST(request: Request, { params }: Params) {
       connectionId,
       component,
       webhookUrl.href,
+      configuredProps,
     );
     try {
       await saveTrigger(authed.userId, {

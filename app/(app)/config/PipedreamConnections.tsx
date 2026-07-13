@@ -37,6 +37,16 @@ type TriggerComponent = {
   description: string | null;
   supported: boolean;
   unsupportedReason: string | null;
+  configProps: TriggerConfigProp[];
+};
+
+type TriggerConfigProp = {
+  name: string;
+  label: string;
+  description: string | null;
+  multiple: boolean;
+  required: boolean;
+  options: Array<{ label: string; value: string }>;
 };
 
 type DeployedTrigger = {
@@ -405,6 +415,9 @@ export default function PipedreamConnections() {
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [notificationNeedsMigration, setNotificationNeedsMigration] =
     useState(false);
+  const [notificationConfig, setNotificationConfig] = useState<
+    Record<string, Record<string, string[]>>
+  >({});
 
   const loadConnections = useCallback(async () => {
     const response = await fetch("/api/pipedream/connections");
@@ -532,11 +545,41 @@ export default function PipedreamConnections() {
     }
   };
 
+  const toggleNotificationOption = (
+    connectionId: string,
+    component: TriggerComponent,
+    prop: TriggerConfigProp,
+    value: string,
+  ) => {
+    const key = `${connectionId}:${component.id}`;
+    setNotificationConfig((current) => {
+      const componentConfig = current[key] ?? {};
+      const selected = componentConfig[prop.name] ?? [];
+      const next = prop.multiple
+        ? selected.includes(value)
+          ? selected.filter((item) => item !== value)
+          : [...selected, value]
+        : [value];
+      return {
+        ...current,
+        [key]: { ...componentConfig, [prop.name]: next },
+      };
+    });
+  };
+
   const enableNotification = async (
     connectionId: string,
     component: TriggerComponent,
   ) => {
     const busyKey = `${connectionId}:${component.id}`;
+    const config = notificationConfig[busyKey] ?? {};
+    const configuredProps = Object.fromEntries(
+      component.configProps.flatMap((prop) => {
+        const selected = config[prop.name] ?? [];
+        if (selected.length === 0) return [];
+        return [[prop.name, prop.multiple ? selected : selected[0]]];
+      }),
+    );
     setNotificationBusy(busyKey);
     setNotificationError(null);
     const temporaryId = `pending:${component.id}`;
@@ -556,7 +599,7 @@ export default function PipedreamConnections() {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ componentId: component.id }),
+        body: JSON.stringify({ componentId: component.id, configuredProps }),
       },
     ).catch(() => null);
     const body = (await response?.json().catch(() => ({}))) as {
@@ -1065,8 +1108,17 @@ export default function PipedreamConnections() {
                         NOTIFY ME WHEN…
                       </div>
                       <p className="text-[11.5px] leading-relaxed text-ink-3">
-                        Events can suggest actions; Chief never acts without approval.
+                        Choose which events should wake Chief. It will summarize what
+                        happened and may suggest an action; nothing runs without approval.
                       </p>
+                      {connection.appSlug === "frontapp" && (
+                        <p className="text-[11.5px] leading-relaxed text-ink-3">
+                          Front&apos;s current Pipedream event sources can miss or replay
+                          activity, so Chief does not offer Front notifications yet.
+                          Mention, inbound-message, and sender filters need a reliable
+                          upstream event feed first.
+                        </p>
+                      )}
                       {notificationError && !notificationNeedsMigration && (
                         <div className="text-[12px]" style={{ color: "var(--danger)" }}>
                           {notificationError}
@@ -1114,7 +1166,9 @@ export default function PipedreamConnections() {
                       )}
                       {notificationData?.components.length === 0 && (
                         <div className="text-[13px] text-ink-3">
-                          No event notifications exposed for this app.
+                          {connection.appSlug === "frontapp"
+                            ? "No reliable Front notification events are available yet."
+                            : "No notification events Chief can configure for this app yet."}
                         </div>
                       )}
                       {notificationData?.components.map((component) => {
@@ -1122,54 +1176,127 @@ export default function PipedreamConnections() {
                           (trigger) => trigger.componentId === component.id,
                         );
                         const enablingKey = `${connection.id}:${component.id}`;
+                        const selectedConfig =
+                          notificationConfig[enablingKey] ?? {};
+                        const configComplete = component.configProps.every(
+                          (prop) =>
+                            !prop.required ||
+                            (selectedConfig[prop.name]?.length ?? 0) > 0,
+                        );
+                        const canEnable =
+                          component.supported !== false && configComplete;
                         const disablingKey = enabled
                           ? `${connection.id}:${enabled.id}`
                           : null;
                         return (
-                          <div key={component.id} className="flex items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-[13.5px] text-ink">
-                                {component.name}
+                          <div key={component.id} className="flex flex-col gap-2.5">
+                            <div className="flex items-center gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[13.5px] text-ink">
+                                  {component.name}
+                                </div>
+                                {component.description && (
+                                  <div className="text-[11.5px] leading-relaxed text-ink-3">
+                                    {component.description}
+                                  </div>
+                                )}
+                                {enabled?.name?.startsWith(`${component.name}: `) && (
+                                  <div className="text-[11.5px] text-teal">
+                                    Listening for{" "}
+                                    {enabled.name.slice(component.name.length + 2)}
+                                  </div>
+                                )}
+                                {!component.supported &&
+                                  component.unsupportedReason && (
+                                    <div className="text-[11.5px] text-ink-3">
+                                      {component.unsupportedReason}
+                                    </div>
+                                  )}
                               </div>
-                              {component.description && (
-                                <div className="truncate text-[11.5px] text-ink-3">
-                                  {component.description}
-                                </div>
-                              )}
-                              {!component.supported && component.unsupportedReason && (
-                                <div className="text-[11.5px] text-ink-3">
-                                  {component.unsupportedReason}
-                                </div>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  enabled
+                                    ? void disableNotification(connection.id, enabled)
+                                    : void enableNotification(connection.id, component)
+                                }
+                                disabled={
+                                  (!enabled && !canEnable) ||
+                                  notificationBusy === enablingKey ||
+                                  notificationBusy === disablingKey
+                                }
+                                className="shrink-0 rounded-chip border px-2.5 py-1 font-mono text-[10px] tracking-[0.06em] disabled:opacity-50"
+                                style={
+                                  enabled
+                                    ? {
+                                        background: "var(--teal-fill)",
+                                        color: "var(--teal-on-fill)",
+                                        borderColor: "transparent",
+                                      }
+                                    : canEnable
+                                      ? {
+                                          borderColor: "var(--teal-border)",
+                                          color: "var(--teal)",
+                                        }
+                                      : {
+                                          borderColor: "var(--hairline)",
+                                          color: "var(--ink-3)",
+                                        }
+                                }
+                              >
+                                {enabled
+                                  ? "ON"
+                                  : !component.supported
+                                    ? "UNAVAILABLE"
+                                    : configComplete
+                                      ? "TURN ON"
+                                      : "CHOOSE"}
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                enabled
-                                  ? void disableNotification(connection.id, enabled)
-                                  : void enableNotification(connection.id, component)
-                              }
-                              disabled={
-                                (!enabled && !component.supported) ||
-                                notificationBusy === enablingKey ||
-                                notificationBusy === disablingKey
-                              }
-                              className="shrink-0 rounded-chip border px-2.5 py-1 font-mono text-[10px] tracking-[0.06em] disabled:opacity-50"
-                              style={
-                                enabled
-                                  ? {
-                                      background: "var(--teal-fill)",
-                                      color: "var(--teal-on-fill)",
-                                      borderColor: "transparent",
-                                    }
-                                  : {
-                                      borderColor: "var(--hairline)",
-                                      color: "var(--ink-3)",
-                                    }
-                              }
-                            >
-                              {enabled ? "ON" : "OFF"}
-                            </button>
+                            {!enabled &&
+                              component.configProps.map((prop) => (
+                                <div key={prop.name} className="flex flex-col gap-1.5">
+                                  <div className="text-[11.5px] text-ink-2">
+                                    {prop.label}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {prop.options.map((option) => {
+                                      const selected = (
+                                        selectedConfig[prop.name] ?? []
+                                      ).includes(option.value);
+                                      return (
+                                        <button
+                                          key={option.value}
+                                          type="button"
+                                          onClick={() =>
+                                            toggleNotificationOption(
+                                              connection.id,
+                                              component,
+                                              prop,
+                                              option.value,
+                                            )
+                                          }
+                                          className="rounded-chip border px-2.5 py-1.5 text-[11.5px]"
+                                          style={
+                                            selected
+                                              ? {
+                                                  background: "var(--teal-fill)",
+                                                  color: "var(--teal-on-fill)",
+                                                  borderColor: "transparent",
+                                                }
+                                              : {
+                                                  borderColor: "var(--hairline)",
+                                                  color: "var(--ink-2)",
+                                                }
+                                          }
+                                        >
+                                          {option.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
                           </div>
                         );
                       })}
