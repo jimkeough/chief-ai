@@ -129,25 +129,28 @@ to that identifier. Hosted authorization uses a short-lived Connect Link; the
 project client credentials never go to the browser.
 
 **What Pipedream can see:** which apps and accounts you connect, the OAuth
-grants it manages for those apps, and the connector tool requests and results
-that pass through its MCP service. Owner-published private actions run in the
-same owner-controlled Pipedream workspace and receive only the connected
-account grant and inputs needed for that action. That is the managed-connector
-give.
+grants it manages for those apps, connector tool requests and results that
+pass through its MCP service, and Connect API Proxy requests Chief makes to
+fill gaps in prebuilt actions (for example Front Core API search). Optional
+owner-published private actions run in the same owner-controlled Pipedream
+workspace and receive only the connected account grant and inputs needed for
+that action. That is the managed-connector give.
 
 **What Pipedream cannot see through this integration:** your Supabase database,
 AI credential, email app password, unrelated tasks, projects, memory, chat
 history, or approval decisions. Chief sends only the app/account-scoped MCP
-request needed for a selected connector tool.
+or proxy request needed for a selected connector operation.
 
 **Scoping and the gate:** each connected Pipedream account is a separate logical
 Chief connection. Its MCP session includes the project, environment,
 `external_user_id`, app slug, and account ID, so Chief never receives
 Pipedream's full cross-app catalog. Chief requests both the public registry and
 private actions the owner explicitly published to that same project and
-environment. Verified read-only tools default to Auto. Unknown tools and every
-write, send, or delete default to Ask and use the same broker, proposal card,
-live permission re-check, executor, and journal as a direct MCP server.
+environment. Connect Proxy calls use the same project credentials and the
+specific connected account ID; Chief-built proxy helpers that are read-only
+(such as Front tagged search) run as transparent read tools, while every write,
+send, or delete still defaults to Ask through the broker, proposal card, live
+permission re-check, executor, and journal.
 
 **Ejecting:** disconnect the account in Config to delete its Pipedream grant.
 Direct remote MCP remains available under **Advanced · Direct MCP**, so no
@@ -163,4 +166,5 @@ Chief-operated connector service is required.
    only ever be a convenience, so run it elsewhere.)
 3. **Watch the network**: the app's outbound calls go to your Supabase, your AI
    provider, your mail server, direct MCP servers you configure, and — when you
-   enable the default connector provider — Pipedream's API and MCP service.
+   enable the default connector provider — Pipedream's API, MCP service, and
+   Connect API Proxy (for authenticated upstream API calls on your behalf).

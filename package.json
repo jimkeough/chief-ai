@@ -8,7 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:document-import": "node --no-warnings --experimental-strip-types --test tests/document-import.test.mjs",
-    "test:pipedream-front": "node --no-warnings --experimental-strip-types --test tests/pipedream-front-search.test.mjs && node --check pipedream/components/frontapp/search-tagged-open-conversations.mjs",
+    "test:pipedream-front": "node --no-warnings --experimental-strip-types --test tests/pipedream-front-search.test.mjs",
     "release:check": "node scripts/check-release.mjs",
     "release:sync-updater": "node scripts/sync-updater-workflow.mjs",
     "release:patch": "npm version patch --no-git-tag-version",

@@ -1,13 +1,24 @@
-const text = (value) => (typeof value === "string" ? value.trim() : "");
-const record = (value) =>
-  value && typeof value === "object" && !Array.isArray(value) ? value : {};
+// Pure Front search helpers — no server/runtime imports (safe for strip-types tests).
 
-export function resultsFrom(response) {
+const text = (value: unknown): string =>
+  typeof value === "string" ? value.trim() : "";
+
+const record = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+export const FRONT_API_BASE = "https://api2.frontapp.com";
+export const DEFAULT_FRONT_INBOX_ZERO_TAG = "Chief Inbox Zero";
+export const FRONTAPP_PIPEDREAM_SLUG = "frontapp";
+
+export function resultsFrom(response: unknown): unknown[] {
   if (Array.isArray(response)) return response;
-  return Array.isArray(response?._results) ? response._results : [];
+  const envelope = record(response);
+  return Array.isArray(envelope._results) ? envelope._results : [];
 }
 
-export function pageTokenFromNext(next) {
+export function pageTokenFromNext(next: unknown): string | null {
   const value = text(next);
   if (!value) return null;
   try {
@@ -17,7 +28,7 @@ export function pageTokenFromNext(next) {
   }
 }
 
-export function buildTaggedOpenQuery(tagId) {
+export function buildTaggedOpenQuery(tagId: string): string {
   const id = text(tagId);
   if (!/^tag_[a-zA-Z0-9]+$/.test(id)) {
     throw new Error("Front returned an invalid tag ID.");
@@ -25,10 +36,11 @@ export function buildTaggedOpenQuery(tagId) {
   return `tag:${id} is:open`;
 }
 
-export function resolveExactTag(matches, requestedName) {
-  const exact = matches.filter(
-    (tag) => text(tag?.name) === requestedName,
-  );
+export function resolveExactTag(
+  matches: unknown[],
+  requestedName: string,
+): { id: string; name: string } {
+  const exact = matches.filter((tag) => text(record(tag).name) === requestedName);
   const candidates = exact.length ? exact : matches;
   if (candidates.length === 0) {
     throw new Error(`Front tag "${requestedName}" was not found.`);
@@ -38,10 +50,14 @@ export function resolveExactTag(matches, requestedName) {
       `More than one Front tag is named "${requestedName}". Rename the target tag so it is unique.`,
     );
   }
-  return candidates[0];
+  const tag = record(candidates[0]);
+  const id = text(tag.id);
+  const name = text(tag.name);
+  if (!id || !name) throw new Error(`Front tag "${requestedName}" was incomplete.`);
+  return { id, name };
 }
 
-function personLabel(value) {
+function personLabel(value: unknown): string {
   const person = record(value);
   return (
     text(person.name) ||
@@ -51,7 +67,21 @@ function personLabel(value) {
   );
 }
 
-export function compactConversation(value) {
+export type CompactFrontConversation = {
+  id: string;
+  subject: string;
+  status: string;
+  statusCategory: string;
+  updatedAt: unknown;
+  assignee: string;
+  correspondent: string;
+  tags: Array<{ id: string; name: string }>;
+  inboxes: Array<{ id: string; name: string }>;
+  preview: string;
+  link: string | null;
+};
+
+export function compactConversation(value: unknown): CompactFrontConversation {
   const conversation = record(value);
   const lastMessage = record(conversation.last_message);
   const recipient = record(conversation.recipient);
@@ -98,4 +128,12 @@ export function compactConversation(value) {
       ? `https://app.frontapp.com/open/${id}`
       : null,
   };
+}
+
+export function textField(value: unknown): string {
+  return text(value);
+}
+
+export function asRecord(value: unknown): Record<string, unknown> {
+  return record(value);
 }

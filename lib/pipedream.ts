@@ -96,12 +96,11 @@ type AccessToken = { token: string; expiresAt: number };
 const tokenCache = new Map<string, AccessToken>();
 
 class PipedreamRequestError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
+  readonly status: number;
+  constructor(message: string, status: number) {
     super(message);
     this.name = "PipedreamRequestError";
+    this.status = status;
   }
 }
 
@@ -957,10 +956,140 @@ export async function getRuntimePipedreamServers(
   );
 }
 
+/** First healthy Pipedream connection for an app slug (e.g. `frontapp`). */
+export async function findPipedreamConnectionByApp(
+  userId: string,
+  appSlug: string,
+): Promise<PipedreamConnection | null> {
+  const slug = clean(appSlug);
+  if (!slug) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("pipedream_connections")
+    .select("id,account_id,app_slug,app_name,account_name,healthy")
+    .eq("user_id", userId)
+    .eq("app_slug", slug)
+    .eq("healthy", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return toPublic(data as ConnectionRow);
+}
+
+export type PipedreamProxyMethod =
+  | "GET"
+  | "POST"
+  | "PUT"
+  | "PATCH"
+  | "DELETE";
+
+export type PipedreamProxyRequest = {
+  accountId: string;
+  /** Full upstream URL or app-relative path (see Pipedream Connect proxy docs). */
+  url: string;
+  method?: PipedreamProxyMethod;
+  body?: unknown;
+  /** Only `x-pd-proxy-*` headers are forwarded to the upstream API. */
+  headers?: Record<string, string>;
+};
+
+/** URL-safe Base64 encode a Connect proxy target URL (exported for tests). */
+export function encodePipedreamProxyTarget(url: string): string {
+  return Buffer.from(url, "utf8").toString("base64url");
+}
+
+/**
+ * Call any integrated upstream API through Pipedream Connect Proxy, using the
+ * connected account's managed OAuth/API credentials. Use this when a prebuilt
+ * MCP action is missing or needs a custom request shape.
+ */
+export async function pipedreamProxyRequest(
+  userId: string,
+  request: PipedreamProxyRequest,
+): Promise<unknown> {
+  const config = await requireRuntimeConfig(userId);
+  const accountId = clean(request.accountId);
+  if (!/^apn_[a-zA-Z0-9]+$/.test(accountId)) {
+    throw new Error("Choose a valid Pipedream connected account.");
+  }
+  const targetUrl = clean(request.url);
+  if (!targetUrl) throw new Error("Enter the upstream API URL.");
+
+  const method = request.method ?? "GET";
+  const encodedUrl = encodePipedreamProxyTarget(targetUrl);
+  const qs = new URLSearchParams({
+    external_user_id: userId,
+    account_id: accountId,
+  });
+  const path = `/connect/${encodeURIComponent(config.projectId)}/proxy/${encodedUrl}?${qs}`;
+
+  const { token } = await fetchAccessToken(config);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "x-pd-environment": config.environment,
+  };
+  if (request.headers) {
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (key.toLowerCase().startsWith("x-pd-proxy-") && clean(value)) {
+        headers[key] = value;
+      }
+    }
+  }
+  if (method !== "GET" && method !== "DELETE" && request.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const response = await fetch(`${PIPEDREAM_API}${path}`, {
+    method,
+    headers,
+    ...(request.body !== undefined && method !== "GET" && method !== "DELETE"
+      ? { body: JSON.stringify(request.body) }
+      : {}),
+    cache: "no-store",
+    signal: AbortSignal.timeout(25_000),
+  });
+
+  if (!response.ok) {
+    const detail = (await response.json().catch(() => ({}))) as {
+      error?: unknown;
+      message?: unknown;
+    };
+    const reason = clean(detail.error ?? detail.message).slice(0, 180);
+    if (response.status === 401 || response.status === 403) {
+      throw new PipedreamRequestError(
+        "Pipedream rejected the stored project credentials.",
+        response.status,
+      );
+    }
+    if (response.status === 404) {
+      throw new PipedreamRequestError(
+        "Pipedream could not find that project or connected account.",
+        response.status,
+      );
+    }
+    if (response.status === 429) {
+      throw new PipedreamRequestError(
+        "Pipedream is rate-limiting requests. Try again shortly.",
+        response.status,
+      );
+    }
+    throw new PipedreamRequestError(
+      reason
+        ? `Pipedream proxy rejected that request: ${reason}`
+        : `Pipedream proxy request failed (${response.status}).`,
+      response.status,
+    );
+  }
+  if (response.status === 204) return null;
+  return response.json().catch(() => null);
+}
+
 export function publicPipedreamError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : "";
   if (
-    /^(Enter|Choose|Disconnect Pipedream|Finish Pipedream|Pipedream (rejected|could not|did not|returned|is rate-limiting|request failed)|Invalid return URL|Stored Pipedream|Pipedream connection not found)/.test(
+    /^(Enter|Choose|Disconnect Pipedream|Finish Pipedream|Pipedream (rejected|could not|did not|returned|is rate-limiting|request failed|proxy)|Invalid return URL|Stored Pipedream|Pipedream connection not found|Sign in)/.test(
       message,
     )
   ) {

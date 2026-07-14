@@ -1,40 +1,30 @@
-# Chief custom Pipedream tools
+# Pipedream in Chief
 
-Chief requests Pipedream's public and private MCP registries. Private actions
-published to the same Connect project and environment therefore appear under
-the connected app's **Tools** menu and use that account's existing managed
-authentication.
+Pipedream is the default connector path:
 
-Custom tools require a Pipedream Business plan and the Pipedream CLI.
+1. **MCP tools** — each connected account exposes that app's prebuilt actions
+   through Pipedream's remote MCP. Reads default to Auto; writes stay on Ask.
+2. **Connect API Proxy** — when a prebuilt action is missing or too narrow,
+   Chief can call the upstream API through Pipedream with the same managed
+   OAuth grant (`pipedreamProxyRequest` in `lib/pipedream.ts`).
 
-## Front: tagged open conversations
+## Front tagged search
 
-`components/frontapp/search-tagged-open-conversations.mjs` resolves an exact
-Front tag name, searches the Front Core API for open conversations carrying
-that tag, and returns compact pages to Chief. It does not modify Front.
+Front's public Pipedream `list-conversations` action cannot filter by tag.
+Chief therefore searches open tagged conversations with the native read tool
+`search_front_tagged_conversations` (`lib/front-search.ts`), which:
 
-1. Install and authenticate the Pipedream CLI by following
-   [Pipedream's action quickstart](https://pipedream.com/docs/components/contributing/actions-quickstart),
-   then run `pd login`.
-2. From this repository, publish to the environment selected in
-   **Chief → Config → Connections → Pipedream**:
+- resolves the exact tag name (default `Chief Inbox Zero`)
+- calls Front Core API `GET /conversations/search/{tag:ID is:open}` through
+  Connect Proxy
+- returns compact, paginated results for triage
 
-   ```sh
-   pd publish pipedream/components/frontapp/search-tagged-open-conversations.mjs \
-     --connect-environment production
-   ```
+No Front API token is stored in Chief. No private Pipedream action publish
+step is required. After inventory, use Front MCP tools to read details and
+propose writes (archive, assign, tag, comment, draft reply).
 
-   Use `development` instead when Chief's Pipedream configuration uses that
-   environment.
-3. Wait about a minute for Chief's MCP tool cache, then expand
-   **Config → Connections → Front → Tools**.
-4. Set **Search Tagged Open Conversations** to **Auto**. Keep Front write tools
-   such as archive, assign, tag, comment, and draft reply on **Ask**.
-5. Ask Chief:
+Example ask:
 
-   > Search every open Front conversation tagged "Chief Inbox Zero". Follow
-   > `nextCursor` until `hasMore` is false. Make no Front changes. Report the
-   > final count, then triage the oldest 10 conversations.
-
-The action uses Pipedream's existing Front OAuth grant. Do not paste a Front API
-token into the component, Chief, source control, or chat.
+> Search every open Front conversation tagged "Chief Inbox Zero". Follow
+> `nextCursor` until `hasMore` is false. Make no Front changes. Report the
+> final count, then triage the oldest 10 conversations.

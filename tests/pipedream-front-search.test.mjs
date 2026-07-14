@@ -7,10 +7,12 @@ import {
 import {
   buildTaggedOpenQuery,
   compactConversation,
+  DEFAULT_FRONT_INBOX_ZERO_TAG,
+  FRONT_API_BASE,
   pageTokenFromNext,
   resolveExactTag,
   resultsFrom,
-} from "../pipedream/components/frontapp/search-tagged-open-conversations.helpers.mjs";
+} from "../lib/front-search-helpers.ts";
 
 test("requests both public and private Pipedream MCP tools", () => {
   const server = buildPipedreamMcpServerConfig({
@@ -40,12 +42,20 @@ test("requests both public and private Pipedream MCP tools", () => {
   assert.equal(server.trustAnnotations, true);
 });
 
+test("uses Front Core API host for Connect proxy targets", () => {
+  assert.equal(FRONT_API_BASE, "https://api2.frontapp.com");
+  const url = `${FRONT_API_BASE}/tags?limit=100`;
+  // Matches encodePipedreamProxyTarget in lib/pipedream.ts.
+  assert.match(Buffer.from(url, "utf8").toString("base64url"), /^[A-Za-z0-9_-]+$/);
+});
+
 test("builds an exact tagged-open Front query", () => {
   assert.equal(
     buildTaggedOpenQuery("tag_Chief123"),
     "tag:tag_Chief123 is:open",
   );
   assert.throws(() => buildTaggedOpenQuery("380024798"), /invalid tag ID/);
+  assert.equal(DEFAULT_FRONT_INBOX_ZERO_TAG, "Chief Inbox Zero");
 });
 
 test("extracts Front pagination cursors", () => {
@@ -66,7 +76,11 @@ test("resolves one exact Front tag from API envelopes", () => {
       { id: "tag_2", name: "Chief Inbox Zero" },
     ],
   }).filter(
-    (tag) => tag.name.toLowerCase() === "chief inbox zero".toLowerCase(),
+    (tag) =>
+      typeof tag === "object" &&
+      tag &&
+      "name" in tag &&
+      String(tag.name).toLowerCase() === "chief inbox zero",
   );
   assert.deepEqual(resolveExactTag(tags, "Chief Inbox Zero"), {
     id: "tag_2",

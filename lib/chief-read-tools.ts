@@ -16,6 +16,10 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { listTasks, type Task } from "@/lib/tasks";
 import { listProjectsWithState } from "@/lib/projects";
 import { buildTaskDigest, buildProjectDigest } from "@/lib/chief";
+import {
+  DEFAULT_FRONT_INBOX_ZERO_TAG,
+  searchTaggedOpenConversations,
+} from "@/lib/front-search";
 
 export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   {
@@ -52,6 +56,27 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         include_done: {
           type: "boolean",
           description: "Include completed tasks (default false).",
+        },
+      },
+    },
+  },
+  {
+    name: "search_front_tagged_conversations",
+    description: `Search open Front conversations that carry an exact tag, using the owner's Pipedream-connected Front account via Connect API Proxy. Default tag is "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Returns one compact page; pass nextCursor until hasMore is false before claiming a full inventory. Read-only — does not change Front. After inventory, use Front MCP tools to read details and propose writes (archive, assign, tag, comment, reply) through the approval gate.`,
+    input_schema: {
+      type: "object",
+      properties: {
+        tag_name: {
+          type: "string",
+          description: `Exact Front tag name (default "${DEFAULT_FRONT_INBOX_ZERO_TAG}").`,
+        },
+        limit: {
+          type: "number",
+          description: "Page size from 1 to 100 (default 25).",
+        },
+        cursor: {
+          type: "string",
+          description: "nextCursor from the previous page.",
         },
       },
     },
@@ -101,6 +126,15 @@ export async function runChiefReadTool(
     const projects = await listProjectsWithState().catch(() => []);
     const projectNames = new Map(projects.map((p) => [p.id, p.name]));
     return buildTaskDigest(filtered, projectNames);
+  }
+
+  if (name === "search_front_tagged_conversations") {
+    const result = await searchTaggedOpenConversations({
+      tagName: typeof args.tag_name === "string" ? args.tag_name : undefined,
+      limit: typeof args.limit === "number" ? args.limit : undefined,
+      cursor: typeof args.cursor === "string" ? args.cursor : undefined,
+    });
+    return JSON.stringify(result);
   }
 
   return `Unknown tool: ${name}`;
