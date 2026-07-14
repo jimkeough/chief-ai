@@ -148,7 +148,7 @@ Pipedream's full cross-app catalog. Chief requests both the public registry and
 private actions the owner explicitly published to that same project and
 environment. Connect Proxy calls use the same project credentials and the
 specific connected account ID; Chief-built proxy helpers that are read-only
-(such as Front tagged search) run as transparent read tools, while every write,
+(such as Front conversation search) run as transparent read tools, while every write,
 send, or delete still defaults to Ask through the broker, proposal card, live
 permission re-check, executor, and journal.
 

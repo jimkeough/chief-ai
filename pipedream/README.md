@@ -8,23 +8,27 @@ Pipedream is the default connector path:
    Chief can call the upstream API through Pipedream with the same managed
    OAuth grant (`pipedreamProxyRequest` in `lib/pipedream.ts`).
 
-## Front tagged search
+## Front conversation inventory
 
-Front's public Pipedream `list-conversations` action cannot filter by tag.
-Chief therefore searches open tagged conversations with the native read tool
-`search_front_tagged_conversations` (`lib/front-search.ts`), which:
+Front's public Pipedream `list-conversations` action cannot filter by tag,
+inbox, or assignee. Chief therefore searches with the native read tool
+`search_front_conversations` (`lib/front-search.ts`), which:
 
-- resolves the exact tag name (default `Chief Inbox Zero`)
-- calls Front Core API `GET /conversations/search/{tag:ID is:open}` through
-  Connect Proxy
+- resolves the authorizing Front teammate via `GET /me` (important for admins
+  with private/individual tags)
+- looks up tags on both `/tags` and `/teammates/{id}/tags`
+- for a tag filter, lists `/tags/{id}/conversations` (same path as Front's tag
+  view) with open statuses
+- without a tag, searches `is:open` scoped to that teammate as participant by
+  default
 - returns compact, paginated results for triage
 
-No Front API token is stored in Chief. No private Pipedream action publish
-step is required. After inventory, use Front MCP tools to read details and
-propose writes (archive, assign, tag, comment, draft reply).
+No Front API token is stored in Chief. After inventory, use Front MCP tools to
+read details and propose writes (archive, assign, tag, comment, draft reply).
+Keep those write tools on **Ask** (not Off).
 
 Example ask:
 
-> Search every open Front conversation tagged "Chief Inbox Zero". Follow
+> Search open Front conversations tagged "Chief Inbox Zero". Follow
 > `nextCursor` until `hasMore` is false. Make no Front changes. Report the
-> final count, then triage the oldest 10 conversations.
+> final count, then triage the oldest 10.

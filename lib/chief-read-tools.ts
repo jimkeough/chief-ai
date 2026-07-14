@@ -18,6 +18,7 @@ import { listProjectsWithState } from "@/lib/projects";
 import { buildTaskDigest, buildProjectDigest } from "@/lib/chief";
 import {
   DEFAULT_FRONT_INBOX_ZERO_TAG,
+  searchFrontConversations,
   searchTaggedOpenConversations,
 } from "@/lib/front-search";
 
@@ -61,14 +62,59 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "search_front_conversations",
+    description:
+      "Search open Front conversations via the owner's Pipedream-connected Front account (Connect API Proxy). Resolves the authorizing Front teammate via /me so private/individual tags (common for admins) are found under /teammates/{id}/tags. With tag_name, lists that tag's open conversations (Front tag view). Without tag_name, searches is:open scoped to the teammate as participant by default (override with assignee/inbox_name or set participant). Optional filters: tag_name, inbox_name, assignee, participant, teammate (tea_ id / email / name). Page with nextCursor until hasMore is false. Read-only. After inventory, propose Front MCP writes on Ask.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tag_name: {
+          type: "string",
+          description: "Optional exact Front tag name filter (company or private teammate tag).",
+        },
+        inbox_name: {
+          type: "string",
+          description: "Optional exact Front inbox name filter.",
+        },
+        assignee: {
+          type: "string",
+          description: "Optional teammate name, email, or tea_ id (assignee filter).",
+        },
+        participant: {
+          type: "string",
+          description:
+            "Optional teammate name, email, or tea_ id (participant filter). Defaults to authorizing teammate when no tag/inbox/assignee is set.",
+        },
+        teammate: {
+          type: "string",
+          description:
+            "Teammate that owns private tags. Defaults to Front /me for the Pipedream OAuth grant. Accepts tea_ id, tea: id, email, or name.",
+        },
+        limit: {
+          type: "number",
+          description: "Page size from 1 to 100 (default 25).",
+        },
+        cursor: {
+          type: "string",
+          description: "nextCursor from the previous page.",
+        },
+      },
+    },
+  },
+  {
     name: "search_front_tagged_conversations",
-    description: `Search open Front conversations that carry an exact tag, using the owner's Pipedream-connected Front account via Connect API Proxy. Default tag is "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Returns one compact page; pass nextCursor until hasMore is false before claiming a full inventory. Read-only — does not change Front. After inventory, use Front MCP tools to read details and propose writes (archive, assign, tag, comment, reply) through the approval gate.`,
+    description: `Convenience alias for search_front_conversations with tag_name defaulting to "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Resolves private teammate tags via /me.`,
     input_schema: {
       type: "object",
       properties: {
         tag_name: {
           type: "string",
           description: `Exact Front tag name (default "${DEFAULT_FRONT_INBOX_ZERO_TAG}").`,
+        },
+        teammate: {
+          type: "string",
+          description:
+            "Teammate that owns the private tag. Defaults to Front /me.",
         },
         limit: {
           type: "number",
@@ -128,9 +174,24 @@ export async function runChiefReadTool(
     return buildTaskDigest(filtered, projectNames);
   }
 
+  if (name === "search_front_conversations") {
+    const result = await searchFrontConversations({
+      tagName: typeof args.tag_name === "string" ? args.tag_name : undefined,
+      inboxName: typeof args.inbox_name === "string" ? args.inbox_name : undefined,
+      assignee: typeof args.assignee === "string" ? args.assignee : undefined,
+      participant:
+        typeof args.participant === "string" ? args.participant : undefined,
+      teammate: typeof args.teammate === "string" ? args.teammate : undefined,
+      limit: typeof args.limit === "number" ? args.limit : undefined,
+      cursor: typeof args.cursor === "string" ? args.cursor : undefined,
+    });
+    return JSON.stringify(result);
+  }
+
   if (name === "search_front_tagged_conversations") {
     const result = await searchTaggedOpenConversations({
       tagName: typeof args.tag_name === "string" ? args.tag_name : undefined,
+      teammate: typeof args.teammate === "string" ? args.teammate : undefined,
       limit: typeof args.limit === "number" ? args.limit : undefined,
       cursor: typeof args.cursor === "string" ? args.cursor : undefined,
     });
