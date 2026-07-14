@@ -14,7 +14,8 @@ Front tag name, searches the Front Core API for open conversations carrying
 that tag, and returns compact pages to Chief. It does not modify Front.
 
 1. Install and authenticate the Pipedream CLI by following
-   [Pipedream's component quickstart](https://pipedream.com/docs/components/quickstart/nodejs/actions/).
+   [Pipedream's action quickstart](https://pipedream.com/docs/components/contributing/actions-quickstart),
+   then run `pd login`.
 2. From this repository, publish to the environment selected in
    **Chief → Config → Connections → Pipedream**:
 
