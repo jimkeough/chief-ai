@@ -2,8 +2,12 @@
 //
 // Pipedream MCP exposes prebuilt Front actions; list-conversations cannot
 // filter by tag/inbox/assignee. When a managed action is missing, Chief calls
-// Front's Core API search through Connect Proxy with the owner's existing
-// Front OAuth grant — no Front token in Chief.
+// Front's Core API through Connect Proxy with the owner's existing Front OAuth
+// grant — no Front token in Chief.
+//
+// Individual (private) tags live under /teammates/{id}/tags, not only /tags.
+// Admins who create personal tags like "Chief Inbox Zero" must be resolved via
+// GET /me (or an explicit teammate id) before tag search works.
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -13,15 +17,19 @@ import {
 import {
   asRecord,
   buildOpenSearchQuery,
+  buildTagOpenConversationsPath,
   buildTaggedOpenQuery,
   compactConversation,
   DEFAULT_FRONT_INBOX_ZERO_TAG,
   FRONT_API_BASE,
   FRONTAPP_PIPEDREAM_SLUG,
+  nameMatchesIgnoreCase,
+  normalizeFrontTeammateId,
   pageTokenFromNext,
   resolveExactNamedResource,
   resolveExactTag,
   resultsFrom,
+  teammateLabel,
   teammateMatches,
   textField,
   type CompactFrontConversation,
@@ -29,11 +37,13 @@ import {
 
 export {
   buildOpenSearchQuery,
+  buildTagOpenConversationsPath,
   buildTaggedOpenQuery,
   compactConversation,
   DEFAULT_FRONT_INBOX_ZERO_TAG,
   FRONT_API_BASE,
   FRONTAPP_PIPEDREAM_SLUG,
+  normalizeFrontTeammateId,
   pageTokenFromNext,
   resolveExactTag,
   resultsFrom,
@@ -77,11 +87,7 @@ async function paginateCollection(
   do {
     const qs = new URLSearchParams({ limit: "100" });
     if (pageToken) qs.set("page_token", pageToken);
-    const response = await frontProxyGet(
-      userId,
-      accountId,
-      `${path}?${qs}`,
-    );
+    const response = await frontProxyGet(userId, accountId, `${path}?${qs}`);
     for (const item of resultsFrom(response)) {
       if (pick(item)) matches.push(item);
     }
@@ -95,20 +101,54 @@ async function paginateCollection(
   return matches;
 }
 
+async function fetchFrontMe(
+  userId: string,
+  accountId: string,
+): Promise<{ id: string; name: string }> {
+  const me = asRecord(await frontProxyGet(userId, accountId, "/me"));
+  const id = normalizeFrontTeammateId(textField(me.id));
+  const name = teammateLabel(me) || textField(me.email) || id;
+  if (!/^tea_[a-zA-Z0-9]+$/.test(id)) {
+    throw new Error("Front did not return the authorizing teammate id (/me).");
+  }
+  return { id, name };
+}
+
 async function resolveTagByName(
   userId: string,
   accountId: string,
   requestedName: string,
-): Promise<{ id: string; name: string }> {
-  const matches = await paginateCollection(
+  teammateId: string,
+): Promise<{ id: string; name: string; scope: "company" | "teammate" }> {
+  const pickName = (tag: unknown) =>
+    nameMatchesIgnoreCase(asRecord(tag).name, requestedName);
+
+  const companyMatches = await paginateCollection(
     userId,
     accountId,
     "/tags",
-    (tag) =>
-      textField(asRecord(tag).name).toLowerCase() ===
-      requestedName.toLowerCase(),
+    pickName,
   );
-  return resolveExactTag(matches, requestedName);
+  if (companyMatches.length > 0) {
+    return { ...resolveExactTag(companyMatches, requestedName), scope: "company" };
+  }
+
+  const teammateMatchesForTag = await paginateCollection(
+    userId,
+    accountId,
+    `/teammates/${encodeURIComponent(teammateId)}/tags`,
+    pickName,
+  );
+  if (teammateMatchesForTag.length > 0) {
+    return {
+      ...resolveExactTag(teammateMatchesForTag, requestedName),
+      scope: "teammate",
+    };
+  }
+
+  throw new Error(
+    `Front tag "${requestedName}" was not found on company tags or teammate ${teammateId}'s tags.`,
+  );
 }
 
 async function resolveInboxByName(
@@ -120,9 +160,7 @@ async function resolveInboxByName(
     userId,
     accountId,
     "/inboxes",
-    (inbox) =>
-      textField(asRecord(inbox).name).toLowerCase() ===
-      requestedName.toLowerCase(),
+    (inbox) => nameMatchesIgnoreCase(asRecord(inbox).name, requestedName),
   );
   return resolveExactNamedResource(matches, requestedName, "inbox");
 }
@@ -132,6 +170,21 @@ async function resolveTeammate(
   accountId: string,
   requested: string,
 ): Promise<{ id: string; name: string }> {
+  const normalized = normalizeFrontTeammateId(requested);
+  if (/^tea_[a-zA-Z0-9]+$/.test(normalized)) {
+    const direct = asRecord(
+      await frontProxyGet(
+        userId,
+        accountId,
+        `/teammates/${encodeURIComponent(normalized)}`,
+      ),
+    );
+    const id = normalizeFrontTeammateId(textField(direct.id) || normalized);
+    const name = teammateLabel(direct) || textField(direct.email) || id;
+    if (!id) throw new Error(`Front teammate "${requested}" was not found.`);
+    return { id, name };
+  }
+
   const matches = await paginateCollection(userId, accountId, "/teammates", (t) =>
     teammateMatches(t, requested),
   );
@@ -146,24 +199,18 @@ async function resolveTeammate(
     const chosen = exact.length === 1 ? exact : matches;
     if (chosen.length > 1) {
       throw new Error(
-        `More than one Front teammate matches "${requested}". Use their email.`,
+        `More than one Front teammate matches "${requested}". Use their email or tea_ id.`,
       );
     }
     const item = asRecord(chosen[0]);
     return {
-      id: textField(item.id),
-      name:
-        textField(item.name) ||
-        `${textField(item.first_name)} ${textField(item.last_name)}`.trim() ||
-        textField(item.email),
+      id: normalizeFrontTeammateId(textField(item.id)),
+      name: teammateLabel(item) || textField(item.email),
     };
   }
   const item = asRecord(matches[0]);
-  const id = textField(item.id);
-  const name =
-    textField(item.name) ||
-    `${textField(item.first_name)} ${textField(item.last_name)}`.trim() ||
-    textField(item.email);
+  const id = normalizeFrontTeammateId(textField(item.id));
+  const name = teammateLabel(item) || textField(item.email);
   if (!id || !name) throw new Error(`Front teammate "${requested}" was incomplete.`);
   return { id, name };
 }
@@ -173,21 +220,28 @@ export type FrontSearchInput = {
   tagName?: string;
   /** Exact inbox name. Optional. */
   inboxName?: string;
-  /** Teammate name or email for assignee: filter. Optional. */
+  /** Teammate name, email, or tea_ id for assignee: filter. Optional. */
   assignee?: string;
-  /** Teammate name or email for participant: filter. Optional. */
+  /** Teammate name, email, or tea_ id for participant: filter. Optional. */
   participant?: string;
+  /**
+   * Teammate that owns private tags / personal resources. Defaults to the
+   * Front teammate behind the Pipedream OAuth grant (GET /me).
+   */
+  teammate?: string;
   limit?: number;
   cursor?: string;
 };
 
 export type FrontSearchResult = {
   query: string;
+  source: "search" | "tag_conversations";
   filters: {
-    tag?: { id: string; name: string };
+    tag?: { id: string; name: string; scope?: "company" | "teammate" };
     inbox?: { id: string; name: string };
     assignee?: { id: string; name: string };
     participant?: { id: string; name: string };
+    teammate?: { id: string; name: string };
   };
   account: string;
   count: number;
@@ -223,11 +277,52 @@ export async function searchFrontConversations(
   const inboxName = textField(input.inboxName);
   const assignee = textField(input.assignee);
   const participant = textField(input.participant);
+  const teammateHint = textField(input.teammate);
 
-  const filters: FrontSearchResult["filters"] = {};
+  const me = await fetchFrontMe(userId, connection.accountId);
+  const owner = teammateHint
+    ? await resolveTeammate(userId, connection.accountId, teammateHint)
+    : me;
+
+  const filters: FrontSearchResult["filters"] = {
+    teammate: owner,
+  };
+
   if (tagName) {
-    filters.tag = await resolveTagByName(userId, connection.accountId, tagName);
+    const tag = await resolveTagByName(
+      userId,
+      connection.accountId,
+      tagName,
+      owner.id,
+    );
+    filters.tag = tag;
+
+    // Private/individual tags are most reliably inventoried through the tag's
+    // conversations collection (what the Front tag view uses), not company search.
+    const response = await frontProxyGet(
+      userId,
+      connection.accountId,
+      buildTagOpenConversationsPath(tag.id, limit, cursor),
+    );
+    const envelope = asRecord(response);
+    const nextCursor = pageTokenFromNext(asRecord(envelope._pagination).next);
+    const conversations = resultsFrom(response).map(compactConversation);
+    const total =
+      typeof envelope._total === "number" ? envelope._total : undefined;
+
+    return {
+      query: `tag:${tag.id} statuses:assigned,unassigned`,
+      source: "tag_conversations",
+      filters,
+      account: connection.accountName ?? connection.accountId,
+      count: conversations.length,
+      ...(total !== undefined ? { total } : {}),
+      conversations,
+      nextCursor,
+      hasMore: Boolean(nextCursor),
+    };
   }
+
   if (inboxName) {
     filters.inbox = await resolveInboxByName(
       userId,
@@ -248,6 +343,10 @@ export async function searchFrontConversations(
       connection.accountId,
       participant,
     );
+  } else if (!inboxName && !assignee) {
+    // Default open inventory to the authorizing teammate's participation so
+    // admin OAuth still surfaces personal/subscribed work (Jim folder, etc.).
+    filters.participant = owner;
   }
 
   const query = buildOpenSearchQuery({
@@ -272,6 +371,7 @@ export async function searchFrontConversations(
 
   return {
     query,
+    source: "search",
     filters,
     account: connection.accountName ?? connection.accountId,
     count: conversations.length,
@@ -282,14 +382,16 @@ export async function searchFrontConversations(
   };
 }
 
-/** @deprecated Prefer searchFrontConversations. Kept for the tagged-tool alias. */
+/** Convenience alias that defaults the Chief Inbox Zero tag name. */
 export async function searchTaggedOpenConversations(input: {
   tagName?: string;
+  teammate?: string;
   limit?: number;
   cursor?: string;
 }): Promise<FrontSearchResult> {
   return searchFrontConversations({
     tagName: textField(input.tagName) || DEFAULT_FRONT_INBOX_ZERO_TAG,
+    teammate: input.teammate,
     limit: input.limit,
     cursor: input.cursor,
   });

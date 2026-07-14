@@ -118,9 +118,11 @@ export function teammateLabel(value: unknown): string {
 }
 
 export function teammateMatches(value: unknown, requested: string): boolean {
-  const needle = requested.trim().toLowerCase();
+  const needle = normalizeFrontTeammateId(requested).toLowerCase();
   if (!needle) return false;
   const person = record(value);
+  const id = text(person.id).toLowerCase();
+  if (id && id === needle) return true;
   const labels = [
     text(person.name),
     `${text(person.first_name)} ${text(person.last_name)}`.trim(),
@@ -130,6 +132,36 @@ export function teammateMatches(value: unknown, requested: string): boolean {
     .map((label) => label.toLowerCase())
     .filter(Boolean);
   return labels.some((label) => label === needle || label.includes(needle));
+}
+
+/** Front UI sometimes uses tea:123; Core API expects tea_123. */
+export function normalizeFrontTeammateId(raw: string): string {
+  const value = text(raw);
+  if (/^tea:[a-zA-Z0-9]+$/.test(value)) return `tea_${value.slice(4)}`;
+  return value;
+}
+
+export function nameMatchesIgnoreCase(actual: unknown, requested: string): boolean {
+  return text(actual).toLowerCase() === text(requested).toLowerCase();
+}
+
+/** Path for open (assigned+unassigned) conversations on a tag. */
+export function buildTagOpenConversationsPath(
+  tagId: string,
+  limit: number,
+  cursor?: string,
+): string {
+  const id = text(tagId);
+  if (!/^tag_[a-zA-Z0-9]+$/.test(id)) {
+    throw new Error("Front returned an invalid tag ID.");
+  }
+  const qs = new URLSearchParams();
+  qs.set("limit", String(limit));
+  if (cursor) qs.set("page_token", cursor);
+  // Front's Open tab ≈ assigned + unassigned (excludes archived/trashed/snoozed).
+  qs.append("q[statuses][]", "assigned");
+  qs.append("q[statuses][]", "unassigned");
+  return `/tags/${encodeURIComponent(id)}/conversations?${qs}`;
 }
 
 export type CompactFrontConversation = {

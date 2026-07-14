@@ -64,13 +64,13 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   {
     name: "search_front_conversations",
     description:
-      "Search open Front conversations via the owner's Pipedream-connected Front account (Connect API Proxy). With no filters, returns open conversations across accessible inboxes. Optionally filter by exact tag_name, exact inbox_name, assignee (teammate name/email), and/or participant (teammate name/email). Returns one compact page; pass nextCursor until hasMore is false before claiming a full inventory. Prefer this for inbox-zero inventory — do not require a tag to exist. Read-only. After inventory, use Front MCP tools to read details and propose writes (archive, assign, tag, comment, reply) through Ask.",
+      "Search open Front conversations via the owner's Pipedream-connected Front account (Connect API Proxy). Resolves the authorizing Front teammate via /me so private/individual tags (common for admins) are found under /teammates/{id}/tags. With tag_name, lists that tag's open conversations (Front tag view). Without tag_name, searches is:open scoped to the teammate as participant by default (override with assignee/inbox_name or set participant). Optional filters: tag_name, inbox_name, assignee, participant, teammate (tea_ id / email / name). Page with nextCursor until hasMore is false. Read-only. After inventory, propose Front MCP writes on Ask.",
     input_schema: {
       type: "object",
       properties: {
         tag_name: {
           type: "string",
-          description: "Optional exact Front tag name filter.",
+          description: "Optional exact Front tag name filter (company or private teammate tag).",
         },
         inbox_name: {
           type: "string",
@@ -78,12 +78,17 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         },
         assignee: {
           type: "string",
-          description: "Optional teammate name or email (assignee filter).",
+          description: "Optional teammate name, email, or tea_ id (assignee filter).",
         },
         participant: {
           type: "string",
           description:
-            "Optional teammate name or email (participant / subscribed filter).",
+            "Optional teammate name, email, or tea_ id (participant filter). Defaults to authorizing teammate when no tag/inbox/assignee is set.",
+        },
+        teammate: {
+          type: "string",
+          description:
+            "Teammate that owns private tags. Defaults to Front /me for the Pipedream OAuth grant. Accepts tea_ id, tea: id, email, or name.",
         },
         limit: {
           type: "number",
@@ -98,13 +103,18 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "search_front_tagged_conversations",
-    description: `Convenience alias for search_front_conversations with tag_name defaulting to "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Prefer search_front_conversations without a tag when inventoring all open work.`,
+    description: `Convenience alias for search_front_conversations with tag_name defaulting to "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Resolves private teammate tags via /me.`,
     input_schema: {
       type: "object",
       properties: {
         tag_name: {
           type: "string",
           description: `Exact Front tag name (default "${DEFAULT_FRONT_INBOX_ZERO_TAG}").`,
+        },
+        teammate: {
+          type: "string",
+          description:
+            "Teammate that owns the private tag. Defaults to Front /me.",
         },
         limit: {
           type: "number",
@@ -171,6 +181,7 @@ export async function runChiefReadTool(
       assignee: typeof args.assignee === "string" ? args.assignee : undefined,
       participant:
         typeof args.participant === "string" ? args.participant : undefined,
+      teammate: typeof args.teammate === "string" ? args.teammate : undefined,
       limit: typeof args.limit === "number" ? args.limit : undefined,
       cursor: typeof args.cursor === "string" ? args.cursor : undefined,
     });
@@ -180,6 +191,7 @@ export async function runChiefReadTool(
   if (name === "search_front_tagged_conversations") {
     const result = await searchTaggedOpenConversations({
       tagName: typeof args.tag_name === "string" ? args.tag_name : undefined,
+      teammate: typeof args.teammate === "string" ? args.teammate : undefined,
       limit: typeof args.limit === "number" ? args.limit : undefined,
       cursor: typeof args.cursor === "string" ? args.cursor : undefined,
     });

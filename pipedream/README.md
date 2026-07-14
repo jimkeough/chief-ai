@@ -14,9 +14,13 @@ Front's public Pipedream `list-conversations` action cannot filter by tag,
 inbox, or assignee. Chief therefore searches with the native read tool
 `search_front_conversations` (`lib/front-search.ts`), which:
 
-- defaults to open conversations (`is:open`) with no tag required
-- optionally filters by exact tag, inbox, assignee, or participant
-- calls Front Core API `GET /conversations/search/{query}` through Connect Proxy
+- resolves the authorizing Front teammate via `GET /me` (important for admins
+  with private/individual tags)
+- looks up tags on both `/tags` and `/teammates/{id}/tags`
+- for a tag filter, lists `/tags/{id}/conversations` (same path as Front's tag
+  view) with open statuses
+- without a tag, searches `is:open` scoped to that teammate as participant by
+  default
 - returns compact, paginated results for triage
 
 No Front API token is stored in Chief. After inventory, use Front MCP tools to
@@ -25,6 +29,6 @@ Keep those write tools on **Ask** (not Off).
 
 Example ask:
 
-> Search open Front conversations. Follow `nextCursor` until `hasMore` is
-> false. Make no Front changes. Report the final count, then triage the
-> oldest 10 conversations.
+> Search open Front conversations tagged "Chief Inbox Zero". Follow
+> `nextCursor` until `hasMore` is false. Make no Front changes. Report the
+> final count, then triage the oldest 10.

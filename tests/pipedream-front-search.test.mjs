@@ -6,10 +6,12 @@ import {
 } from "../lib/pipedream-mcp-config.ts";
 import {
   buildOpenSearchQuery,
+  buildTagOpenConversationsPath,
   buildTaggedOpenQuery,
   compactConversation,
   DEFAULT_FRONT_INBOX_ZERO_TAG,
   FRONT_API_BASE,
+  normalizeFrontTeammateId,
   pageTokenFromNext,
   resolveExactTag,
   resultsFrom,
@@ -75,6 +77,22 @@ test("builds open Front search queries without requiring a tag", () => {
   assert.throws(
     () => buildOpenSearchQuery({ inboxId: "380024798" }),
     /invalid inbox ID/,
+  );
+});
+
+test("normalizes Front teammate ids from UI tea: form", () => {
+  assert.equal(normalizeFrontTeammateId("tea:36301790"), "tea_36301790");
+  assert.equal(normalizeFrontTeammateId("tea_36301790"), "tea_36301790");
+});
+
+test("builds tag conversation list paths for open statuses", () => {
+  assert.equal(
+    buildTagOpenConversationsPath("tag_Chief123", 25),
+    "/tags/tag_Chief123/conversations?limit=25&q%5Bstatuses%5D%5B%5D=assigned&q%5Bstatuses%5D%5B%5D=unassigned",
+  );
+  assert.match(
+    buildTagOpenConversationsPath("tag_Chief123", 10, "next_1"),
+    /page_token=next_1/,
   );
 });
 
