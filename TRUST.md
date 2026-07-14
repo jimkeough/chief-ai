@@ -130,7 +130,10 @@ project client credentials never go to the browser.
 
 **What Pipedream can see:** which apps and accounts you connect, the OAuth
 grants it manages for those apps, and the connector tool requests and results
-that pass through its MCP service. That is the managed-connector give.
+that pass through its MCP service. Owner-published private actions run in the
+same owner-controlled Pipedream workspace and receive only the connected
+account grant and inputs needed for that action. That is the managed-connector
+give.
 
 **What Pipedream cannot see through this integration:** your Supabase database,
 AI credential, email app password, unrelated tasks, projects, memory, chat
@@ -140,10 +143,11 @@ request needed for a selected connector tool.
 **Scoping and the gate:** each connected Pipedream account is a separate logical
 Chief connection. Its MCP session includes the project, environment,
 `external_user_id`, app slug, and account ID, so Chief never receives
-Pipedream's full cross-app catalog. Verified read-only tools default to Auto.
-Unknown tools and every write, send, or delete default to Ask and use the same
-broker, proposal card, live permission re-check, executor, and journal as a
-direct MCP server.
+Pipedream's full cross-app catalog. Chief requests both the public registry and
+private actions the owner explicitly published to that same project and
+environment. Verified read-only tools default to Auto. Unknown tools and every
+write, send, or delete default to Ask and use the same broker, proposal card,
+live permission re-check, executor, and journal as a direct MCP server.
 
 **Ejecting:** disconnect the account in Config to delete its Pipedream grant.
 Direct remote MCP remains available under **Advanced · Direct MCP**, so no

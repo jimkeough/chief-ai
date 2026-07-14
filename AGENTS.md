@@ -8,9 +8,9 @@ directly in the main app with owner-supplied, Vault-backed project credentials.
 
 Standard scripts live in `package.json` (`dev`, `build`, `start`, `typecheck`).
 There is **no ESLint or general test suite** — `npm run typecheck`
-(`tsc --noEmit`) is the main static check. The document importer has a focused
-`npm run test:document-import` regression check. `.env.local` is gitignored;
-general setup is in `README.md`.
+(`tsc --noEmit`) is the main static check. Focused regression checks include
+`npm run test:document-import` and `npm run test:pipedream-front`. `.env.local`
+is gitignored; general setup is in `README.md`.
 
 ### Release discipline
 

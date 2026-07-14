@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { McpServerConfig } from "@/lib/mcp";
+import { buildPipedreamMcpServerConfig } from "@/lib/pipedream-mcp-config";
 
 const PIPEDREAM_API = "https://api.pipedream.com/v1";
 export const PIPEDREAM_MCP_URL = "https://remote.mcp.pipedream.net/v3";
@@ -938,26 +939,22 @@ export async function getRuntimePipedreamServers(
   const rows = (data ?? []) as ConnectionRow[];
   if (rows.length === 0) return [];
   const { token } = await fetchAccessToken(config);
-  return rows.map((row) => {
-    const safeApp = row.app_slug.replace(/[^a-zA-Z0-9_]/g, "_").slice(0, 12);
-    return {
-      id: row.id,
-      name: serverName(row.id),
-      url: PIPEDREAM_MCP_URL,
-      authorization_token: token,
-      headers: {
-        "x-pd-project-id": config.projectId,
-        "x-pd-environment": config.environment,
-        "x-pd-external-user-id": userId,
-        "x-pd-app-slug": row.app_slug,
-        "x-pd-account-id": row.account_id,
+  return rows.map((row) =>
+    buildPipedreamMcpServerConfig({
+      mcpUrl: PIPEDREAM_MCP_URL,
+      projectId: config.projectId,
+      environment: config.environment,
+      userId,
+      token,
+      connection: {
+        id: row.id,
+        accountId: row.account_id,
+        appSlug: row.app_slug,
+        appName: row.app_name,
+        accountName: row.account_name,
       },
-      app: row.app_name,
-      accountLabel: row.account_name ?? row.account_id,
-      toolPrefix: `pd_${safeApp}_${row.id.slice(0, 4)}_`,
-      trustAnnotations: true,
-    };
-  });
+    }),
+  );
 }
 
 export function publicPipedreamError(error: unknown, fallback: string): string {

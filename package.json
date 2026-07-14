@@ -1,6 +1,6 @@
 {
   "name": "chief",
-  "version": "0.8.6",
+  "version": "0.8.7",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,6 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:document-import": "node --no-warnings --experimental-strip-types --test tests/document-import.test.mjs",
+    "test:pipedream-front": "node --no-warnings --experimental-strip-types --test tests/pipedream-front-search.test.mjs && node --check pipedream/components/frontapp/search-tagged-open-conversations.mjs",
     "release:check": "node scripts/check-release.mjs",
     "release:sync-updater": "node scripts/sync-updater-workflow.mjs",
     "release:patch": "npm version patch --no-git-tag-version",

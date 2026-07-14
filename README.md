@@ -146,6 +146,12 @@ connected account to review or change those modes. Expand **Notify** to turn
 Pipedream event triggers on or off; incoming events can queue suggestions, but
 Chief still requires approval before any action.
 
+Chief also requests owner-published private Pipedream actions alongside the
+public registry. Publish a custom action to the same Connect project and
+environment and it appears under that account's **Tools** menu with the same
+read/write classification and approval gate. The tagged Front search used for
+inbox-zero work is documented in `pipedream/README.md`.
+
 Direct remote MCP servers remain available under **Advanced · Direct MCP** for
 owners who prefer to configure a server URL and credential themselves.
 
