@@ -88,7 +88,7 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         teammate: {
           type: "string",
           description:
-            "Teammate that owns private tags. Defaults to Front /me for the Pipedream OAuth grant. Accepts tea_ id, tea: id, email, or name.",
+            "Teammate that owns private tags. Prefer Config → Front — teammate id. Accepts tea_ id, tea: id, email, or name. Used when Front /me is unavailable through Pipedream.",
         },
         limit: {
           type: "number",
@@ -114,7 +114,7 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         teammate: {
           type: "string",
           description:
-            "Teammate that owns the private tag. Defaults to Front /me.",
+            "Teammate that owns the private tag. Prefer Config → Front — teammate id; otherwise Front /me.",
         },
         limit: {
           type: "number",

@@ -150,8 +150,10 @@ Chief also uses Pipedream's Connect API Proxy when a prebuilt MCP action is
 missing or too narrow — for example, searching open Front conversations
 (`search_front_conversations`, with optional tag/inbox/assignee filters)
 reuses the same Front OAuth grant without storing a Front API token in Chief.
-Optional owner-published private Pipedream actions still appear under that
-account's **Tools** menu alongside the public registry.
+If private-tag inventory cannot resolve Front `/me`, set **Config → Front —
+teammate id** once (e.g. `tea_36301790`). Optional owner-published private
+Pipedream actions still appear under that account's **Tools** menu alongside
+the public registry.
 
 Direct remote MCP servers remain available under **Advanced · Direct MCP** for
 owners who prefer to configure a server URL and credential themselves.

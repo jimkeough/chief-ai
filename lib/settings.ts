@@ -22,6 +22,7 @@ export type SettingKey =
   | "connectors.max_chief_tools"
   | "mcp.servers"
   | "mcp.tool_overrides"
+  | "front.teammate_id"
   | "updates.enabled";
 
 export type SettingDef = {
@@ -160,6 +161,15 @@ export const SETTING_DEFS: SettingDef[] = [
     default: "",
     rows: 3,
     placeholder: '{"front": {"search_conversations": "ask"}}',
+  },
+  {
+    key: "front.teammate_id",
+    label: "Front — teammate id",
+    description:
+      "Your Front teammate id (tea_…) used to resolve private/individual tags when Pipedream cannot call Front /me. Find it in a Front tag URL (tea:123 → tea_123) or teammate profile. Leave blank to use /me when available.",
+    default: "",
+    singleLine: true,
+    placeholder: "tea_36301790",
   },
   // Set once the user completes the one-tap "Enable auto-updates" step
   // (see lib/updater-workflow.ts). Gates the "Get this update" button so it
