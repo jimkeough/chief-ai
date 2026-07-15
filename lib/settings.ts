@@ -24,6 +24,7 @@ export type SettingKey =
   | "mcp.tool_overrides"
   | "front.teammate_id"
   | "front.inbox_zero_tag_id"
+  | "pipedream.front_oauth_app_id"
   | "updates.enabled";
 
 export type SettingDef = {
@@ -176,10 +177,19 @@ export const SETTING_DEFS: SettingDef[] = [
     key: "front.inbox_zero_tag_id",
     label: "Front — Chief Inbox Zero tag id",
     description:
-      "Required for the Front inbox. Core API tag id (tag_…) for your triage tag. Inbox lists via GET /tags/{id}/conversations (absolute api2 through Connect Proxy). Prefer an explicit tag_… id so Chief can skip private-tag name lookup.",
+      "Required for the Front inbox. Core API tag id (tag_…) for your triage tag. Private/individual tags need Private Resources on the Front OAuth grant — set Pipedream — Front OAuth app id below and reconnect, or convert the tag to company/shared.",
     default: "",
     singleLine: true,
     placeholder: "tag_…",
+  },
+  {
+    key: "pipedream.front_oauth_app_id",
+    label: "Pipedream — Front OAuth app id",
+    description:
+      "Optional. Pipedream custom OAuth client id (oa_…) for Front with Private Resources enabled. Create a Front developer OAuth app (Private Resources + Tags/Conversations read), add it under Pipedream → OAuth Clients → Front, paste the oa_… id here, then disconnect and reconnect Front. Leave blank to use Pipedream's default Front app (Shared/Global only — private tags 403).",
+    default: "",
+    singleLine: true,
+    placeholder: "oa_…",
   },
   // Set once the user completes the one-tap "Enable auto-updates" step
   // (see lib/updater-workflow.ts). Gates the "Get this update" button so it

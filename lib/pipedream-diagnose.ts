@@ -302,7 +302,7 @@ export async function diagnosePipedreamConnect(): Promise<{
       : "Relative /tags/{id}/conversations 403s but absolute api2 succeeds — Inbox prefers absolute.";
   } else if (tagConversationsGap) {
     summary = inboxZeroTagId
-      ? `GET /tags/${inboxZeroTagId}/conversations failed on both relative and absolute probes while other Front proxy paths work. Re-check Connect Proxy / Front connection; this endpoint previously returned the full tagged set for the same grant.`
+      ? `GET /tags/${inboxZeroTagId}/conversations failed on both relative and absolute probes while other Front proxy paths work. If Front says the agent cannot read the tag, Pipedream's default Front OAuth likely lacks Private Resources — set Config pipedream.front_oauth_app_id (oa_…) from a custom Front client with Private Resources and reconnect, or use a company/shared tag.`
       : "GET /tags/{id}/conversations failed while other Front proxy paths work — set Config front.inbox_zero_tag_id to probe a specific tag.";
   } else if (teammateTagsGap && !inboxZeroTagId) {
     summary =
