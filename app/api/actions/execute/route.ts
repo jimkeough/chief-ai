@@ -104,12 +104,14 @@ export async function POST(req: Request) {
     // The built-in Gmail connection resolves like any configured server, so an
     // approved Gmail MCP write (e.g. create_draft proposed by Chief) executes
     // through the same default-deny path.
-    let cfg = (await getMcpServers()).find((s) => s.name === server);
+    // The built-in official Front connection wins a same-named manual server,
+    // matching the broker that created the proposal.
+    let cfg =
+      server === "front"
+        ? ((await frontMcpServer().catch(() => null)) ?? undefined)
+        : (await getMcpServers()).find((s) => s.name === server);
     if (!cfg && server === "gmail") {
       cfg = (await gmailMcpServer().catch(() => null)) ?? undefined;
-    }
-    if (!cfg && server === "front") {
-      cfg = (await frontMcpServer().catch(() => null)) ?? undefined;
     }
     if (!cfg || !key) {
       return Response.json(
