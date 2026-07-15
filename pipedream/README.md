@@ -22,6 +22,11 @@ Pipedream is the default connector path:
 No `inbox` tool parameter — tag inventory is not scoped to an inbox.
 Pass `status=all` for full tag inventory (not just open).
 
+The **Inbox** page Front tab requires Config `front.inbox_zero_tag_id` and
+uses this same tag list so Chief page context can include all tagged
+conversations (list) or one conversation (detail). Email is a separate tab
+(Gmail/IMAP today; Outlook later via the same source pattern).
+
 `diagnose_pipedream_connect` probes `/me`, company `/tags`, teammate
 `/teammates/{tea}/tags` (when Config teammate id is set), and
 `/conversations/search` separately. A 403 on teammate `/tags` while other

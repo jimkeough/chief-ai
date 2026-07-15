@@ -53,6 +53,7 @@ export {
   pageTokenFromNext,
   resolveExactTag,
   resultsFrom,
+  textField,
   type CompactFrontConversation,
   type FrontSearchStatus,
 } from "@/lib/front-search-helpers";
@@ -664,4 +665,30 @@ export async function searchTaggedOpenConversations(input: {
     limit: input.limit,
     cursor: input.cursor,
   });
+}
+
+/** GET /conversations/{id} via Connect Proxy — detail for the Front-tag inbox. */
+export async function getFrontConversationById(
+  conversationId: string,
+): Promise<CompactFrontConversation> {
+  const id = textField(conversationId);
+  if (!/^cnv_[a-zA-Z0-9]+$/.test(id)) {
+    throw new Error(`Front conversation id must look like cnv_… (got "${id}").`);
+  }
+  const userId = await requireUserId();
+  const connection = await findPipedreamConnectionByApp(
+    userId,
+    FRONTAPP_PIPEDREAM_SLUG,
+  );
+  if (!connection) {
+    throw new Error(
+      "Connect Front through Pipedream in Settings → Connections first.",
+    );
+  }
+  const raw = await frontProxyGet(
+    userId,
+    connection.accountId,
+    `/conversations/${encodeURIComponent(id)}`,
+  );
+  return compactConversation(raw);
 }

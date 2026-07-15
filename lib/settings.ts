@@ -176,7 +176,8 @@ export const SETTING_DEFS: SettingDef[] = [
     key: "front.inbox_zero_tag_id",
     label: "Front — Chief Inbox Zero tag id",
     description:
-      "Front Core API tag id for \"Chief Inbox Zero\" (must look like tag_…, not the numeric id from the Front settings URL). Skips name lookup when set. Find it on a tagged conversation's tags[].id via get-conversation, or in Front's network tab when opening that tag.",
+      "Required for the Front inbox. Front Core API tag id (tag_…) for your triage tag — e.g. Chief Inbox Zero. The Inbox page lists every conversation on this tag via GET /tags/{id}/conversations (includes discussions with no inbox). Not the numeric id from Front's settings URL.",
+
     default: "",
     singleLine: true,
     placeholder: "tag_…",
