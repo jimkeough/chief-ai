@@ -30,6 +30,7 @@ import {
 import { reconcileKbEntry, ReconcileError } from "@/lib/kb/reconcile";
 import { createContact } from "@/lib/contacts";
 import { createNote } from "@/lib/notes";
+import { frontMcpServer } from "@/lib/front-mcp";
 import { gmailMcpServer } from "@/lib/gmail";
 import { getMailProvider } from "@/lib/mail";
 import { recordCommunication } from "@/lib/communications";
@@ -106,6 +107,9 @@ export async function POST(req: Request) {
     let cfg = (await getMcpServers()).find((s) => s.name === server);
     if (!cfg && server === "gmail") {
       cfg = (await gmailMcpServer().catch(() => null)) ?? undefined;
+    }
+    if (!cfg && server === "front") {
+      cfg = (await frontMcpServer().catch(() => null)) ?? undefined;
     }
     if (!cfg || !key) {
       return Response.json(

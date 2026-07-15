@@ -1,7 +1,7 @@
 // GET /api/inbox/front — Front-tag inbox list.
 //
-// Requires Config front.inbox_zero_tag_id. Uses GET /tags/{id}/conversations
-// (via searchFrontConversations) so no-inbox discussions are included.
+// Requires Config front.inbox_zero_tag_id and the official Front MCP OAuth
+// connection. Uses search_conversations with an exact tag-id filter.
 // Paginates until exhausted (cap 200) so the Inbox shows the full tag set.
 
 import { getAuthed, unauthorized } from "@/lib/auth";
@@ -12,11 +12,9 @@ import {
   textField,
   type FrontSearchResult,
 } from "@/lib/front-search";
+import { getFrontOAuthStatus } from "@/lib/front-auth";
 import type { FrontTagInboxResponse, InboxThreadSummary } from "@/lib/inbox-source";
-import { findPipedreamConnectionByApp } from "@/lib/pipedream";
-import { FRONTAPP_PIPEDREAM_SLUG } from "@/lib/front-search-helpers";
 import { getAppSettings } from "@/lib/settings";
-import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,17 +47,8 @@ function toThread(
 export async function GET(req: Request) {
   if (!(await getAuthed())) return unauthorized();
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return unauthorized();
-
-  const connection = await findPipedreamConnectionByApp(
-    user.id,
-    FRONTAPP_PIPEDREAM_SLUG,
-  ).catch(() => null);
-  if (!connection) {
+  const connection = await getFrontOAuthStatus().catch(() => null);
+  if (!connection?.connected) {
     const body: FrontTagInboxResponse = {
       provider: "front-tag",
       connected: false,
@@ -102,8 +91,8 @@ export async function GET(req: Request) {
     const threads: InboxThreadSummary[] = [];
     let nextCursor: string | null = cursor ?? null;
     let hasMore = false;
-    let source = "tag_conversations";
-    let account = connection.accountName ?? connection.accountId;
+    let source = "mcp_search";
+    let account = "Front";
     let tagName = DEFAULT_FRONT_INBOX_ZERO_TAG;
     let note: string | undefined;
     let reportedTotal: number | undefined;

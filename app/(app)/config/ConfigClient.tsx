@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useChief } from "@/app/components/ChiefProvider";
+import FrontOfficialConnection from "@/app/(app)/config/FrontOfficialConnection";
 import ManualMcpConnections from "@/app/(app)/config/ManualMcpConnections";
 import PipedreamConnections from "@/app/(app)/config/PipedreamConnections";
 import { UPSTREAM_REPO } from "@/lib/version";
@@ -37,6 +38,7 @@ type Status = {
     contacts: number;
   };
   ai?: { provider: string; ready: boolean };
+  front?: { configured: boolean; connected: boolean };
   pipedream?: { configured: boolean };
   updates?: {
     provider: string | null;
@@ -424,6 +426,12 @@ export default function ConfigClient({
             </Link>
           </div>
         </div>
+      </Section>
+      )}
+
+      {section === "connections" && (
+      <Section label="FRONT · OFFICIAL MCP">
+        <FrontOfficialConnection />
       </Section>
       )}
 

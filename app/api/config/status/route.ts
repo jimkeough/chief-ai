@@ -5,6 +5,7 @@
 // only for env — never the values.
 
 import { getAuthed, unauthorized } from "@/lib/auth";
+import { getFrontOAuthStatus } from "@/lib/front-auth";
 import { googleOauthConfigured, getGoogleConnection } from "@/lib/google-auth";
 import { getMailAccount } from "@/lib/mail";
 import { listProjects } from "@/lib/projects";
@@ -32,6 +33,7 @@ export async function GET() {
     contacts,
     ai,
     provider,
+    front,
     pipedream,
   ] =
     await Promise.all([
@@ -46,6 +48,12 @@ export async function GET() {
       // Anthropic key both count. resolveAi returns null when neither exists.
       resolveAi().catch(() => null),
       resolveProvider().catch(() => "gateway" as const),
+      getFrontOAuthStatus().catch(() => ({
+        configured: false,
+        connected: false,
+        clientId: null,
+        scopes: [],
+      })),
       getPipedreamConfigStatus(authed.userId).catch(() => ({
         configured: false,
         projectId: null,
@@ -75,6 +83,7 @@ export async function GET() {
       contacts: contacts.length,
     },
     ai: { provider, ready: Boolean(ai) },
+    front: { configured: front.configured, connected: front.connected },
     pipedream: { configured: pipedream.configured },
     updates: getUpdatesInfo(),
   });

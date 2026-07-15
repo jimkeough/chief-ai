@@ -58,3 +58,22 @@ grant execute on function public.chief_pipedream_runtime_config(uuid)
   to service_role;
 grant execute on function public.chief_pipedream_delete_config(uuid)
   to service_role;
+
+-- Official Front MCP OAuth credentials and user tokens are also server-only.
+revoke all on function public.chief_front_upsert_config(uuid, text, text, text[])
+  from public, anon, authenticated;
+revoke all on function public.chief_front_store_tokens(uuid, text, timestamptz, text[])
+  from public, anon, authenticated;
+revoke all on function public.chief_front_runtime_config(uuid)
+  from public, anon, authenticated;
+revoke all on function public.chief_front_delete_config(uuid)
+  from public, anon, authenticated;
+
+grant execute on function public.chief_front_upsert_config(uuid, text, text, text[])
+  to service_role;
+grant execute on function public.chief_front_store_tokens(uuid, text, timestamptz, text[])
+  to service_role;
+grant execute on function public.chief_front_runtime_config(uuid)
+  to service_role;
+grant execute on function public.chief_front_delete_config(uuid)
+  to service_role;

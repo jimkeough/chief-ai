@@ -74,7 +74,7 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   {
     name: "search_front_conversations",
     description:
-      "Inventory Front conversations by tag (preferred) or Search API. For a tag, uses GET /tags/{id}/conversations so discussions with no inbox are included — Front Search alone is inbox-scoped and under-counts. Default status is open; pass status=\"all\" for every non-trashed status. Prefer tag_id / Config front.inbox_zero_tag_id. No inbox filter. Read-only.",
+      "Search conversations through Front's official MCP server. Uses scope=all_inboxes and exact tag IDs when provided. Default status is open; pass status=\"all\" to omit the status filter. Prefer tag_id / Config front.inbox_zero_tag_id. Read-only.",
     input_schema: {
       type: "object",
       properties: {
@@ -85,30 +85,20 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         tag_id: {
           type: "string",
           description:
-            "Optional Front Core API tag id (tag_…). Skips /tags name lookup. Prefer Config → Front — Chief Inbox Zero tag id for that tag.",
+            "Optional Front tag id (tag_…). Skips list_tags name lookup. Prefer Config → Front — Chief Inbox Zero tag id for that tag.",
         },
         status: {
           type: "string",
           description:
-            'Default "open". Use "all" for full tag inventory including archived/snoozed and no-inbox discussions. Also: archived, snoozed, trashed, assigned, unassigned, unreplied, waiting, resolved.',
+            'Default "open". Front MCP supports "open", "all", "archived", and "trashed".',
         },
         assignee: {
           type: "string",
-          description: "Optional teammate name, email, or tea_ id (assignee filter; Search path only, no tag).",
-        },
-        participant: {
-          type: "string",
-          description:
-            "Optional teammate name, email, or tea_ id (participant filter; Search path only, no tag).",
-        },
-        teammate: {
-          type: "string",
-          description:
-            "Teammate that owns private tags. Prefer Config → Front — teammate id (tea_lm2n2). Used when Front /me is unavailable through Pipedream.",
+          description: "Optional teammate name, email, or tea_ id for filters.teammateId.",
         },
         limit: {
           type: "number",
-          description: "Page size from 1 to 100 (default 25).",
+          description: "Requested page size hint; Front MCP controls its page size.",
         },
         cursor: {
           type: "string",
@@ -119,7 +109,7 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "search_front_tagged_conversations",
-    description: `Convenience alias for search_front_conversations with tag_name defaulting to "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Uses GET /tags/{id}/conversations (includes no-inbox discussions). Pass status=\"all\" for full tag inventory.`,
+    description: `Convenience alias for official Front MCP search_conversations with tag_name defaulting to "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Pass status=\"all\" to omit the status filter.`,
     input_schema: {
       type: "object",
       properties: {
@@ -130,21 +120,16 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         tag_id: {
           type: "string",
           description:
-            "Front Core API tag id (tag_…). Prefer Config → Front — Chief Inbox Zero tag id.",
+            "Front tag id (tag_…). Prefer Config → Front — Chief Inbox Zero tag id.",
         },
         status: {
           type: "string",
           description:
             'Default "open". Use "all" for full tag inventory including no-inbox discussions.',
         },
-        teammate: {
-          type: "string",
-          description:
-            "Teammate that owns the private tag. Prefer Config → Front — teammate id; otherwise Front /me.",
-        },
         limit: {
           type: "number",
-          description: "Page size from 1 to 100 (default 25).",
+          description: "Requested page size hint; Front MCP controls its page size.",
         },
         cursor: {
           type: "string",

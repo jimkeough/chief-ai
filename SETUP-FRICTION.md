@@ -965,3 +965,21 @@ OWNER's setup and updates. It does **NOT** solve distribution for user #2+ — t
 is still entry 28's open problem. This is "build for myself first," not a general
 answer. When the app is good enough to give away, the user-#2 update question
 still has to be answered (or explicitly scoped to developers only).
+
+### 30. Front official MCP requires a confidential developer app (2026-07-15)
+
+Front's first-party MCP works for the owner but does not support Dynamic Client
+Registration. Manual steps: Front → Developers → create an OAuth feature; keep
+only **MCP Server** under Feature Access; choose resource permissions; copy the
+client ID/secret; add Chief's exact deployment callback URL; paste credentials
+into Chief; then complete per-user OAuth consent. A callback registered for
+Claude does not authorize Chief—the same Front app needs Chief's second redirect
+URL.
+
+**Current mitigation:** Settings → Connections now displays the exact redirect
+URL, stores client credentials and tokens in Vault, validates scopes, and starts
+OAuth. **Future concierge:** provide a screenshot-level Front walkthrough and
+verify common mistakes before redirect (wrong Feature Access boxes, missing
+callback, requested `send` exceeding app permissions). Front's no-DCR constraint
+means creating the developer app remains manual unless Chief later operates a
+shared published OAuth app, which would change the sovereign trust model.

@@ -443,7 +443,7 @@ export type FrontSearchInput = {
 
 export type FrontSearchResult = {
   query: string;
-  source: "search" | "tag_conversations" | "mcp_list_filter";
+  source: "search" | "tag_conversations" | "mcp_list_filter" | "mcp_search";
   filters: {
     tag?: {
       id: string;
@@ -472,55 +472,10 @@ export type FrontSearchResult = {
 export async function searchFrontConversations(
   input: FrontSearchInput = {},
 ): Promise<FrontSearchResult> {
-  try {
-    return await searchFrontConversationsViaProxy(input);
-  } catch (proxyError) {
-    if (input.allowSearchFallback === false) throw proxyError;
-    // MCP list is all_inboxes + open — misses no-inbox discussions and
-    // non-open statuses. Prefer failing the proxy error in those cases.
-    const status = normalizeFrontSearchStatus(input.status);
-    if (textField(input.assignee) || status !== "open") {
-      throw proxyError;
-    }
-    const { searchFrontConversationsViaMcp } = await import(
-      "@/lib/front-search-mcp"
-    );
-    const fallback = await searchFrontConversationsViaMcp({
-      tagName: input.tagName,
-      teammate: input.teammate,
-      proxyError:
-        proxyError instanceof Error
-          ? proxyError.message
-          : "Connect Proxy failed",
-    });
-    const explicitTagId = textField(input.tagId);
-    return {
-      query: fallback.query,
-      source: fallback.source,
-      filters: {
-        ...(fallback.filters.tag
-          ? {
-              tag: {
-                id: explicitTagId || "",
-                name: fallback.filters.tag.name,
-                ...(explicitTagId ? { scope: "explicit" as const } : {}),
-              },
-            }
-          : {}),
-        ...(fallback.filters.teammate
-          ? { teammate: fallback.filters.teammate }
-          : {}),
-      },
-      account: fallback.account,
-      count: fallback.count,
-      conversations: fallback.conversations,
-      nextCursor: null,
-      hasMore: false,
-      proxyError: fallback.proxyError,
-      note: fallback.note,
-      sampleTags: fallback.sampleTags,
-    };
-  }
+  const { searchFrontConversationsViaOfficialMcp } = await import(
+    "@/lib/front-mcp-read"
+  );
+  return searchFrontConversationsViaOfficialMcp(input);
 }
 
 async function searchFrontConversationsViaProxy(
@@ -800,28 +755,12 @@ export async function searchTaggedOpenConversations(input: {
   });
 }
 
-/** GET /conversations/{id} via Connect Proxy — detail for the Front-tag inbox. */
+/** Read one conversation through Front's official MCP timeline tool. */
 export async function getFrontConversationById(
   conversationId: string,
-): Promise<CompactFrontConversation> {
-  const id = textField(conversationId);
-  if (!/^cnv_[a-zA-Z0-9]+$/.test(id)) {
-    throw new Error(`Front conversation id must look like cnv_… (got "${id}").`);
-  }
-  const userId = await requireUserId();
-  const connection = await findPipedreamConnectionByApp(
-    userId,
-    FRONTAPP_PIPEDREAM_SLUG,
+): Promise<CompactFrontConversation & { body: string }> {
+  const { getFrontConversationViaOfficialMcp } = await import(
+    "@/lib/front-mcp-read"
   );
-  if (!connection) {
-    throw new Error(
-      "Connect Front through Pipedream in Settings → Connections first.",
-    );
-  }
-  const raw = await frontProxyGet(
-    userId,
-    connection.accountId,
-    `/conversations/${encodeURIComponent(id)}`,
-  );
-  return compactConversation(raw);
+  return getFrontConversationViaOfficialMcp(conversationId);
 }

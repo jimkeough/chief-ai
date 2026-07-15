@@ -3,6 +3,7 @@
 // POST { server, tool, mode } — set a tool's mode. Writes can be ask/off only.
 
 import { getAuthed, unauthorized } from "@/lib/auth";
+import { frontMcpServer } from "@/lib/front-mcp";
 import { getMcpServers } from "@/lib/mcp";
 import { listMcpTools } from "@/lib/mcp-broker";
 import { gmailMcpServer } from "@/lib/gmail";
@@ -17,6 +18,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function resolveServer(name: string) {
+  if (name === "front") {
+    return (await frontMcpServer().catch(() => null)) ?? undefined;
+  }
   const manual = (await getMcpServers()).find((server) => server.name === name);
   if (manual) return manual;
   if (name === "gmail") {

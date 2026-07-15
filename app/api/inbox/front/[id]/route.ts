@@ -30,7 +30,7 @@ export async function GET(_req: Request, ctx: Ctx) {
             : null,
       tags: c.tags.map((t) => t.name).filter(Boolean),
       externalUrl: c.link,
-      body: c.preview,
+      body: c.body || c.preview,
       assignee: c.assignee,
       inboxes: c.inboxes.map((i) => i.name).filter(Boolean),
     };

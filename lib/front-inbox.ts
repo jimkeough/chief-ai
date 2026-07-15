@@ -13,6 +13,7 @@
 
 import { getMcpServers, type McpServerConfig } from "@/lib/mcp";
 import { listMcpTools, callMcpTool, type McpToolDef } from "@/lib/mcp-broker";
+import { frontMcpServer } from "@/lib/front-mcp";
 
 export type FrontConversation = {
   id: string;
@@ -47,6 +48,8 @@ function isFrontServer(s: McpServerConfig): boolean {
 
 /** Find the user's direct Front MCP connection. */
 export async function resolveFrontServer(): Promise<McpServerConfig | null> {
+  const official = await frontMcpServer().catch(() => null);
+  if (official) return official;
   const manual = await getMcpServers().catch(() => []);
   return manual.find(isFrontServer) ?? null;
 }

@@ -129,45 +129,30 @@ slide-to-send card, through the one executor.
 
 ### Connections
 
-Pipedream is the default connector provider. In **Settings → Connections**, the
-one-time guide walks the owner through creating their own Pipedream account and
-Connect project, then entering its project ID, OAuth client ID, client secret,
-and environment. The OAuth credentials are write-only: Chief verifies them,
-encrypts them in Supabase Vault, and never returns them to the browser or puts
-them in model context.
+**Front uses Front's official hosted MCP server.** In **Settings → Connections
+→ Front · Official MCP**, Chief shows the deployment-specific redirect URL.
+Create a Front developer app with an OAuth feature, register that URL, enable
+only **MCP Server** under Feature Access, and paste the client ID and secret into
+Chief. Choose `read`, optional `write`, and optional `send`, save, then authorize
+as your Front user. The app secret and user tokens are write-only, encrypted in
+Supabase Vault, and never enter model context.
 
-After setup, search Pipedream's app catalog in Chief and connect accounts through
-Pipedream's hosted authorization screen. Each account becomes its own logical
-Chief connection and its MCP session is scoped to that app, that account, and
-the signed-in Supabase user's stable ID. Tools marked read-only by the managed
-provider default to **Auto**; every write, send, delete, or unknown tool defaults
-to **Ask** and flows through the same approval executor. Expand **Tools** on a
-connected account to review or change those modes. Expand **Notify** to turn
-Pipedream event triggers on or off; incoming events can queue suggestions, but
-Chief still requires approval before any action.
+The Front Inbox requires **Config → Front — Chief Inbox Zero tag id** (`tag_…`).
+Chief calls official `search_conversations` with `scope=all_inboxes` and that
+exact tag ID; conversation detail uses `read_conversation`. The same official
+tools are available in Chief chat. Front's write and send tools always go
+through Chief's approval executor.
 
-Chief also uses Pipedream's Connect API Proxy when a prebuilt MCP action is
-missing or too narrow — for example, searching open Front conversations
-(`search_front_conversations`, with optional tag/assignee filters; tagged
-inventory uses `/tags/{id}/conversations` so no-inbox discussions are included)
-reuses the same Front OAuth grant without storing a Front API token in Chief.
-If private-tag inventory cannot resolve Front `/me`, set **Config → Front —
-teammate id** once (e.g. `tea_lm2n2` for jim@homejab.com). The Inbox page
-(**Front** tab) requires **Config → Front — Chief Inbox Zero tag id**
-(`tag_…`) and lists that tag via `/tags/{id}/conversations` (includes
-no-inbox discussions). Private/individual triage tags need **Private
-Resources** on the Front OAuth grant — Pipedream's default Front app usually
-lacks that; either use a company/shared tag, or set **Config → Pipedream —
-Front OAuth app id** (`oa_…`) from a custom Front client with Private
-Resources and reconnect Front. Email (Gmail/IMAP) is a separate Inbox tab;
-Outlook can join the same source pattern later. When Connect Proxy fails,
-Front search falls back to Pipedream MCP list+tag filter only when Search
-fallback is allowed (Inbox and tagged Chief tools do not). Optional
-owner-published private Pipedream actions still appear under that
-account's **Tools** menu alongside the public registry.
+Pipedream remains the guided provider for other apps. Its one-time setup stores
+the owner-controlled Connect project's OAuth credentials in Supabase Vault.
+Accounts authorize through Pipedream's hosted Connect Link and become isolated
+MCP sessions scoped to that app, account, and signed-in Supabase user. Managed
+read tools default to **Auto**; every write, send, delete, or unknown tool
+defaults to **Ask**. Optional triggers can queue suggestions but cannot act
+without approval.
 
 Direct remote MCP servers remain available under **Advanced · Direct MCP** for
-owners who prefer to configure a server URL and credential themselves.
+owners who prefer to configure another server URL and credential themselves.
 
 ## For Claude Code
 

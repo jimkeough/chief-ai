@@ -16,10 +16,13 @@ export function resultsFrom(response: unknown): unknown[] {
   if (Array.isArray(response)) return response;
   const envelope = record(response);
   if (Array.isArray(envelope._results)) return envelope._results;
+  if (Array.isArray(envelope.results)) return envelope.results;
   // Connect Proxy sometimes nests the Front envelope.
   for (const key of ["data", "body", "result", "response"] as const) {
     const nested = record(envelope[key]);
     if (Array.isArray(nested._results)) return nested._results;
+    if (Array.isArray(nested.results)) return nested.results;
+    if (Array.isArray(nested.conversations)) return nested.conversations;
     if (Array.isArray(envelope[key])) return envelope[key] as unknown[];
   }
   if (Array.isArray(envelope.conversations)) return envelope.conversations;
@@ -292,7 +295,7 @@ export type CompactFrontConversation = {
 
 export function compactConversation(value: unknown): CompactFrontConversation {
   const conversation = record(value);
-  const lastMessage = record(conversation.last_message);
+  const lastMessage = record(conversation.last_message ?? conversation.lastMessage);
   const recipient = record(conversation.recipient);
   const tags = Array.isArray(conversation.tags) ? conversation.tags : [];
   const inboxes = Array.isArray(conversation.inboxes)
@@ -303,25 +306,34 @@ export function compactConversation(value: unknown): CompactFrontConversation {
     id,
     subject: text(conversation.subject) || "(no subject)",
     status: text(conversation.status),
-    statusCategory: text(conversation.status_category),
+    statusCategory: text(
+      conversation.status_category ?? conversation.statusCategory,
+    ),
     updatedAt:
       conversation.updated_at ??
+      conversation.updatedAt ??
       lastMessage.created_at ??
+      lastMessage.createdAt ??
       conversation.created_at ??
+      conversation.createdAt ??
       null,
-    assignee: teammateLabel(conversation.assignee),
+    assignee:
+      text(conversation.assignee) || teammateLabel(conversation.assignee),
     correspondent:
+      text(conversation.correspondent) ||
       teammateLabel(recipient) ||
       teammateLabel(lastMessage.author) ||
       text(recipient.handle),
     tags: tags
       .map((tag) => {
+        if (typeof tag === "string") return { id: "", name: text(tag) };
         const item = record(tag);
         return { id: text(item.id), name: text(item.name) };
       })
       .filter((tag) => tag.id || tag.name),
     inboxes: inboxes
       .map((inbox) => {
+        if (typeof inbox === "string") return { id: "", name: text(inbox) };
         const item = record(inbox);
         return { id: text(item.id), name: text(item.name) };
       })
@@ -329,7 +341,9 @@ export function compactConversation(value: unknown): CompactFrontConversation {
     preview: (
       text(lastMessage.blurb) ||
       text(lastMessage.body) ||
-      text(conversation.blurb)
+      text(conversation.blurb) ||
+      text(conversation.preview) ||
+      text(conversation.body)
     )
       .replace(/\s+/g, " ")
       .slice(0, 240),

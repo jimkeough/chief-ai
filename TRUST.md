@@ -113,6 +113,27 @@ piece is the optional server-side web fetch tool (off by default), which the
 gateway's Anthropic-compatible endpoint may not proxy; flip to direct
 Anthropic mode if you turn it on and it misbehaves.
 
+## Front official MCP (owner-operated)
+
+Front data flows directly between Chief and `mcp.frontapp.com`; Pipedream is not
+in the Front path. You create the Front developer app, choose its resource
+permissions, and authorize as your own Front teammate. Front enforces both the
+app's requested `read`/`write`/`send` scopes and that teammate's live access.
+
+Chief stores the developer-app client secret, OAuth access token, and refresh
+token as one encrypted Supabase Vault value. Browser roles may read only
+non-secret metadata such as client ID, selected scopes, and connection state.
+Only service-role RPCs called after Chief verifies the signed-in Supabase user
+can decrypt or rotate the Vault value. Credentials are never returned to the
+browser or put in model context.
+
+Inbox and Chief read tools call Front's documented `search_conversations`,
+`read_conversation`, and discovery tools. Front mutations are brokered like
+every other connector: verified reads may run automatically, while write and
+send tools always become approval proposals and are revalidated before the
+executor calls Front. Disconnect is a best-effort token revocation followed by
+deletion of local metadata and the cascading Vault secret.
+
 ## Pipedream Connect (owner-operated)
 
 Pipedream is Chief's default connector provider, but there is no shared Chief
@@ -130,11 +151,11 @@ project client credentials never go to the browser.
 
 **What Pipedream can see:** which apps and accounts you connect, the OAuth
 grants it manages for those apps, connector tool requests and results that
-pass through its MCP service, and Connect API Proxy requests Chief makes to
-fill gaps in prebuilt actions (for example Front Core API search). Optional
-owner-published private actions run in the same owner-controlled Pipedream
-workspace and receive only the connected account grant and inputs needed for
-that action. That is the managed-connector give.
+pass through its MCP service, and Connect API Proxy requests Chief makes for
+those Pipedream-connected apps. Optional owner-published private actions run in
+the same owner-controlled Pipedream workspace and receive only the connected
+account grant and inputs needed for that action. That is the managed-connector
+give.
 
 **What Pipedream cannot see through this integration:** your Supabase database,
 AI credential, email app password, unrelated tasks, projects, memory, chat
@@ -147,13 +168,9 @@ Chief connection. Its MCP session includes the project, environment,
 Pipedream's full cross-app catalog. Chief requests both the public registry and
 private actions the owner explicitly published to that same project and
 environment. Connect Proxy calls use the same project credentials and the
-specific connected account ID; Chief-built proxy helpers that are read-only
-(such as Front conversation search) run as transparent read tools, while every write,
-send, or delete still defaults to Ask through the broker, proposal card, live
-permission re-check, executor, and journal. Optional Config
-`pipedream.front_oauth_app_id` selects an owner-created Pipedream OAuth client
-for Front (for example one with Private Resources) instead of Pipedream's
-default Front app when connecting that account.
+specific connected account ID. Every write, send, or delete still defaults to
+Ask through the broker, proposal card, live permission re-check, executor, and
+journal.
 
 **Ejecting:** disconnect the account in Config to delete its Pipedream grant.
 Direct remote MCP remains available under **Advanced · Direct MCP**, so no

@@ -101,16 +101,20 @@ export async function POST(req: Request) {
     resolvedAttachments.length > 0;
   const untrustedTurn = page?.untrusted === true || hasAttachments;
 
-  // Broker every configured server so Chief can read across all of them —
-  // plus Gmail when connected (its reads are annotated read-only, so
-  // search_threads/get_thread run transparently and its writes gate like any
-  // other connector's). A user-configured server named "gmail" would collide,
-  // so the built-in wins.
+  // Broker every configured server plus built-in official Gmail and Front MCP.
+  // Built-ins win name/app collisions so a stale Pipedream Front connection
+  // cannot shadow the user-authorized official Front server.
   let brokerServers: McpServerConfig[] = [];
   if (!untrustedTurn) {
     brokerServers = (await getMcpServers()).filter((s) => s.name !== "gmail");
     const gmail = await (await import("@/lib/gmail")).gmailMcpServer().catch(() => null);
     if (gmail) brokerServers.push(gmail);
+    const { frontMcpServer, isFrontServer } = await import("@/lib/front-mcp");
+    const front = await frontMcpServer().catch(() => null);
+    if (front) {
+      brokerServers = brokerServers.filter((server) => !isFrontServer(server));
+      brokerServers.push(front);
+    }
   }
 
   const brokerReads: { server: McpServerConfig; def: McpToolDef }[] = [];
