@@ -314,6 +314,8 @@ export type FrontSearchResult = {
   /** Present when MCP fallback was used after Connect Proxy failed. */
   proxyError?: string;
   note?: string;
+  /** Tag names seen on the MCP recent-open page (fallback only). */
+  sampleTags?: string[];
 };
 
 /** One compact page of open Front conversations matching optional filters. */
@@ -358,6 +360,7 @@ export async function searchFrontConversations(
       hasMore: false,
       proxyError: fallback.proxyError,
       note: fallback.note,
+      sampleTags: fallback.sampleTags,
     };
   }
 }
@@ -400,38 +403,86 @@ async function searchFrontConversationsViaProxy(
   };
 
   if (tagName) {
-    const tag = await resolveTagByName(
-      userId,
-      connection.accountId,
-      tagName,
-      owner.id,
-    );
+    let tag: { id: string; name: string; scope: "company" | "teammate" };
+    try {
+      tag = await resolveTagByName(
+        userId,
+        connection.accountId,
+        tagName,
+        owner.id,
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "tag resolve failed";
+      throw new Error(
+        `Front proxy failed while resolving tag "${tagName}" (company /tags and teammate ${owner.id}/tags): ${detail}`,
+      );
+    }
     filters.tag = tag;
 
-    // Private/individual tags are most reliably inventoried through the tag's
-    // conversations collection (what the Front tag view uses), not company search.
-    const response = await frontProxyGet(
-      userId,
-      connection.accountId,
-      buildTagOpenConversationsPath(tag.id, limit, cursor),
-    );
-    const envelope = asRecord(response);
-    const nextCursor = pageTokenFromNext(asRecord(envelope._pagination).next);
-    const conversations = resultsFrom(response).map(compactConversation);
-    const total =
-      typeof envelope._total === "number" ? envelope._total : undefined;
+    // Front Search API: GET /conversations/search/{query}
+    // https://dev.frontapp.com/docs/search-1 — e.g. tag:tag_xxx is:open
+    const query = buildOpenSearchQuery({ tagId: tag.id });
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (cursor) qs.set("page_token", cursor);
+    const searchPath = `/conversations/search/${encodeURIComponent(query)}?${qs}`;
 
-    return {
-      query: `tag:${tag.id} statuses:assigned,unassigned`,
-      source: "tag_conversations",
-      filters,
-      account: connection.accountName ?? connection.accountId,
-      count: conversations.length,
-      ...(total !== undefined ? { total } : {}),
-      conversations,
-      nextCursor,
-      hasMore: Boolean(nextCursor),
-    };
+    try {
+      const response = await frontProxyGet(
+        userId,
+        connection.accountId,
+        searchPath,
+      );
+      const envelope = asRecord(response);
+      const nextCursor = pageTokenFromNext(asRecord(envelope._pagination).next);
+      const conversations = resultsFrom(response).map(compactConversation);
+      const total =
+        typeof envelope._total === "number" ? envelope._total : undefined;
+
+      return {
+        query,
+        source: "search",
+        filters,
+        account: connection.accountName ?? connection.accountId,
+        count: conversations.length,
+        ...(total !== undefined ? { total } : {}),
+        conversations,
+        nextCursor,
+        hasMore: Boolean(nextCursor),
+        note: "Used Front Core Search API (GET /conversations/search/{query}) via Connect Proxy.",
+      };
+    } catch (searchError) {
+      // Older path: list a tag's conversations. Prefer Search API; keep as backup.
+      try {
+        const response = await frontProxyGet(
+          userId,
+          connection.accountId,
+          buildTagOpenConversationsPath(tag.id, limit, cursor),
+        );
+        const envelope = asRecord(response);
+        const nextCursor = pageTokenFromNext(
+          asRecord(envelope._pagination).next,
+        );
+        const conversations = resultsFrom(response).map(compactConversation);
+        const total =
+          typeof envelope._total === "number" ? envelope._total : undefined;
+        return {
+          query: `tag:${tag.id} statuses:assigned,unassigned`,
+          source: "tag_conversations",
+          filters,
+          account: connection.accountName ?? connection.accountId,
+          count: conversations.length,
+          ...(total !== undefined ? { total } : {}),
+          conversations,
+          nextCursor,
+          hasMore: Boolean(nextCursor),
+          note: `Front Search API failed (${searchError instanceof Error ? searchError.message : "error"}); used /tags/{id}/conversations backup.`,
+        };
+      } catch (tagListError) {
+        throw new Error(
+          `Front Search API failed (${searchError instanceof Error ? searchError.message : "error"}); tag conversations backup also failed (${tagListError instanceof Error ? tagListError.message : "error"}).`,
+        );
+      }
+    }
   }
 
   if (inboxName) {
@@ -466,29 +517,37 @@ async function searchFrontConversationsViaProxy(
   });
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("page_token", cursor);
-  const response = await frontProxyGet(
-    userId,
-    connection.accountId,
-    `/conversations/search/${encodeURIComponent(query)}?${qs}`,
-  );
+  try {
+    const response = await frontProxyGet(
+      userId,
+      connection.accountId,
+      `/conversations/search/${encodeURIComponent(query)}?${qs}`,
+    );
 
-  const envelope = asRecord(response);
-  const nextCursor = pageTokenFromNext(asRecord(envelope._pagination).next);
-  const conversations = resultsFrom(response).map(compactConversation);
-  const total =
-    typeof envelope._total === "number" ? envelope._total : undefined;
+    const envelope = asRecord(response);
+    const nextCursor = pageTokenFromNext(asRecord(envelope._pagination).next);
+    const conversations = resultsFrom(response).map(compactConversation);
+    const total =
+      typeof envelope._total === "number" ? envelope._total : undefined;
 
-  return {
-    query,
-    source: "search",
-    filters,
-    account: connection.accountName ?? connection.accountId,
-    count: conversations.length,
-    ...(total !== undefined ? { total } : {}),
-    conversations,
-    nextCursor,
-    hasMore: Boolean(nextCursor),
-  };
+    return {
+      query,
+      source: "search",
+      filters,
+      account: connection.accountName ?? connection.accountId,
+      count: conversations.length,
+      ...(total !== undefined ? { total } : {}),
+      conversations,
+      nextCursor,
+      hasMore: Boolean(nextCursor),
+      note: "Used Front Core Search API (GET /conversations/search/{query}) via Connect Proxy.",
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "search failed";
+    throw new Error(
+      `Front Search API failed for query "${query}" (GET /conversations/search/…): ${detail}`,
+    );
+  }
 }
 
 /** Convenience alias that defaults the Chief Inbox Zero tag name. */
