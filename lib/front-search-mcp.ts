@@ -1,5 +1,5 @@
 // MCP-backed Front inventory — same path as Inbox UI / working Pipedream MCP
-// tools. Used when Connect Proxy fails (Calendar-style MCP still works).
+// tools. Used when Connect Proxy / Front Search API fails.
 
 import {
   listOpenFrontConversations,
@@ -16,6 +16,7 @@ export type FrontMcpSearchResult = {
   source: "mcp_list_filter";
   proxyError: string;
   note: string;
+  sampleTags: string[];
   filters: {
     tag?: { name: string };
     teammate?: { id: string; name: string };
@@ -58,6 +59,10 @@ export async function searchFrontConversationsViaMcp(input: {
   }
 
   const tagName = textField(input.tagName);
+  const sampleTags = [
+    ...new Set(listed.conversations.flatMap((c) => c.tags).filter(Boolean)),
+  ].slice(0, 25);
+
   let conversations = listed.conversations;
   if (tagName) {
     const needle = tagName.toLowerCase();
@@ -78,11 +83,17 @@ export async function searchFrontConversationsViaMcp(input: {
     source: "mcp_list_filter",
     proxyError: input.proxyError,
     note:
-      "Connect Proxy failed, so this used the working Pipedream MCP list-conversations path (same as Calendar tools). Results are the recent open page (up to ~100), filtered in Chief — not a full Front search index.",
+      "Front Search API / Connect Proxy failed, so this used Pipedream MCP list-conversations (same path as Calendar). Results are the recent open page (up to ~100), filtered in Chief — not GET /conversations/search. sampleTags lists tag names seen on that page.",
+    sampleTags,
     filters: {
       ...(tagName ? { tag: { name: tagName } } : {}),
       ...(textField(input.teammate)
-        ? { teammate: { id: textField(input.teammate), name: textField(input.teammate) } }
+        ? {
+            teammate: {
+              id: textField(input.teammate),
+              name: textField(input.teammate),
+            },
+          }
         : {}),
     },
     account: listed.account ?? "Front",

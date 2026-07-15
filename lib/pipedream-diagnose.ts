@@ -64,7 +64,15 @@ async function probeProxy(
 function probeTargetsForApp(appSlug: string): string[] {
   const slug = appSlug.toLowerCase();
   if (slug === "frontapp" || slug === "front") {
-    return ["/me", "https://api2.frontapp.com/me"];
+    // Include Search API — /me can succeed while /conversations/search fails.
+    const openSearch = `/conversations/search/${encodeURIComponent("is:open")}?limit=1`;
+    return [
+      "/me",
+      "/tags?limit=1",
+      openSearch,
+      "https://api2.frontapp.com/me",
+      `https://api2.frontapp.com${openSearch}`,
+    ];
   }
   if (slug.includes("google_calendar") || slug === "google_calendar") {
     return [
@@ -143,11 +151,26 @@ export async function diagnosePipedreamConnect(): Promise<{
   const proxyFrontOk = proxyProbes.some(
     (p) => p.ok && p.appSlug === FRONTAPP_PIPEDREAM_SLUG,
   );
+  const proxyFrontSearchOk = proxyProbes.some(
+    (p) =>
+      p.ok &&
+      p.appSlug === FRONTAPP_PIPEDREAM_SLUG &&
+      p.target.includes("/conversations/search/"),
+  );
+  const proxyFrontMeOk = proxyProbes.some(
+    (p) =>
+      p.ok &&
+      p.appSlug === FRONTAPP_PIPEDREAM_SLUG &&
+      (p.target === "/me" || p.target.endsWith("/me")),
+  );
 
   let summary: string;
-  if (frontMcp.ok && proxyFrontOk) {
+  if (frontMcp.ok && proxyFrontSearchOk) {
     summary =
-      "Front MCP and Connect Proxy both work. Tag search should use the proxy path.";
+      "Front MCP works and Connect Proxy can call Front Search API. Tag search should use GET /conversations/search/{query}.";
+  } else if (frontMcp.ok && proxyFrontMeOk && !proxyFrontSearchOk) {
+    summary =
+      "Front /me works via Proxy but /conversations/search does not — tag search will fail on the Search API path even though diagnose /me looks healthy. Prefer fixing Search proxy targets or rely on MCP list+tag filter.";
   } else if (frontMcp.ok && !proxyFrontOk) {
     summary = proxyOk
       ? "Front MCP works and Connect Proxy works for another app — Front proxy targets are the problem (use MCP list+tag filter fallback)."

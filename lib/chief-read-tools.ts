@@ -74,7 +74,7 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   {
     name: "search_front_conversations",
     description:
-      "Search open Front conversations. Tries Pipedream Connect Proxy first (exact tag/inbox search); if Proxy fails, falls back to working Pipedream MCP list-conversations and filters by tag name in Chief (recent open page, up to ~100). For Chief Inbox Zero, pass tag_name. Optional teammate tea_lm2n2 / Config front.teammate_id for private tags on the proxy path. Page with nextCursor when hasMore is true. Read-only.",
+      "Search open Front conversations using Front's Core Search API (GET /conversations/search/{query} per https://dev.frontapp.com/docs/search-1), e.g. tag:tag_xxx is:open, via Pipedream Connect Proxy. If Proxy fails, falls back to Pipedream MCP list-conversations + tag filter (recent ~100 only). For Chief Inbox Zero pass tag_name; optional teammate tea_lm2n2. Page with nextCursor when hasMore. Read-only.",
     input_schema: {
       type: "object",
       properties: {
