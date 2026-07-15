@@ -15,7 +15,8 @@ Pipedream is the default connector path:
    or name lookup
 2. **Primary for tags:** `GET /tags/{id}/conversations` — includes Front
    **discussions with no inbox** (Search API alone misses those)
-3. If that fails, fall back to inbox-scoped Search API
+3. If that fails (and Search fallback is allowed), fall back to inbox-scoped
+   Search API
 4. If Proxy fails entirely on open inventory, MCP `list-conversations`
    (also inbox-scoped / recent page only)
 
@@ -23,9 +24,20 @@ No `inbox` tool parameter — tag inventory is not scoped to an inbox.
 Pass `status=all` for full tag inventory (not just open).
 
 The **Inbox** page Front tab requires Config `front.inbox_zero_tag_id` and
-uses this same tag list so Chief page context can include all tagged
-conversations (list) or one conversation (detail). Email is a separate tab
+uses this same tag list with **no Search fallback** (so a Proxy failure is
+visible instead of a silent under-count). Email is a separate tab
 (Gmail/IMAP today; Outlook later via the same source pattern).
+
+Private/individual tags: Front returns **403** on `/tags/{id}/conversations`
+when either (1) the owning teammate has **not** enabled **Allow access to my
+individual resources via the API**, or more commonly when that preference is
+already on — (2) the Front OAuth grant behind Pipedream lacks the **Private
+Resources** namespace. Pipedream's default Front OAuth app often only requests
+Shared/Global. Fix with a Front developer OAuth app / API token that includes
+Private Resources, wired as a custom OAuth client in Pipedream, then reconnect
+Front in Chief — or use a company/shared tag. See
+https://help.front.com/en/articles/2516. A 403 here is that grant gap — not
+broken Pipedream project credentials.
 
 `diagnose_pipedream_connect` probes `/me`, company `/tags`, teammate
 `/teammates/{tea}/tags` (when Config teammate id is set), and

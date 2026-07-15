@@ -584,7 +584,7 @@ function FrontTagInbox() {
       <section className="flex flex-col gap-2.5 pt-2">
         <h1 className="text-[22px] font-semibold text-ink">Inbox</h1>
         <div
-          className="rounded-control border px-3 py-2.5 text-[13px] text-ink-2"
+          className="rounded-control border px-3 py-2.5 text-[13px] leading-relaxed text-ink-2 whitespace-pre-wrap break-words"
           style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
         >
           {data.error}

@@ -69,6 +69,47 @@ async function requireUserId(): Promise<string> {
   return user.id;
 }
 
+/** Connect Proxy 403 on private-tag conversation lists is a Front grant gap. */
+function isFrontTagConversationsPermissionDenied(detail: string): boolean {
+  return /403|forbidden|permission denial|do not have access to the resources of this teammate|not allowed to read/i.test(
+    detail,
+  );
+}
+
+/**
+ * Preference "Allow access to my individual resources via the API" is necessary
+ * but not sufficient. When that toggle is already on, 403 almost always means
+ * the Front OAuth grant behind Pipedream lacks the Private Resources namespace.
+ */
+export function formatTagConversationsPermissionError(tagId: string): Error {
+  return new Error(
+    `Front returned 403 for /tags/${tagId}/conversations. ` +
+      `If the teammate preference "Allow access to my individual resources via the API" is already on, ` +
+      `this is almost always the Front OAuth grant behind Pipedream — it needs the Private Resources namespace ` +
+      `(Pipedream's default Front app often only requests Shared/Global). ` +
+      `Fix: Front Developers → OAuth app (or API token) with Private Resources + Tags/Conversations read, ` +
+      `add it as a custom OAuth client in Pipedream for Front, reconnect in Settings → Connections; ` +
+      `or convert the triage tag to a company/shared tag. ` +
+      `https://help.front.com/en/articles/2516`,
+  );
+}
+
+function formatTagConversationsEmptyError(
+  tagId: string,
+  attemptCount: number,
+  errors: string[],
+): Error {
+  const joined = errors.join(" ");
+  if (isFrontTagConversationsPermissionDenied(joined)) {
+    return formatTagConversationsPermissionError(tagId);
+  }
+  return new Error(
+    `No conversations from /tags/${tagId}/conversations after ${attemptCount} encoding(s). ${
+      errors.slice(0, 3).join(" | ") || "no error detail"
+    }`,
+  );
+}
+
 async function frontProxyGet(
   userId: string,
   accountId: string,
@@ -532,8 +573,8 @@ async function searchFrontConversationsViaProxy(
     filters.tag = tag;
 
     // Prefer GET /tags/{id}/conversations — includes discussions with no inbox.
-    // Run encodings in parallel (relative Proxy only) so one slow 403 doesn't
-    // serialize into a multi-minute Inbox load.
+    // Try encodings sequentially (relative Proxy only). Merge successful
+    // variants; on permission denial stop immediately with remediation text.
     const tagListQuery =
       status === "open"
         ? `tag:${tag.id} statuses:assigned,unassigned`
@@ -547,26 +588,6 @@ async function searchFrontConversationsViaProxy(
         cursor,
         status,
       );
-      const settled = await Promise.all(
-        paths.map(async (path) => {
-          try {
-            const response = await frontProxyGet(
-              userId,
-              connection.accountId,
-              path,
-              { absoluteFallback: false },
-            );
-            return { path, response, error: null as string | null };
-          } catch (error) {
-            return {
-              path,
-              response: null,
-              error: error instanceof Error ? error.message : "proxy failed",
-            };
-          }
-        }),
-      );
-
       const byId = new Map<string, ReturnType<typeof compactConversation>>();
       const errors: string[] = [];
       let bestPath = "";
@@ -574,32 +595,39 @@ async function searchFrontConversationsViaProxy(
       let reportedTotal: number | undefined;
       let bestPageCount = -1;
 
-      for (const attempt of settled) {
-        if (attempt.error || !attempt.response) {
-          errors.push(
-            `${attempt.path}: ${attempt.error ?? "empty"}`.slice(0, 180),
+      for (const path of paths) {
+        try {
+          const response = await frontProxyGet(
+            userId,
+            connection.accountId,
+            path,
+            { absoluteFallback: false },
           );
-          continue;
-        }
-        const envelope = asRecord(attempt.response);
-        const page = resultsFrom(attempt.response).map(compactConversation);
-        for (const c of page) {
-          if (c.id && !byId.has(c.id)) byId.set(c.id, c);
-        }
-        if (page.length > bestPageCount) {
-          bestPageCount = page.length;
-          bestPath = attempt.path;
-          nextCursor = pageTokenFromNext(asRecord(envelope._pagination).next);
-          if (typeof envelope._total === "number") {
-            reportedTotal = envelope._total;
+          const envelope = asRecord(response);
+          const page = resultsFrom(response).map(compactConversation);
+          for (const c of page) {
+            if (c.id && !byId.has(c.id)) byId.set(c.id, c);
+          }
+          if (page.length > bestPageCount) {
+            bestPageCount = page.length;
+            bestPath = path;
+            nextCursor = pageTokenFromNext(asRecord(envelope._pagination).next);
+            if (typeof envelope._total === "number") {
+              reportedTotal = envelope._total;
+            }
+          }
+        } catch (error) {
+          const detail =
+            error instanceof Error ? error.message : "proxy failed";
+          errors.push(`${path}: ${detail}`.slice(0, 180));
+          if (isFrontTagConversationsPermissionDenied(detail)) {
+            throw formatTagConversationsPermissionError(tag.id);
           }
         }
       }
 
       if (byId.size === 0) {
-        throw new Error(
-          `No conversations from /tags/${tag.id}/conversations after ${paths.length} encoding(s). ${errors.slice(0, 3).join(" | ") || "no error detail"}`,
-        );
+        throw formatTagConversationsEmptyError(tag.id, paths.length, errors);
       }
 
       let pages = 1;

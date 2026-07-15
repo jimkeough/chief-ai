@@ -40,6 +40,10 @@ function isTeammateTagsTarget(target: string): boolean {
   return target.includes("/teammates/") && target.includes("/tags");
 }
 
+function isTagConversationsTarget(target: string): boolean {
+  return /\/tags\/tag_[^/?]+\/conversations/.test(target);
+}
+
 async function probeProxy(
   userId: string,
   connection: PipedreamConnection,
@@ -61,6 +65,7 @@ async function probeProxy(
   } catch (error) {
     const message = error instanceof Error ? error.message : "proxy failed";
     const teammateTags = isTeammateTagsTarget(target);
+    const tagConversations = isTagConversationsTarget(target);
     return {
       appSlug: connection.appSlug,
       accountId: connection.accountId,
@@ -74,6 +79,12 @@ async function probeProxy(
             note: "Known gap: Front often denies teammate-scoped /tags through Connect Proxy even when /me, company /tags, and /conversations/search work. Not a Pipedream project-credential failure. Set Config → Front — Chief Inbox Zero tag id (tag_…) to skip this lookup.",
           }
         : {}),
+      ...(tagConversations
+        ? {
+            expectedGap: true,
+            note: "Private-tag conversation list denied. If the teammate preference for individual API access is already on, the Front OAuth grant behind Pipedream almost certainly lacks Private Resources — use a custom Front OAuth client (or company/shared tag), not the preference toggle.",
+          }
+        : {}),
     };
   }
 }
@@ -81,7 +92,7 @@ async function probeProxy(
 /** Probe URLs known to be cheap GETs for common Connect apps. */
 function probeTargetsForApp(
   appSlug: string,
-  opts?: { teammateId?: string },
+  opts?: { teammateId?: string; inboxZeroTagId?: string },
 ): string[] {
   const slug = appSlug.toLowerCase();
   if (slug === "frontapp" || slug === "front") {
@@ -101,6 +112,13 @@ function probeTargetsForApp(
         2,
         0,
         `/teammates/${encodeURIComponent(tea)}/tags?limit=1`,
+      );
+    }
+    const tagId = (opts?.inboxZeroTagId ?? "").trim();
+    if (/^tag_[a-zA-Z0-9]+$/.test(tagId)) {
+      targets.push(
+        `/tags/${encodeURIComponent(tagId)}`,
+        `/tags/${encodeURIComponent(tagId)}/conversations?limit=1`,
       );
     }
     return targets;
@@ -189,6 +207,7 @@ export async function diagnosePipedreamConnect(): Promise<{
   if (front) {
     for (const target of probeTargetsForApp(front.appSlug, {
       teammateId: teammateId ?? undefined,
+      inboxZeroTagId: inboxZeroTagId ?? undefined,
     })) {
       proxyProbes.push(await probeProxy(userId, front, target));
     }
@@ -241,14 +260,35 @@ export async function diagnosePipedreamConnect(): Promise<{
     !proxyFrontTeammateTagsOk &&
     (proxyFrontCompanyTagsOk || proxyFrontMeOk || proxyFrontSearchOk);
 
+  const tagConversationsProbed = proxyProbes.some(
+    (p) =>
+      p.appSlug === FRONTAPP_PIPEDREAM_SLUG && isTagConversationsTarget(p.target),
+  );
+  const proxyFrontTagConversationsOk = proxyProbes.some(
+    (p) =>
+      p.ok &&
+      p.appSlug === FRONTAPP_PIPEDREAM_SLUG &&
+      isTagConversationsTarget(p.target),
+  );
+  const tagConversationsGap =
+    tagConversationsProbed &&
+    !proxyFrontTagConversationsOk &&
+    (proxyFrontCompanyTagsOk || proxyFrontMeOk || proxyFrontSearchOk);
+
   let summary: string;
-  if (teammateTagsGap && !inboxZeroTagId) {
+  if (tagConversationsGap) {
+    summary = inboxZeroTagId
+      ? `GET /tags/${inboxZeroTagId}/conversations is denied (403) while other Front proxy paths work. If the individual-resources preference is already on, the Front OAuth grant behind Pipedream lacks Private Resources — add a custom Front OAuth client with that namespace (or use a company/shared tag), then reconnect. Not broken Pipedream project credentials.`
+      : "GET /tags/{id}/conversations is denied while other Front proxy paths work — Private Resources missing on the Front OAuth grant, or set Config front.inbox_zero_tag_id to probe a specific tag.";
+  } else if (teammateTagsGap && !inboxZeroTagId) {
     summary =
       "Known gap: /teammates/{id}/tags is denied through Connect Proxy while other Front proxy paths work — this is NOT broken Pipedream project credentials. Set Config → Front — Chief Inbox Zero tag id (tag_…) so Search can run tag:{id} is:open without that lookup. Get tag_… from a tagged conversation's tags[].id (not the numeric settings URL).";
   } else if (teammateTagsGap && inboxZeroTagId) {
-    summary = proxyFrontSearchOk
-      ? `Teammate /tags is still denied (expected); Config front.inbox_zero_tag_id=${inboxZeroTagId} is set so tagged Search can skip that lookup. Connect Proxy Search looks healthy.`
-      : `Teammate /tags is still denied (expected); Config front.inbox_zero_tag_id=${inboxZeroTagId} is set. Fix /conversations/search next if tagged inventory still fails.`;
+    summary = proxyFrontTagConversationsOk
+      ? `Teammate /tags is still denied (expected); Config front.inbox_zero_tag_id=${inboxZeroTagId} is set and /tags/{id}/conversations works.`
+      : proxyFrontSearchOk
+        ? `Teammate /tags is still denied (expected); Config front.inbox_zero_tag_id=${inboxZeroTagId} is set so tagged Search can skip that lookup. Connect Proxy Search looks healthy.`
+        : `Teammate /tags is still denied (expected); Config front.inbox_zero_tag_id=${inboxZeroTagId} is set. Fix /conversations/search next if tagged inventory still fails.`;
   } else if (frontMcp.ok && proxyFrontSearchOk) {
     summary =
       "Front MCP works and Connect Proxy can call Front Search API. Tag search should use GET /conversations/search/{query} with an explicit tag_… id when private-tag listing fails.";

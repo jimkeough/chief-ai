@@ -108,6 +108,37 @@ function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Pull a human reason from Pipedream or Front-shaped proxy error bodies. */
+function proxyFailureReason(detail: Record<string, unknown>): string {
+  const nested =
+    detail._error && typeof detail._error === "object"
+      ? (detail._error as Record<string, unknown>)
+      : null;
+  const data =
+    detail.data && typeof detail.data === "object"
+      ? (detail.data as Record<string, unknown>)
+      : null;
+  const dataError =
+    data?._error && typeof data._error === "object"
+      ? (data._error as Record<string, unknown>)
+      : null;
+  const candidates = [
+    detail.error,
+    detail.message,
+    detail.name,
+    nested?.message,
+    nested?.title,
+    dataError?.message,
+    data?.message,
+    data?.error,
+  ];
+  for (const candidate of candidates) {
+    const text = clean(candidate);
+    if (text) return text;
+  }
+  return "";
+}
+
 function parseInput(raw: unknown): PipedreamConfigInput {
   const body = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const projectId = clean(body.projectId);
@@ -1056,20 +1087,16 @@ export async function pipedreamProxyRequest(
   });
 
   if (!response.ok) {
-    const detail = (await response.json().catch(() => ({}))) as {
-      error?: unknown;
-      message?: unknown;
-      name?: unknown;
-    };
-    const reason = clean(detail.error ?? detail.message ?? detail.name).slice(
-      0,
-      180,
-    );
+    const detail = (await response.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    const reason = proxyFailureReason(detail).slice(0, 240);
     if (response.status === 401 || response.status === 403) {
       throw new PipedreamRequestError(
         reason
-          ? `Pipedream rejected the proxy request (${response.status}) for ${targetUrl}: ${reason}`
-          : `Connect Proxy returned ${response.status} for ${targetUrl}. This is often an upstream permission denial for that path — not necessarily invalid Pipedream project credentials (other proxy paths may still work).`,
+          ? `Connect Proxy returned ${response.status} for ${targetUrl}: ${reason}`
+          : `Connect Proxy returned ${response.status} for ${targetUrl}. Upstream denied the path or returned an empty body — not necessarily invalid Pipedream project credentials (other proxy paths may still work).`,
         response.status,
       );
     }
