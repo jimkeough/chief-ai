@@ -83,7 +83,7 @@ export async function searchFrontConversationsViaMcp(input: {
     source: "mcp_list_filter",
     proxyError: input.proxyError,
     note:
-      "Front Search API / Connect Proxy failed, so this used Pipedream MCP list-conversations (same path as Calendar). Results are the recent open page (up to ~100), filtered in Chief — not GET /conversations/search. sampleTags lists tag names seen on that page.",
+      "Front Connect Proxy failed, so this used Pipedream MCP list-conversations (all_inboxes / open). That path misses no-inbox discussions — use GET /tags/{id}/conversations via proxy when available. sampleTags lists tag names seen on that page.",
     sampleTags,
     filters: {
       ...(tagName ? { tag: { name: tagName } } : {}),

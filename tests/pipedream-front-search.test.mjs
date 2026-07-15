@@ -76,14 +76,13 @@ test("builds open Front search queries without requiring a tag", () => {
   );
   assert.equal(
     buildOpenSearchQuery({
-      inboxId: "inb_abc",
       assigneeId: "tea_36301790",
     }),
-    "is:open inbox:inb_abc assignee:tea_36301790",
+    "is:open assignee:tea_36301790",
   );
   assert.throws(
-    () => buildOpenSearchQuery({ inboxId: "380024798" }),
-    /invalid inbox ID/,
+    () => buildOpenSearchQuery({ assigneeId: "380024798" }),
+    /invalid teammate ID/,
   );
 });
 
