@@ -74,13 +74,18 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   {
     name: "search_front_conversations",
     description:
-      "Search open Front conversations using Front's Core Search API (GET /conversations/search/{query} per https://dev.frontapp.com/docs/search-1), e.g. tag:tag_xxx is:open, via Pipedream Connect Proxy. If Proxy fails, falls back to Pipedream MCP list-conversations + tag filter (recent ~100 only). For Chief Inbox Zero pass tag_name; optional teammate tea_lm2n2. Page with nextCursor when hasMore. Read-only.",
+      "Search open Front conversations using Front's Core Search API (GET /conversations/search/{query} per https://dev.frontapp.com/docs/search-1), e.g. tag:tag_xxx is:open, via Pipedream Connect Proxy. Prefer tag_id (tag_…) or Config front.inbox_zero_tag_id when private-tag listing fails. If Proxy fails, falls back to Pipedream MCP list-conversations + tag filter (recent ~100 only). For Chief Inbox Zero pass tag_name and/or tag_id; optional teammate tea_lm2n2. Page with nextCursor when hasMore. Read-only.",
     input_schema: {
       type: "object",
       properties: {
         tag_name: {
           type: "string",
           description: "Optional exact Front tag name filter (company or private teammate tag).",
+        },
+        tag_id: {
+          type: "string",
+          description:
+            "Optional Front Core API tag id (tag_…). Skips /tags name lookup. Prefer Config → Front — Chief Inbox Zero tag id for that tag.",
         },
         inbox_name: {
           type: "string",
@@ -113,13 +118,18 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "search_front_tagged_conversations",
-    description: `Convenience alias for search_front_conversations with tag_name defaulting to "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Falls back to MCP list+tag filter when Connect Proxy fails.`,
+    description: `Convenience alias for search_front_conversations with tag_name defaulting to "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Uses Config front.inbox_zero_tag_id or tag_id when set. Falls back to MCP list+tag filter when Connect Proxy fails.`,
     input_schema: {
       type: "object",
       properties: {
         tag_name: {
           type: "string",
           description: `Exact Front tag name (default "${DEFAULT_FRONT_INBOX_ZERO_TAG}").`,
+        },
+        tag_id: {
+          type: "string",
+          description:
+            "Front Core API tag id (tag_…). Prefer Config → Front — Chief Inbox Zero tag id.",
         },
         teammate: {
           type: "string",
@@ -191,6 +201,7 @@ export async function runChiefReadTool(
   if (name === "search_front_conversations") {
     const result = await searchFrontConversations({
       tagName: typeof args.tag_name === "string" ? args.tag_name : undefined,
+      tagId: typeof args.tag_id === "string" ? args.tag_id : undefined,
       inboxName: typeof args.inbox_name === "string" ? args.inbox_name : undefined,
       assignee: typeof args.assignee === "string" ? args.assignee : undefined,
       participant:
@@ -205,6 +216,7 @@ export async function runChiefReadTool(
   if (name === "search_front_tagged_conversations") {
     const result = await searchTaggedOpenConversations({
       tagName: typeof args.tag_name === "string" ? args.tag_name : undefined,
+      tagId: typeof args.tag_id === "string" ? args.tag_id : undefined,
       teammate: typeof args.teammate === "string" ? args.teammate : undefined,
       limit: typeof args.limit === "number" ? args.limit : undefined,
       cursor: typeof args.cursor === "string" ? args.cursor : undefined,

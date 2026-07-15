@@ -151,10 +151,13 @@ missing or too narrow — for example, searching open Front conversations
 (`search_front_conversations`, with optional tag/inbox/assignee filters)
 reuses the same Front OAuth grant without storing a Front API token in Chief.
 If private-tag inventory cannot resolve Front `/me`, set **Config → Front —
-teammate id** once (e.g. `tea_lm2n2` for jim@homejab.com). When Connect Proxy
-fails, Front search falls back to Pipedream MCP list+tag filter (the same path
-Calendar uses). Optional owner-published private Pipedream actions still appear
-under that account's **Tools** menu alongside the public registry.
+teammate id** once (e.g. `tea_lm2n2` for jim@homejab.com). When teammate-scoped
+`/tags` is rejected, set **Config → Front — Chief Inbox Zero tag id** to the
+Core API id (`tag_…`, not the numeric settings URL id — get it from a tagged
+conversation's `tags[].id`). When Connect Proxy fails, Front search falls back
+to Pipedream MCP list+tag filter (the same path Calendar uses). Optional
+owner-published private Pipedream actions still appear under that account's
+**Tools** menu alongside the public registry.
 
 Direct remote MCP servers remain available under **Advanced · Direct MCP** for
 owners who prefer to configure a server URL and credential themselves.

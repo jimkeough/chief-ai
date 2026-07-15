@@ -141,6 +141,17 @@ export function normalizeFrontTeammateId(raw: string): string {
   return value;
 }
 
+/** Front UI settings URLs use a numeric id; Core API expects tag_…. */
+export function normalizeFrontTagId(raw: string): string {
+  const id = text(raw);
+  if (!/^tag_[a-zA-Z0-9]+$/.test(id)) {
+    throw new Error(
+      `Front tag id must look like tag_… (got "${id || String(raw)}"). The numeric id from Front's settings URL is not the API id.`,
+    );
+  }
+  return id;
+}
+
 export function nameMatchesIgnoreCase(actual: unknown, requested: string): boolean {
   return text(actual).toLowerCase() === text(requested).toLowerCase();
 }

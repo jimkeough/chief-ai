@@ -23,6 +23,7 @@ export type SettingKey =
   | "mcp.servers"
   | "mcp.tool_overrides"
   | "front.teammate_id"
+  | "front.inbox_zero_tag_id"
   | "updates.enabled";
 
 export type SettingDef = {
@@ -170,6 +171,15 @@ export const SETTING_DEFS: SettingDef[] = [
     default: "",
     singleLine: true,
     placeholder: "tea_lm2n2",
+  },
+  {
+    key: "front.inbox_zero_tag_id",
+    label: "Front — Chief Inbox Zero tag id",
+    description:
+      "Front Core API tag id for \"Chief Inbox Zero\" (must look like tag_…, not the numeric id from the Front settings URL). Skips name lookup when set. Find it on a tagged conversation's tags[].id via get-conversation, or in Front's network tab when opening that tag.",
+    default: "",
+    singleLine: true,
+    placeholder: "tag_…",
   },
   // Set once the user completes the one-tap "Enable auto-updates" step
   // (see lib/updater-workflow.ts). Gates the "Get this update" button so it

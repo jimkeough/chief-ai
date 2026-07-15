@@ -61,18 +61,31 @@ async function probeProxy(
 }
 
 /** Probe URLs known to be cheap GETs for common Connect apps. */
-function probeTargetsForApp(appSlug: string): string[] {
+function probeTargetsForApp(
+  appSlug: string,
+  opts?: { teammateId?: string },
+): string[] {
   const slug = appSlug.toLowerCase();
   if (slug === "frontapp" || slug === "front") {
     // Include Search API — /me can succeed while /conversations/search fails.
+    // Teammate /tags is often rejected for private tags even when company /tags works.
     const openSearch = `/conversations/search/${encodeURIComponent("is:open")}?limit=1`;
-    return [
+    const targets = [
       "/me",
       "/tags?limit=1",
       openSearch,
       "https://api2.frontapp.com/me",
       `https://api2.frontapp.com${openSearch}`,
     ];
+    const tea = (opts?.teammateId ?? "").trim();
+    if (/^tea_[a-zA-Z0-9]+$/.test(tea)) {
+      targets.splice(
+        2,
+        0,
+        `/teammates/${encodeURIComponent(tea)}/tags?limit=1`,
+      );
+    }
+    return targets;
   }
   if (slug.includes("google_calendar") || slug === "google_calendar") {
     return [
@@ -132,7 +145,15 @@ export async function diagnosePipedreamConnect(): Promise<{
     FRONTAPP_PIPEDREAM_SLUG,
   );
   if (front) {
-    for (const target of probeTargetsForApp(front.appSlug)) {
+    const { getAppSettings } = await import("@/lib/settings");
+    const { normalizeFrontTeammateId } = await import(
+      "@/lib/front-search-helpers"
+    );
+    const settings = await getAppSettings().catch(() => null);
+    const teammateId = normalizeFrontTeammateId(
+      settings?.["front.teammate_id"] ?? "",
+    );
+    for (const target of probeTargetsForApp(front.appSlug, { teammateId })) {
       proxyProbes.push(await probeProxy(userId, front, target));
     }
   }
@@ -163,11 +184,38 @@ export async function diagnosePipedreamConnect(): Promise<{
       p.appSlug === FRONTAPP_PIPEDREAM_SLUG &&
       (p.target === "/me" || p.target.endsWith("/me")),
   );
+  const proxyFrontCompanyTagsOk = proxyProbes.some(
+    (p) =>
+      p.ok &&
+      p.appSlug === FRONTAPP_PIPEDREAM_SLUG &&
+      (p.target === "/tags?limit=1" || p.target.startsWith("/tags?")),
+  );
+  const proxyFrontTeammateTagsOk = proxyProbes.some(
+    (p) =>
+      p.ok &&
+      p.appSlug === FRONTAPP_PIPEDREAM_SLUG &&
+      p.target.includes("/teammates/") &&
+      p.target.includes("/tags"),
+  );
+  const teammateTagsProbed = proxyProbes.some(
+    (p) =>
+      p.appSlug === FRONTAPP_PIPEDREAM_SLUG &&
+      p.target.includes("/teammates/") &&
+      p.target.includes("/tags"),
+  );
 
   let summary: string;
   if (frontMcp.ok && proxyFrontSearchOk) {
     summary =
-      "Front MCP works and Connect Proxy can call Front Search API. Tag search should use GET /conversations/search/{query}.";
+      "Front MCP works and Connect Proxy can call Front Search API. Tag search should use GET /conversations/search/{query} with an explicit tag_… id when private-tag listing fails.";
+  } else if (
+    frontMcp.ok &&
+    proxyFrontCompanyTagsOk &&
+    teammateTagsProbed &&
+    !proxyFrontTeammateTagsOk
+  ) {
+    summary =
+      "Company /tags works via Proxy but teammate /tags does not — private tags need Config front.inbox_zero_tag_id (tag_…) so Search can skip name lookup.";
   } else if (frontMcp.ok && proxyFrontMeOk && !proxyFrontSearchOk) {
     summary =
       "Front /me works via Proxy but /conversations/search does not — tag search will fail on the Search API path even though diagnose /me looks healthy. Prefer fixing Search proxy targets or rely on MCP list+tag filter.";

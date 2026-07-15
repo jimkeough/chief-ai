@@ -24,6 +24,7 @@ import {
   FRONT_API_BASE,
   FRONTAPP_PIPEDREAM_SLUG,
   nameMatchesIgnoreCase,
+  normalizeFrontTagId,
   normalizeFrontTeammateId,
   pageTokenFromNext,
   resolveExactNamedResource,
@@ -43,6 +44,7 @@ export {
   DEFAULT_FRONT_INBOX_ZERO_TAG,
   FRONT_API_BASE,
   FRONTAPP_PIPEDREAM_SLUG,
+  normalizeFrontTagId,
   normalizeFrontTeammateId,
   pageTokenFromNext,
   resolveExactTag,
@@ -179,31 +181,92 @@ async function resolveTagByName(
   const pickName = (tag: unknown) =>
     nameMatchesIgnoreCase(asRecord(tag).name, requestedName);
 
-  const companyMatches = await paginateCollection(
-    userId,
-    accountId,
-    "/tags",
-    pickName,
-  );
-  if (companyMatches.length > 0) {
-    return { ...resolveExactTag(companyMatches, requestedName), scope: "company" };
+  let companyError: string | null = null;
+  try {
+    const companyMatches = await paginateCollection(
+      userId,
+      accountId,
+      "/tags",
+      pickName,
+    );
+    if (companyMatches.length > 0) {
+      return {
+        ...resolveExactTag(companyMatches, requestedName),
+        scope: "company",
+      };
+    }
+  } catch (error) {
+    companyError = error instanceof Error ? error.message : "company /tags failed";
   }
 
-  const teammateMatchesForTag = await paginateCollection(
-    userId,
-    accountId,
-    `/teammates/${encodeURIComponent(teammateId)}/tags`,
-    pickName,
-  );
-  if (teammateMatchesForTag.length > 0) {
+  let teammateError: string | null = null;
+  try {
+    const teammateMatchesForTag = await paginateCollection(
+      userId,
+      accountId,
+      `/teammates/${encodeURIComponent(teammateId)}/tags`,
+      pickName,
+    );
+    if (teammateMatchesForTag.length > 0) {
+      return {
+        ...resolveExactTag(teammateMatchesForTag, requestedName),
+        scope: "teammate",
+      };
+    }
+  } catch (error) {
+    // Private-tag listing is often rejected for admin OAuth even when /tags works.
+    teammateError =
+      error instanceof Error ? error.message : "teammate tags failed";
+  }
+
+  const parts = [
+    `Front tag "${requestedName}" was not found`,
+    companyError ? `company /tags: ${companyError}` : "company /tags: no match",
+    teammateError
+      ? `teammate ${teammateId}/tags: ${teammateError}`
+      : `teammate ${teammateId}/tags: no match`,
+    "Pass tag_id (tag_…) or set Config → Front — Chief Inbox Zero tag id.",
+  ];
+  throw new Error(parts.join(". "));
+}
+
+async function resolveTagForSearch(
+  userId: string,
+  accountId: string,
+  input: { tagId?: string; tagName?: string; teammateId: string },
+): Promise<{ id: string; name: string; scope: "company" | "teammate" | "explicit" }> {
+  const explicit = textField(input.tagId);
+  if (explicit) {
+    const id = normalizeFrontTagId(explicit);
     return {
-      ...resolveExactTag(teammateMatchesForTag, requestedName),
-      scope: "teammate",
+      id,
+      name: textField(input.tagName) || DEFAULT_FRONT_INBOX_ZERO_TAG,
+      scope: "explicit",
     };
   }
 
-  throw new Error(
-    `Front tag "${requestedName}" was not found on company tags or teammate ${teammateId}'s tags.`,
+  const { getAppSettings } = await import("@/lib/settings");
+  const settings = await getAppSettings().catch(() => null);
+  const fromSettings = textField(settings?.["front.inbox_zero_tag_id"]);
+  const requestedName =
+    textField(input.tagName) || DEFAULT_FRONT_INBOX_ZERO_TAG;
+  // Only use the saved Inbox Zero tag id when searching that tag (or default).
+  if (
+    fromSettings &&
+    requestedName.toLowerCase() === DEFAULT_FRONT_INBOX_ZERO_TAG.toLowerCase()
+  ) {
+    return {
+      id: normalizeFrontTagId(fromSettings),
+      name: requestedName,
+      scope: "explicit",
+    };
+  }
+
+  return resolveTagByName(
+    userId,
+    accountId,
+    requestedName,
+    input.teammateId,
   );
 }
 
@@ -280,6 +343,11 @@ async function resolveTeammate(
 export type FrontSearchInput = {
   /** Exact tag name. Optional — omit to inventory all open conversations. */
   tagName?: string;
+  /**
+   * Front Core API tag id (`tag_…`). Prefer this (or Config
+   * `front.inbox_zero_tag_id`) when private-tag listing is blocked.
+   */
+  tagId?: string;
   /** Exact inbox name. Optional. */
   inboxName?: string;
   /** Teammate name, email, or tea_ id for assignee: filter. Optional. */
@@ -299,7 +367,11 @@ export type FrontSearchResult = {
   query: string;
   source: "search" | "tag_conversations" | "mcp_list_filter";
   filters: {
-    tag?: { id: string; name: string; scope?: "company" | "teammate" };
+    tag?: {
+      id: string;
+      name: string;
+      scope?: "company" | "teammate" | "explicit";
+    };
     inbox?: { id: string; name: string };
     assignee?: { id: string; name: string };
     participant?: { id: string; name: string };
@@ -342,12 +414,19 @@ export async function searchFrontConversations(
           ? proxyError.message
           : "Connect Proxy failed",
     });
+    const explicitTagId = textField(input.tagId);
     return {
       query: fallback.query,
       source: fallback.source,
       filters: {
         ...(fallback.filters.tag
-          ? { tag: { id: "", name: fallback.filters.tag.name } }
+          ? {
+              tag: {
+                id: explicitTagId || "",
+                name: fallback.filters.tag.name,
+                ...(explicitTagId ? { scope: "explicit" as const } : {}),
+              },
+            }
           : {}),
         ...(fallback.filters.teammate
           ? { teammate: fallback.filters.teammate }
@@ -387,6 +466,7 @@ async function searchFrontConversationsViaProxy(
   const cursor = textField(input.cursor) || undefined;
 
   const tagName = textField(input.tagName);
+  const tagId = textField(input.tagId);
   const inboxName = textField(input.inboxName);
   const assignee = textField(input.assignee);
   const participant = textField(input.participant);
@@ -402,19 +482,23 @@ async function searchFrontConversationsViaProxy(
     teammate: owner,
   };
 
-  if (tagName) {
-    let tag: { id: string; name: string; scope: "company" | "teammate" };
+  const wantsTag = Boolean(tagId) || Boolean(tagName);
+  if (wantsTag) {
+    let tag: {
+      id: string;
+      name: string;
+      scope: "company" | "teammate" | "explicit";
+    };
     try {
-      tag = await resolveTagByName(
-        userId,
-        connection.accountId,
+      tag = await resolveTagForSearch(userId, connection.accountId, {
+        tagId,
         tagName,
-        owner.id,
-      );
+        teammateId: owner.id,
+      });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "tag resolve failed";
       throw new Error(
-        `Front proxy failed while resolving tag "${tagName}" (company /tags and teammate ${owner.id}/tags): ${detail}`,
+        `Front proxy failed while resolving tag "${tagName || tagId || DEFAULT_FRONT_INBOX_ZERO_TAG}" (pass tag_id / Config front.inbox_zero_tag_id, or company /tags + teammate ${owner.id}/tags): ${detail}`,
       );
     }
     filters.tag = tag;
@@ -553,12 +637,14 @@ async function searchFrontConversationsViaProxy(
 /** Convenience alias that defaults the Chief Inbox Zero tag name. */
 export async function searchTaggedOpenConversations(input: {
   tagName?: string;
+  tagId?: string;
   teammate?: string;
   limit?: number;
   cursor?: string;
 }): Promise<FrontSearchResult> {
   return searchFrontConversations({
     tagName: textField(input.tagName) || DEFAULT_FRONT_INBOX_ZERO_TAG,
+    tagId: input.tagId,
     teammate: input.teammate,
     limit: input.limit,
     cursor: input.cursor,

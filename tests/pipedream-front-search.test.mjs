@@ -11,6 +11,7 @@ import {
   compactConversation,
   DEFAULT_FRONT_INBOX_ZERO_TAG,
   FRONT_API_BASE,
+  normalizeFrontTagId,
   normalizeFrontTeammateId,
   pageTokenFromNext,
   resolveExactTag,
@@ -88,6 +89,11 @@ test("builds open Front search queries without requiring a tag", () => {
 test("normalizes Front teammate ids from UI tea: form", () => {
   assert.equal(normalizeFrontTeammateId("tea:36301790"), "tea_36301790");
   assert.equal(normalizeFrontTeammateId("tea_36301790"), "tea_36301790");
+});
+
+test("rejects numeric Front settings URL ids as tag ids", () => {
+  assert.equal(normalizeFrontTagId("tag_abc123"), "tag_abc123");
+  assert.throws(() => normalizeFrontTagId("380024798"), /tag_…/);
 });
 
 test("builds tag conversation list paths for open statuses", () => {
