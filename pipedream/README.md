@@ -22,8 +22,9 @@ Pipedream is the default connector path:
 
 `diagnose_pipedream_connect` probes `/me`, company `/tags`, teammate
 `/teammates/{tea}/tags` (when Config teammate id is set), and
-`/conversations/search` separately — `/me` can succeed while Search or
-teammate tags still fail.
+`/conversations/search` separately. A 403 on teammate `/tags` while other
+Front proxy paths succeed is a **known gap** (not broken Pipedream project
+credentials) — set Config **Front — Chief Inbox Zero tag id** to skip it.
 
 ### Finding `tag_…`
 

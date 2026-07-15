@@ -1068,8 +1068,8 @@ export async function pipedreamProxyRequest(
     if (response.status === 401 || response.status === 403) {
       throw new PipedreamRequestError(
         reason
-          ? `Pipedream rejected the proxy request: ${reason}`
-          : "Pipedream rejected the stored project credentials.",
+          ? `Pipedream rejected the proxy request (${response.status}) for ${targetUrl}: ${reason}`
+          : `Connect Proxy returned ${response.status} for ${targetUrl}. This is often an upstream permission denial for that path — not necessarily invalid Pipedream project credentials (other proxy paths may still work).`,
         response.status,
       );
     }
@@ -1101,7 +1101,7 @@ export async function pipedreamProxyRequest(
 export function publicPipedreamError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : "";
   if (
-    /^(Enter|Choose|Disconnect Pipedream|Finish Pipedream|Pipedream (rejected|could not|did not|returned|is rate-limiting|request failed|proxy)|Invalid return URL|Stored Pipedream|Pipedream connection not found|Sign in)/.test(
+    /^(Enter|Choose|Disconnect Pipedream|Finish Pipedream|Pipedream (rejected|could not|did not|returned|is rate-limiting|request failed|proxy)|Connect Proxy returned|Invalid return URL|Stored Pipedream|Pipedream connection not found|Sign in)/.test(
       message,
     )
   ) {
