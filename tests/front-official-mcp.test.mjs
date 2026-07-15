@@ -9,6 +9,7 @@ import {
 } from "../lib/front-mcp-read-helpers.ts";
 import {
   FRONT_OAUTH_SCOPE,
+  frontAuthorizationScope,
   frontOAuthScopeString,
   frontRedirectUri,
   normalizeFrontScopes,
@@ -29,6 +30,19 @@ test("builds the Front OAuth callback and uses feature:mcp", () => {
     () => normalizeFrontScopes(["openid"]),
     /only supports the "feature:mcp" scope/,
   );
+});
+
+test("requests the scope Front's live metadata advertises", () => {
+  // Mirrors whatever the authorization server advertises...
+  assert.equal(frontAuthorizationScope(["feature:mcp"]), "feature:mcp");
+  assert.equal(
+    frontAuthorizationScope(["read", "write", "send"]),
+    "read write send",
+  );
+  // ...and falls back to the known MCP scope when metadata omits it.
+  assert.equal(frontAuthorizationScope([]), "feature:mcp");
+  assert.equal(frontAuthorizationScope(undefined), "feature:mcp");
+  assert.equal(frontAuthorizationScope("read"), "feature:mcp");
 });
 
 test("builds official Front MCP tag searches", () => {

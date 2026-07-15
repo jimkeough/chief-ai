@@ -34,8 +34,16 @@ export async function GET(req: NextRequest) {
       ),
     );
 
-  if (url.searchParams.get("error")) {
-    return fail(`Front returned: ${url.searchParams.get("error")}`);
+  const oauthError = url.searchParams.get("error");
+  if (oauthError) {
+    if (oauthError === "invalid_scope") {
+      return fail(
+        "Front rejected the requested OAuth scope (invalid_scope). Front's MCP " +
+          "authorization server only accepts the scope it advertises — confirm the " +
+          "developer app has the MCP Server feature enabled, then reconnect.",
+      );
+    }
+    return fail(`Front returned: ${oauthError}`);
   }
   if (!code) return fail("Front did not return an authorization code.");
   if (!state || !cookieState || state !== cookieState || !codeVerifier) {

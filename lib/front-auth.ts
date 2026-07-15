@@ -16,7 +16,7 @@ import type {
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import {
   FRONT_OAUTH_SCOPE,
-  frontOAuthScopeString,
+  frontAuthorizationScope,
   frontRedirectUri,
   normalizeFrontScopes,
   type FrontOAuthScope,
@@ -27,6 +27,7 @@ import { createClient } from "@/lib/supabase/server";
 export const FRONT_MCP_URL = "https://mcp.frontapp.com/mcp";
 export {
   FRONT_OAUTH_SCOPE,
+  frontAuthorizationScope,
   frontOAuthScopeString,
   frontRedirectUri,
   normalizeFrontScopes,
@@ -314,7 +315,10 @@ export async function buildFrontAuthorization(
     metadata: discovered.metadata,
     clientInformation: clientInformation(config),
     redirectUrl: frontRedirectUri(origin),
-    scope: frontOAuthScopeString(),
+    // Request exactly what Front's authorization server advertises rather than a
+    // hardcoded scope; its prose docs (read/write/send) disagree with the live
+    // metadata (feature:mcp), and requesting the wrong value returns invalid_scope.
+    scope: frontAuthorizationScope(discovered.metadata?.scopes_supported),
     state,
     resource: discovered.resource,
   });

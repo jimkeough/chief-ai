@@ -33,6 +33,22 @@ export function frontOAuthScopeString(): string {
   return FRONT_OAUTH_SCOPE;
 }
 
+/**
+ * The scope Chief requests at authorize time. Front's live authorization-server
+ * metadata is the source of truth: its prose docs still list read/write/send,
+ * but `/.well-known/oauth-authorization-server` only advertises what the server
+ * actually accepts (today `feature:mcp`). Requesting anything else returns
+ * `invalid_scope`. Mirror whatever the metadata advertises so a Front change
+ * during the MCP open beta can't silently break the connection again; fall back
+ * to the known MCP scope when the metadata omits `scopes_supported`.
+ */
+export function frontAuthorizationScope(scopesSupported?: unknown): string {
+  const supported = Array.isArray(scopesSupported)
+    ? scopesSupported.map(clean).filter(Boolean)
+    : [];
+  return supported.length > 0 ? supported.join(" ") : FRONT_OAUTH_SCOPE;
+}
+
 export function frontRedirectUri(origin: string): string {
   return `${origin.replace(/\/$/, "")}/api/front/callback`;
 }

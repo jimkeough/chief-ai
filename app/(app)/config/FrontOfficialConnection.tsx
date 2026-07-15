@@ -252,11 +252,11 @@ export default function FrontOfficialConnection() {
             />
           </label>
           <p className="text-[11.5px] leading-relaxed text-ink-3">
-            Chief requests Front&apos;s OAuth scope{" "}
-            <span className="font-mono">feature:mcp</span> (what Front&apos;s
-            authorization server actually accepts). Set Read / Write / Send under
-            the Front developer app&apos;s Resource permissions — those are not
-            OAuth scopes, even though Front&apos;s docs still mention them that way.
+            Chief requests the OAuth scope Front&apos;s authorization server
+            advertises (today <span className="font-mono">feature:mcp</span>). Set
+            Read / Write / Send under the Front developer app&apos;s Resource
+            permissions — those are not OAuth scopes, even though Front&apos;s docs
+            still mention them that way.
           </p>
 
           {config?.configured ? (

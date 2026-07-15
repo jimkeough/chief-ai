@@ -983,10 +983,14 @@ live authorization-server metadata only advertises `feature:mcp`. Requesting
 belong on the Front developer app's permission grid; they are not OAuth scopes.
 
 **Current mitigation:** Settings → Connections displays the exact redirect URL,
-stores client credentials and tokens in Vault, requests `feature:mcp`, offers
-an “Apply database update” control when the Front OAuth tables/RPCs are missing,
-and auto-applies pending migrations on save (including the older read/write/send
-RPC). Front app Resource Read/Write/Send do not affect credential save.
+stores client credentials and tokens in Vault, and at authorize time requests the
+scope Front's live authorization-server metadata advertises (`scopes_supported`,
+currently `feature:mcp`) rather than a hardcoded value — so a Front change during
+the open beta can't silently reintroduce `invalid_scope`; it falls back to
+`feature:mcp` when the metadata omits it. It also offers an “Apply database
+update” control when the Front OAuth tables/RPCs are missing, and auto-applies
+pending migrations on save (including the older read/write/send RPC). Front app
+Resource Read/Write/Send do not affect credential save.
 
 **Doc trap #2 (hit live):** Front MCP `search_conversations` with a tag filter
 still under-counts vs Core REST `GET /tags/{id}/conversations` (no-inbox
