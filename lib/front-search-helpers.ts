@@ -15,7 +15,15 @@ export const FRONTAPP_PIPEDREAM_SLUG = "frontapp";
 export function resultsFrom(response: unknown): unknown[] {
   if (Array.isArray(response)) return response;
   const envelope = record(response);
-  return Array.isArray(envelope._results) ? envelope._results : [];
+  if (Array.isArray(envelope._results)) return envelope._results;
+  // Connect Proxy sometimes nests the Front envelope.
+  for (const key of ["data", "body", "result", "response"] as const) {
+    const nested = record(envelope[key]);
+    if (Array.isArray(nested._results)) return nested._results;
+    if (Array.isArray(envelope[key])) return envelope[key] as unknown[];
+  }
+  if (Array.isArray(envelope.conversations)) return envelope.conversations;
+  return [];
 }
 
 export function pageTokenFromNext(next: unknown): string | null {
@@ -118,44 +126,61 @@ export function buildOpenSearchQuery(filters: {
   return buildFrontSearchQuery({ ...filters, status: filters.status ?? "open" });
 }
 
-/** Path for conversations on a tag.
- *  Front expects `q` as a JSON object: {"statuses":["assigned",...]}
- *  https://dev.frontapp.com/reference/list-tagged-conversations
- *  Omitting `q` does NOT mean “all” — it returns a tiny default subset.
- */
+/** Build /tags/{id}/conversations paths. Front's `q` is finicky through Proxy. */
 export function buildTagConversationsPath(
   tagId: string,
   limit: number,
   cursor?: string,
   status: FrontSearchStatus = "open",
 ): string {
+  return buildTagConversationsPathOptions(tagId, limit, cursor, status)[0]!;
+}
+
+/**
+ * Candidate paths for a tag list. For `all`, try bare (no q), classic statuses,
+ * and ticketing status_categories — callers should merge unique ids.
+ */
+export function buildTagConversationsPathOptions(
+  tagId: string,
+  limit: number,
+  cursor?: string,
+  status: FrontSearchStatus = "open",
+): string[] {
   const id = text(tagId);
   if (!/^tag_[a-zA-Z0-9]+$/.test(id)) {
     throw new Error("Front returned an invalid tag ID.");
   }
-  const qs = new URLSearchParams();
-  qs.set("limit", String(limit));
-  if (cursor) qs.set("page_token", cursor);
+  const base = (extra: Record<string, string> = {}) => {
+    const qs = new URLSearchParams({ limit: String(limit), ...extra });
+    if (cursor) qs.set("page_token", cursor);
+    return `/tags/${encodeURIComponent(id)}/conversations?${qs}`;
+  };
   const normalized = normalizeFrontSearchStatus(status);
-  let statuses: string[];
   if (normalized === "open") {
-    statuses = ["assigned", "unassigned"];
-  } else if (normalized === "archived") {
-    statuses = ["archived"];
-  } else if (normalized === "trashed") {
-    statuses = ["trashed"];
-  } else if (normalized === "all") {
-    // Explicit full set — required for complete tag inventory.
-    statuses = ["assigned", "unassigned", "archived", "trashed"];
-  } else if (normalized === "assigned" || normalized === "unassigned") {
-    statuses = [normalized];
-  } else {
-    // Search-style filters (snoozed, waiting, …) aren't valid on this list
-    // endpoint — fall back to the full set.
-    statuses = ["assigned", "unassigned", "archived", "trashed"];
+    return [
+      base({ q: JSON.stringify({ statuses: ["assigned", "unassigned"] }) }),
+      `/tags/${encodeURIComponent(id)}/conversations?limit=${limit}${cursor ? `&page_token=${encodeURIComponent(cursor)}` : ""}&q%5Bstatuses%5D%5B%5D=assigned&q%5Bstatuses%5D%5B%5D=unassigned`,
+    ];
   }
-  qs.set("q", JSON.stringify({ statuses }));
-  return `/tags/${encodeURIComponent(id)}/conversations?${qs}`;
+  if (normalized === "archived") {
+    return [base({ q: JSON.stringify({ statuses: ["archived"] }) })];
+  }
+  if (normalized === "trashed") {
+    return [base({ q: JSON.stringify({ statuses: ["trashed"] }) })];
+  }
+  if (normalized === "assigned" || normalized === "unassigned") {
+    return [base({ q: JSON.stringify({ statuses: [normalized] }) })];
+  }
+  const allStatuses = ["assigned", "unassigned", "archived", "trashed"];
+  return [
+    base(),
+    base({ q: JSON.stringify({ statuses: allStatuses }) }),
+    base({
+      q: JSON.stringify({
+        status_categories: ["open", "waiting", "resolved"],
+      }),
+    }),
+  ];
 }
 
 /** @deprecated Prefer buildTagConversationsPath. */

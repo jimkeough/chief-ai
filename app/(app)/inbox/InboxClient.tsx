@@ -726,6 +726,14 @@ function FrontTagInbox() {
           {countLabel} TAGGED
         </div>
       </div>
+      {data.note && (
+        <div className="text-[12px] leading-snug text-ink-3">{data.note}</div>
+      )}
+      {data.source && (
+        <div className="font-mono text-[10px] tracking-[0.06em] text-ink-3">
+          SOURCE · {data.source.toUpperCase()}
+        </div>
+      )}
 
       {threads.length === 0 ? (
         <div
@@ -843,7 +851,7 @@ function ConnectMail({
 
   return (
     <div className="flex flex-col gap-4 pt-2">
-      <h1 className="text-[22px] font-semibold text-ink">Inbox</h1>
+      <h1 className="text-[22px] font-semibold text-ink">Email</h1>
       <div
         className="flex flex-col gap-3 rounded-card border p-5"
         style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}

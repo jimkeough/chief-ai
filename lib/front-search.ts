@@ -18,6 +18,7 @@ import {
   asRecord,
   buildFrontSearchQuery,
   buildTagConversationsPath,
+  buildTagConversationsPathOptions,
   buildTaggedOpenQuery,
   compactConversation,
   DEFAULT_FRONT_INBOX_ZERO_TAG,
@@ -523,9 +524,8 @@ async function searchFrontConversationsViaProxy(
     filters.tag = tag;
 
     // Prefer GET /tags/{id}/conversations — includes discussions with no inbox.
-    // Front Search API only covers team/private inbox conversations
-    // (https://dev.frontapp.com/docs/search-1), so it under-counts tags on
-    // internal discussions.
+    // Try multiple q encodings (bare / statuses / status_categories); keep the
+    // richest unique set. Search API alone under-counts no-inbox discussions.
     const tagListQuery =
       status === "open"
         ? `tag:${tag.id} statuses:assigned,unassigned`
@@ -533,27 +533,95 @@ async function searchFrontConversationsViaProxy(
           ? `tag:${tag.id}`
           : `tag:${tag.id} is:${status}`;
     try {
-      const response = await frontProxyGet(
-        userId,
-        connection.accountId,
-        buildTagConversationsPath(tag.id, limit, cursor, status),
-      );
-      const envelope = asRecord(response);
-      const nextCursor = pageTokenFromNext(asRecord(envelope._pagination).next);
-      const conversations = resultsFrom(response).map(compactConversation);
-      const total =
-        typeof envelope._total === "number" ? envelope._total : undefined;
+      const byId = new Map<string, ReturnType<typeof compactConversation>>();
+      const pathAttempts: string[] = [];
+      let bestPath = "";
+      let nextCursor: string | null = null;
+      let reportedTotal: number | undefined;
+
+      for (const path of buildTagConversationsPathOptions(
+        tag.id,
+        limit,
+        cursor,
+        status,
+      )) {
+        try {
+          const response = await frontProxyGet(
+            userId,
+            connection.accountId,
+            path,
+          );
+          pathAttempts.push(path.split("?")[0] ?? path);
+          const envelope = asRecord(response);
+          const page = resultsFrom(response).map(compactConversation);
+          for (const c of page) {
+            if (c.id && !byId.has(c.id)) byId.set(c.id, c);
+          }
+          if (page.length > 0 && !bestPath) {
+            bestPath = path;
+            nextCursor = pageTokenFromNext(
+              asRecord(envelope._pagination).next,
+            );
+            if (typeof envelope._total === "number") {
+              reportedTotal = envelope._total;
+            }
+          } else if (page.length > (reportedTotal ?? 0)) {
+            bestPath = path;
+            nextCursor = pageTokenFromNext(
+              asRecord(envelope._pagination).next,
+            );
+            if (typeof envelope._total === "number") {
+              reportedTotal = envelope._total;
+            }
+          }
+        } catch {
+          // Try the next encoding.
+        }
+      }
+
+      if (byId.size === 0) {
+        throw new Error(
+          `No conversations returned from /tags/${tag.id}/conversations (tried ${pathAttempts.length || "0"} encodings).`,
+        );
+      }
+
+      // Follow pagination on the best-yielding path only.
+      let pages = 1;
+      while (nextCursor && byId.size < 200 && pages < 10 && bestPath) {
+        const paginatedPath = bestPath.includes("page_token=")
+          ? bestPath.replace(/page_token=[^&]+/, `page_token=${encodeURIComponent(nextCursor)}`)
+          : `${bestPath}${bestPath.includes("?") ? "&" : "?"}page_token=${encodeURIComponent(nextCursor)}`;
+        try {
+          const response = await frontProxyGet(
+            userId,
+            connection.accountId,
+            paginatedPath,
+          );
+          const envelope = asRecord(response);
+          for (const c of resultsFrom(response).map(compactConversation)) {
+            if (c.id && !byId.has(c.id)) byId.set(c.id, c);
+          }
+          nextCursor = pageTokenFromNext(asRecord(envelope._pagination).next);
+          pages += 1;
+        } catch {
+          break;
+        }
+      }
+
+      const conversations = [...byId.values()];
       return {
         query: tagListQuery,
         source: "tag_conversations",
         filters,
         account: connection.accountName ?? connection.accountId,
         count: conversations.length,
-        ...(total !== undefined ? { total } : {}),
+        ...(reportedTotal !== undefined
+          ? { total: Math.max(reportedTotal, conversations.length) }
+          : { total: conversations.length }),
         conversations,
         nextCursor,
         hasMore: Boolean(nextCursor),
-        note: "Used GET /tags/{id}/conversations (includes discussions with no inbox). Front Search API is inbox-scoped and would miss those.",
+        note: `Used GET /tags/{id}/conversations (${conversations.length} unique across ${pathAttempts.length || 1} query encoding(s)${pages > 1 ? `, ${pages} pages` : ""}).`,
       };
     } catch (tagListError) {
       const query = buildFrontSearchQuery({ tagId: tag.id, status });

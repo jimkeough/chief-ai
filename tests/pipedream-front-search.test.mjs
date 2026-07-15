@@ -120,9 +120,10 @@ test("builds tag conversation list paths for open statuses", () => {
     buildTagOpenConversationsPath("tag_Chief123", 10, "next_1"),
     /page_token=next_1/,
   );
+  // status=all prefers bare /tags/{id}/conversations (no q) first.
   assert.equal(
     buildTagConversationsPath("tag_6a990e", 25, undefined, "all"),
-    "/tags/tag_6a990e/conversations?limit=25&q=%7B%22statuses%22%3A%5B%22assigned%22%2C%22unassigned%22%2C%22archived%22%2C%22trashed%22%5D%7D",
+    "/tags/tag_6a990e/conversations?limit=25",
   );
 });
 
