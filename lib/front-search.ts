@@ -105,13 +105,55 @@ async function fetchFrontMe(
   userId: string,
   accountId: string,
 ): Promise<{ id: string; name: string }> {
-  const me = asRecord(await frontProxyGet(userId, accountId, "/me"));
-  const id = normalizeFrontTeammateId(textField(me.id));
-  const name = teammateLabel(me) || textField(me.email) || id;
-  if (!/^tea_[a-zA-Z0-9]+$/.test(id)) {
-    throw new Error("Front did not return the authorizing teammate id (/me).");
+  const raw = await frontProxyGet(userId, accountId, "/me");
+  // Connect Proxy sometimes returns the teammate object directly, sometimes
+  // nested under data / body.
+  const candidates = [asRecord(raw), asRecord(asRecord(raw).data), asRecord(asRecord(raw).body)];
+  for (const me of candidates) {
+    const id = normalizeFrontTeammateId(textField(me.id));
+    if (!/^tea_[a-zA-Z0-9]+$/.test(id)) continue;
+    const name = teammateLabel(me) || textField(me.email) || id;
+    return { id, name };
   }
-  return { id, name };
+  throw new Error("Front did not return the authorizing teammate id (/me).");
+}
+
+/** Prefer an explicit tea_ id without another Front round-trip. */
+function teammateFromIdHint(hint: string): { id: string; name: string } | null {
+  const id = normalizeFrontTeammateId(hint);
+  if (!/^tea_[a-zA-Z0-9]+$/.test(id)) return null;
+  return { id, name: id };
+}
+
+async function resolveOwnerTeammate(
+  userId: string,
+  accountId: string,
+  hint: string,
+): Promise<{ id: string; name: string }> {
+  const fromHint = textField(hint);
+  if (fromHint) {
+    const direct = teammateFromIdHint(fromHint);
+    if (direct) return direct;
+    return resolveTeammate(userId, accountId, fromHint);
+  }
+
+  const { getAppSettings } = await import("@/lib/settings");
+  const settings = await getAppSettings().catch(() => null);
+  const fromSettings = textField(settings?.["front.teammate_id"]);
+  if (fromSettings) {
+    const direct = teammateFromIdHint(fromSettings);
+    if (direct) return direct;
+    return resolveTeammate(userId, accountId, fromSettings);
+  }
+
+  try {
+    return await fetchFrontMe(userId, accountId);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "failed";
+    throw new Error(
+      `Could not resolve Front teammate identity (${detail}). Set Config → Front — teammate id to your tea_… id (e.g. tea_36301790), or pass teammate in the tool call.`,
+    );
+  }
 }
 
 async function resolveTagByName(
@@ -171,18 +213,24 @@ async function resolveTeammate(
   requested: string,
 ): Promise<{ id: string; name: string }> {
   const normalized = normalizeFrontTeammateId(requested);
+  // Trust an explicit tea_ id for private-tag scoping. Looking up /teammates/{id}
+  // can fail under the same Connect Proxy limits as /me.
   if (/^tea_[a-zA-Z0-9]+$/.test(normalized)) {
-    const direct = asRecord(
-      await frontProxyGet(
-        userId,
-        accountId,
-        `/teammates/${encodeURIComponent(normalized)}`,
-      ),
-    );
-    const id = normalizeFrontTeammateId(textField(direct.id) || normalized);
-    const name = teammateLabel(direct) || textField(direct.email) || id;
-    if (!id) throw new Error(`Front teammate "${requested}" was not found.`);
-    return { id, name };
+    try {
+      const direct = asRecord(
+        await frontProxyGet(
+          userId,
+          accountId,
+          `/teammates/${encodeURIComponent(normalized)}`,
+        ),
+      );
+      const id = normalizeFrontTeammateId(textField(direct.id) || normalized);
+      const name = teammateLabel(direct) || textField(direct.email) || id;
+      if (id) return { id, name };
+    } catch {
+      return { id: normalized, name: normalized };
+    }
+    return { id: normalized, name: normalized };
   }
 
   const matches = await paginateCollection(userId, accountId, "/teammates", (t) =>
@@ -279,10 +327,11 @@ export async function searchFrontConversations(
   const participant = textField(input.participant);
   const teammateHint = textField(input.teammate);
 
-  const me = await fetchFrontMe(userId, connection.accountId);
-  const owner = teammateHint
-    ? await resolveTeammate(userId, connection.accountId, teammateHint)
-    : me;
+  const owner = await resolveOwnerTeammate(
+    userId,
+    connection.accountId,
+    teammateHint,
+  );
 
   const filters: FrontSearchResult["filters"] = {
     teammate: owner,
