@@ -150,7 +150,10 @@ environment. Connect Proxy calls use the same project credentials and the
 specific connected account ID; Chief-built proxy helpers that are read-only
 (such as Front conversation search) run as transparent read tools, while every write,
 send, or delete still defaults to Ask through the broker, proposal card, live
-permission re-check, executor, and journal.
+permission re-check, executor, and journal. Optional Config
+`pipedream.front_oauth_app_id` selects an owner-created Pipedream OAuth client
+for Front (for example one with Private Resources) instead of Pipedream's
+default Front app when connecting that account.
 
 **Ejecting:** disconnect the account in Config to delete its Pipedream grant.
 Direct remote MCP remains available under **Advanced · Direct MCP**, so no

@@ -28,26 +28,34 @@ uses this same tag list with **no Search fallback** (so a Proxy failure is
 visible instead of a silent under-count). Email is a separate tab
 (Gmail/IMAP today; Outlook later via the same source pattern).
 
-Private/individual tags: name lookup via `/teammates/{id}/tags` is often
-denied through Connect Proxy — set Config **Front — Chief Inbox Zero tag id**
-to skip it. Listing uses `GET /tags/{id}/conversations` (absolute api2 first).
+### Private tags and Private Resources
 
-If Front returns **"This agent is not allowed to read the tag"**, that is an
-upstream ACL on the Pipedream Front OAuth app for that tag (often private-tag
-scope) — reconnect Front under Config → Connections, or use a company/shared
-tag. Chief tagged-search tools do **not** fall back to inbox-scoped Search
-(that path under-counts and previously looked like “3 conversations”).
+Name lookup via `/teammates/{id}/tags` is often denied through Connect Proxy —
+set Config **Front — Chief Inbox Zero tag id** to skip it.
 
-Relative Connect Proxy paths can also 403 while absolute api2 works for the
-same grant; Inbox prefers absolute. Real private-resource preference denials
-use a different Front message — see
-https://help.front.com/en/articles/2516.
+If Front returns **"This agent is not allowed to read the tag"**, reconnecting
+Pipedream's **default** Front app will not help — that client typically lacks
+the **Private Resources** namespace. Two durable options:
+
+1. **Convert the triage tag to company/shared** in Front (simplest).
+2. **Custom Front OAuth client with Private Resources:**
+   - Front → Settings → Developers → create an OAuth app with **Private
+     Resources** (and Tags + Conversations read)
+   - Pipedream → OAuth Clients → New → Front → paste that client id/secret;
+     keep Private Resources in the client scopes
+   - Copy the Pipedream client id (`oa_…`) into Chief Config → **Pipedream —
+     Front OAuth app id**
+   - Config → Connections → disconnect Front, then connect Front again (the
+     connect link includes `oauthAppId`)
+
+Chief tagged-search tools do **not** fall back to inbox-scoped Search (that
+path under-counts). Relative Connect Proxy paths can also 403 while absolute
+api2 works; Inbox prefers absolute. Teammate preference denials use a different
+Front message — see https://help.front.com/en/articles/2516.
 
 `diagnose_pipedream_connect` probes `/me`, company `/tags`, teammate
-`/teammates/{tea}/tags` (when Config teammate id is set), and
-`/conversations/search` separately. A 403 on teammate `/tags` while other
-Front proxy paths succeed is a **known gap** (not broken Pipedream project
-credentials) — set Config **Front — Chief Inbox Zero tag id** to skip it.
+`/teammates/{tea}/tags` (when Config teammate id is set), configured tag
+conversations (relative + absolute), and `/conversations/search` separately.
 
 ### Finding `tag_…`
 

@@ -470,6 +470,7 @@ export async function createPipedreamConnectLink(
   userId: string,
   appSlug: string,
   origin: string,
+  opts?: { oauthAppId?: string },
 ): Promise<string> {
   const app = appSlug.trim();
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(app)) throw new Error("Choose a valid Pipedream app.");
@@ -502,6 +503,23 @@ export async function createPipedreamConnectLink(
     throw new Error("Pipedream returned an invalid authorization link.");
   }
   url.searchParams.set("app", app);
+
+  // Custom OAuth client (e.g. Front with Private Resources). Prefer an explicit
+  // opt, then Config for frontapp.
+  let oauthAppId = clean(opts?.oauthAppId);
+  if (!oauthAppId && (app === "frontapp" || app === "front")) {
+    const { getAppSettings } = await import("@/lib/settings");
+    const settings = await getAppSettings().catch(() => null);
+    oauthAppId = clean(settings?.["pipedream.front_oauth_app_id"]);
+  }
+  if (oauthAppId) {
+    if (!/^oa_[a-zA-Z0-9]+$/.test(oauthAppId)) {
+      throw new Error(
+        "Pipedream Front OAuth app id must look like oa_… (from Pipedream → OAuth Clients).",
+      );
+    }
+    url.searchParams.set("oauthAppId", oauthAppId);
+  }
   return url.href;
 }
 

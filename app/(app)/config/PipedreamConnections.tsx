@@ -1043,6 +1043,15 @@ export default function PipedreamConnections() {
                 Verified reads run automatically. Writes, sends, deletes, and unknown
                 tools always ask first.
               </p>
+              {connections.some((c) => c.appSlug === "frontapp") && (
+                <p className="mt-2 text-[12px] leading-relaxed text-ink-3">
+                  Front private tags need Private Resources on the OAuth grant.
+                  Pipedream&apos;s default Front app usually does not include that —
+                  set Config → Pipedream — Front OAuth app id (oa_…) from a custom
+                  Front client with Private Resources, then disconnect and reconnect
+                  Front here. Or use a company/shared triage tag.
+                </p>
+              )}
             </div>
             {connections.length === 0 && (
               <div className="text-[13px] text-ink-3">No Pipedream apps connected yet.</div>

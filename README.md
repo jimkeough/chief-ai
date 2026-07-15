@@ -155,10 +155,15 @@ If private-tag inventory cannot resolve Front `/me`, set **Config → Front —
 teammate id** once (e.g. `tea_lm2n2` for jim@homejab.com). The Inbox page
 (**Front** tab) requires **Config → Front — Chief Inbox Zero tag id**
 (`tag_…`) and lists that tag via `/tags/{id}/conversations` (includes
-no-inbox discussions). Email (Gmail/IMAP) is a separate Inbox tab; Outlook
-can join the same source pattern later. When Connect Proxy fails, Front search
-falls back to Pipedream MCP list+tag filter (the same path Calendar uses).
-Optional owner-published private Pipedream actions still appear under that
+no-inbox discussions). Private/individual triage tags need **Private
+Resources** on the Front OAuth grant — Pipedream's default Front app usually
+lacks that; either use a company/shared tag, or set **Config → Pipedream —
+Front OAuth app id** (`oa_…`) from a custom Front client with Private
+Resources and reconnect Front. Email (Gmail/IMAP) is a separate Inbox tab;
+Outlook can join the same source pattern later. When Connect Proxy fails,
+Front search falls back to Pipedream MCP list+tag filter only when Search
+fallback is allowed (Inbox and tagged Chief tools do not). Optional
+owner-published private Pipedream actions still appear under that
 account's **Tools** menu alongside the public registry.
 
 Direct remote MCP servers remain available under **Advanced · Direct MCP** for

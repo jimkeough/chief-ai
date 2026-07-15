@@ -86,10 +86,9 @@ function formatTagConversationsEmptyError(
   if (/not allowed to read.*tag/i.test(joined)) {
     return new Error(
       `Front denied reading tag ${tagId} ("This agent is not allowed to read the tag"). ` +
-        `That is Front rejecting the Pipedream Front OAuth app's access to this tag — ` +
-        `usually a private/individual tag without Private Resources on the connection. ` +
-        `Reconnect Front under Config → Connections (re-consent), or convert the tag to company/shared. ` +
-        `Do not trust Search fallback counts (inbox-scoped; under-counts). ${sample}`,
+        `Pipedream's default Front OAuth app usually lacks Private Resources — reconnecting alone will not help. ` +
+        `Either convert the tag to company/shared in Front, or: create a Front developer OAuth app with Private Resources + Tags read, ` +
+        `add it as a Pipedream OAuth Client for Front, set Config → Pipedream — Front OAuth app id (oa_…), then disconnect and reconnect Front. ${sample}`,
     );
   }
   if (isFrontTagConversationsPermissionDenied(joined)) {

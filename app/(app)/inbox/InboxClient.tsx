@@ -592,12 +592,20 @@ function FrontTagInbox() {
           {data.error}
         </div>
         {reconnect && (
-          <a
-            href="/config/connections"
-            className="text-[14px] text-ink underline underline-offset-2"
-          >
-            Reconnect Front
-          </a>
+          <div className="flex flex-col gap-1.5">
+            <a
+              href="/config"
+              className="text-[14px] text-ink underline underline-offset-2"
+            >
+              Open Config (set Front OAuth app id)
+            </a>
+            <a
+              href="/config/connections"
+              className="text-[14px] text-ink underline underline-offset-2"
+            >
+              Then reconnect Front
+            </a>
+          </div>
         )}
       </section>
     );
