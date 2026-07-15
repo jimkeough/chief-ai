@@ -199,24 +199,46 @@ async function resolveTagByName(
     companyError = error instanceof Error ? error.message : "company /tags failed";
   }
 
-  let teammateError: string | null = null;
+  // Private tags: try tea_ id, then email alias if /teammates/{id} yields one.
+  // Connect Proxy often 403s teammate-scoped /tags even when company /tags works.
+  const teammatePaths = [
+    `/teammates/${encodeURIComponent(teammateId)}/tags`,
+  ];
   try {
-    const teammateMatchesForTag = await paginateCollection(
-      userId,
-      accountId,
-      `/teammates/${encodeURIComponent(teammateId)}/tags`,
-      pickName,
+    const teammate = asRecord(
+      await frontProxyGet(
+        userId,
+        accountId,
+        `/teammates/${encodeURIComponent(teammateId)}`,
+      ),
     );
-    if (teammateMatchesForTag.length > 0) {
-      return {
-        ...resolveExactTag(teammateMatchesForTag, requestedName),
-        scope: "teammate",
-      };
+    const email = textField(teammate.email);
+    if (email.includes("@")) {
+      teammatePaths.push(`/teammates/${encodeURIComponent(email)}/tags`);
     }
-  } catch (error) {
-    // Private-tag listing is often rejected for admin OAuth even when /tags works.
-    teammateError =
-      error instanceof Error ? error.message : "teammate tags failed";
+  } catch {
+    // Identity lookup is best-effort; tea_ path may still work.
+  }
+
+  let teammateError: string | null = null;
+  for (const path of teammatePaths) {
+    try {
+      const teammateMatchesForTag = await paginateCollection(
+        userId,
+        accountId,
+        path,
+        pickName,
+      );
+      if (teammateMatchesForTag.length > 0) {
+        return {
+          ...resolveExactTag(teammateMatchesForTag, requestedName),
+          scope: "teammate",
+        };
+      }
+    } catch (error) {
+      teammateError =
+        error instanceof Error ? error.message : "teammate tags failed";
+    }
   }
 
   const parts = [
@@ -225,7 +247,7 @@ async function resolveTagByName(
     teammateError
       ? `teammate ${teammateId}/tags: ${teammateError}`
       : `teammate ${teammateId}/tags: no match`,
-    "Pass tag_id (tag_…) or set Config → Front — Chief Inbox Zero tag id.",
+    "Pass tag_id (tag_…) or set Config → Front — Chief Inbox Zero tag id. A Connect Proxy 403 on teammate /tags is a known gap, not broken Pipedream project credentials.",
   ];
   throw new Error(parts.join(". "));
 }

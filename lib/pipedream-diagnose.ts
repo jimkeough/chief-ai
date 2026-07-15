@@ -18,6 +18,12 @@ export type ProxyProbe = {
   target: string;
   ok: boolean;
   error?: string;
+  /**
+   * True when failure is a known Front/Connect gap (e.g. teammate-scoped
+   * private tags) rather than broken Pipedream project credentials.
+   */
+  expectedGap?: boolean;
+  note?: string;
 };
 
 async function requireUserId(): Promise<string> {
@@ -28,6 +34,10 @@ async function requireUserId(): Promise<string> {
   } = await supabase.auth.getUser();
   if (error || !user) throw new Error("Sign in to diagnose Pipedream.");
   return user.id;
+}
+
+function isTeammateTagsTarget(target: string): boolean {
+  return target.includes("/teammates/") && target.includes("/tags");
 }
 
 async function probeProxy(
@@ -49,13 +59,21 @@ async function probeProxy(
       ok: true,
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "proxy failed";
+    const teammateTags = isTeammateTagsTarget(target);
     return {
       appSlug: connection.appSlug,
       accountId: connection.accountId,
       label: connection.accountName ?? connection.appName,
       target,
       ok: false,
-      error: error instanceof Error ? error.message : "proxy failed",
+      error: message,
+      ...(teammateTags
+        ? {
+            expectedGap: true,
+            note: "Known gap: Front often denies teammate-scoped /tags through Connect Proxy even when /me, company /tags, and /conversations/search work. Not a Pipedream project-credential failure. Set Config → Front — Chief Inbox Zero tag id (tag_…) to skip this lookup.",
+          }
+        : {}),
     };
   }
 }
@@ -109,6 +127,10 @@ export async function diagnosePipedreamConnect(): Promise<{
   summary: string;
   frontMcp: { ok: boolean; detail: string };
   proxyProbes: ProxyProbe[];
+  frontConfig: {
+    teammateId: string | null;
+    inboxZeroTagId: string | null;
+  };
   connections: Array<{
     appSlug: string;
     accountId: string;
@@ -139,21 +161,35 @@ export async function diagnosePipedreamConnect(): Promise<{
     };
   }
 
+  const { getAppSettings } = await import("@/lib/settings");
+  const { normalizeFrontTagId, normalizeFrontTeammateId, textField } =
+    await import("@/lib/front-search-helpers");
+  const settings = await getAppSettings().catch(() => null);
+  const teammateIdRaw = normalizeFrontTeammateId(
+    settings?.["front.teammate_id"] ?? "",
+  );
+  const teammateId = /^tea_[a-zA-Z0-9]+$/.test(teammateIdRaw)
+    ? teammateIdRaw
+    : null;
+  let inboxZeroTagId: string | null = null;
+  const tagIdRaw = textField(settings?.["front.inbox_zero_tag_id"]);
+  if (tagIdRaw) {
+    try {
+      inboxZeroTagId = normalizeFrontTagId(tagIdRaw);
+    } catch {
+      inboxZeroTagId = null;
+    }
+  }
+
   const proxyProbes: ProxyProbe[] = [];
   const front = await findPipedreamConnectionByApp(
     userId,
     FRONTAPP_PIPEDREAM_SLUG,
   );
   if (front) {
-    const { getAppSettings } = await import("@/lib/settings");
-    const { normalizeFrontTeammateId } = await import(
-      "@/lib/front-search-helpers"
-    );
-    const settings = await getAppSettings().catch(() => null);
-    const teammateId = normalizeFrontTeammateId(
-      settings?.["front.teammate_id"] ?? "",
-    );
-    for (const target of probeTargetsForApp(front.appSlug, { teammateId })) {
+    for (const target of probeTargetsForApp(front.appSlug, {
+      teammateId: teammateId ?? undefined,
+    })) {
       proxyProbes.push(await probeProxy(userId, front, target));
     }
   }
@@ -194,28 +230,28 @@ export async function diagnosePipedreamConnect(): Promise<{
     (p) =>
       p.ok &&
       p.appSlug === FRONTAPP_PIPEDREAM_SLUG &&
-      p.target.includes("/teammates/") &&
-      p.target.includes("/tags"),
+      isTeammateTagsTarget(p.target),
   );
   const teammateTagsProbed = proxyProbes.some(
     (p) =>
-      p.appSlug === FRONTAPP_PIPEDREAM_SLUG &&
-      p.target.includes("/teammates/") &&
-      p.target.includes("/tags"),
+      p.appSlug === FRONTAPP_PIPEDREAM_SLUG && isTeammateTagsTarget(p.target),
   );
+  const teammateTagsGap =
+    teammateTagsProbed &&
+    !proxyFrontTeammateTagsOk &&
+    (proxyFrontCompanyTagsOk || proxyFrontMeOk || proxyFrontSearchOk);
 
   let summary: string;
-  if (frontMcp.ok && proxyFrontSearchOk) {
+  if (teammateTagsGap && !inboxZeroTagId) {
+    summary =
+      "Known gap: /teammates/{id}/tags is denied through Connect Proxy while other Front proxy paths work — this is NOT broken Pipedream project credentials. Set Config → Front — Chief Inbox Zero tag id (tag_…) so Search can run tag:{id} is:open without that lookup. Get tag_… from a tagged conversation's tags[].id (not the numeric settings URL).";
+  } else if (teammateTagsGap && inboxZeroTagId) {
+    summary = proxyFrontSearchOk
+      ? `Teammate /tags is still denied (expected); Config front.inbox_zero_tag_id=${inboxZeroTagId} is set so tagged Search can skip that lookup. Connect Proxy Search looks healthy.`
+      : `Teammate /tags is still denied (expected); Config front.inbox_zero_tag_id=${inboxZeroTagId} is set. Fix /conversations/search next if tagged inventory still fails.`;
+  } else if (frontMcp.ok && proxyFrontSearchOk) {
     summary =
       "Front MCP works and Connect Proxy can call Front Search API. Tag search should use GET /conversations/search/{query} with an explicit tag_… id when private-tag listing fails.";
-  } else if (
-    frontMcp.ok &&
-    proxyFrontCompanyTagsOk &&
-    teammateTagsProbed &&
-    !proxyFrontTeammateTagsOk
-  ) {
-    summary =
-      "Company /tags works via Proxy but teammate /tags does not — private tags need Config front.inbox_zero_tag_id (tag_…) so Search can skip name lookup.";
   } else if (frontMcp.ok && proxyFrontMeOk && !proxyFrontSearchOk) {
     summary =
       "Front /me works via Proxy but /conversations/search does not — tag search will fail on the Search API path even though diagnose /me looks healthy. Prefer fixing Search proxy targets or rely on MCP list+tag filter.";
@@ -235,6 +271,10 @@ export async function diagnosePipedreamConnect(): Promise<{
     summary,
     frontMcp,
     proxyProbes,
+    frontConfig: {
+      teammateId,
+      inboxZeroTagId,
+    },
     connections: connections.map((c) => ({
       appSlug: c.appSlug,
       accountId: c.accountId,
