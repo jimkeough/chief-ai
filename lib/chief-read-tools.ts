@@ -74,7 +74,7 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   {
     name: "search_front_conversations",
     description:
-      "Search Front conversations via Front Core Search API (GET /conversations/search/{query}). Default status is open (is:open). Pass status=\"all\" for tag-only / all non-trashed statuses (omit is:). Prefer tag_id (tag_…) or Config front.inbox_zero_tag_id when private-tag listing fails. If Proxy fails on open searches, falls back to MCP list+tag filter. Read-only.",
+      "Inventory Front conversations by tag (preferred) or Search API. For a tag, uses GET /tags/{id}/conversations so discussions with no inbox are included — Front Search alone is inbox-scoped and under-counts. Default status is open; pass status=\"all\" for every non-trashed status. Prefer tag_id / Config front.inbox_zero_tag_id. No inbox filter. Read-only.",
     input_schema: {
       type: "object",
       properties: {
@@ -90,20 +90,16 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         status: {
           type: "string",
           description:
-            'Front Search is: filter. Default "open". Use "all" to omit is: (tag-only, includes archived/snoozed; Front still omits trashed). Also: archived, snoozed, trashed, assigned, unassigned, unreplied, waiting, resolved.',
-        },
-        inbox_name: {
-          type: "string",
-          description: "Optional exact Front inbox name filter (proxy path only).",
+            'Default "open". Use "all" for full tag inventory including archived/snoozed and no-inbox discussions. Also: archived, snoozed, trashed, assigned, unassigned, unreplied, waiting, resolved.',
         },
         assignee: {
           type: "string",
-          description: "Optional teammate name, email, or tea_ id (assignee filter, proxy path only).",
+          description: "Optional teammate name, email, or tea_ id (assignee filter; Search path only, no tag).",
         },
         participant: {
           type: "string",
           description:
-            "Optional teammate name, email, or tea_ id (participant filter, proxy path only).",
+            "Optional teammate name, email, or tea_ id (participant filter; Search path only, no tag).",
         },
         teammate: {
           type: "string",
@@ -123,7 +119,7 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "search_front_tagged_conversations",
-    description: `Convenience alias for search_front_conversations with tag_name defaulting to "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Uses Config front.inbox_zero_tag_id or tag_id when set. Pass status=\"all\" for tag-only (not open-only). Falls back to MCP list+tag filter when Connect Proxy fails on open searches.`,
+    description: `Convenience alias for search_front_conversations with tag_name defaulting to "${DEFAULT_FRONT_INBOX_ZERO_TAG}". Uses GET /tags/{id}/conversations (includes no-inbox discussions). Pass status=\"all\" for full tag inventory.`,
     input_schema: {
       type: "object",
       properties: {
@@ -139,7 +135,7 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         status: {
           type: "string",
           description:
-            'Front Search is: filter. Default "open". Use "all" to search the tag across statuses (omit is:).',
+            'Default "open". Use "all" for full tag inventory including no-inbox discussions.',
         },
         teammate: {
           type: "string",
@@ -213,7 +209,6 @@ export async function runChiefReadTool(
       tagName: typeof args.tag_name === "string" ? args.tag_name : undefined,
       tagId: typeof args.tag_id === "string" ? args.tag_id : undefined,
       status: typeof args.status === "string" ? args.status : undefined,
-      inboxName: typeof args.inbox_name === "string" ? args.inbox_name : undefined,
       assignee: typeof args.assignee === "string" ? args.assignee : undefined,
       participant:
         typeof args.participant === "string" ? args.participant : undefined,

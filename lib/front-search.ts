@@ -28,7 +28,6 @@ import {
   normalizeFrontTagId,
   normalizeFrontTeammateId,
   pageTokenFromNext,
-  resolveExactNamedResource,
   resolveExactTag,
   resultsFrom,
   teammateLabel,
@@ -298,20 +297,6 @@ async function resolveTagForSearch(
   );
 }
 
-async function resolveInboxByName(
-  userId: string,
-  accountId: string,
-  requestedName: string,
-): Promise<{ id: string; name: string }> {
-  const matches = await paginateCollection(
-    userId,
-    accountId,
-    "/inboxes",
-    (inbox) => nameMatchesIgnoreCase(asRecord(inbox).name, requestedName),
-  );
-  return resolveExactNamedResource(matches, requestedName, "inbox");
-}
-
 async function resolveTeammate(
   userId: string,
   accountId: string,
@@ -377,12 +362,11 @@ export type FrontSearchInput = {
    */
   tagId?: string;
   /**
-   * Front Search `is:` status. Default `open`. Pass `all` to omit `is:`
-   * (tag-only / all non-trashed statuses).
+   * Status scope. Default `open` (assigned+unassigned on tag list /
+   * `is:open` on Search). Pass `all` for every non-trashed status — needed
+   * for discussions that sit outside any inbox.
    */
   status?: FrontSearchStatus | string;
-  /** Exact inbox name. Optional. */
-  inboxName?: string;
   /** Teammate name, email, or tea_ id for assignee: filter. Optional. */
   assignee?: string;
   /** Teammate name, email, or tea_ id for participant: filter. Optional. */
@@ -406,7 +390,6 @@ export type FrontSearchResult = {
       scope?: "company" | "teammate" | "explicit";
     };
     status?: FrontSearchStatus;
-    inbox?: { id: string; name: string };
     assignee?: { id: string; name: string };
     participant?: { id: string; name: string };
     teammate?: { id: string; name: string };
@@ -431,15 +414,10 @@ export async function searchFrontConversations(
   try {
     return await searchFrontConversationsViaProxy(input);
   } catch (proxyError) {
-    // Inbox-style MCP list works when Connect Proxy does not (same as Calendar).
-    // Skip MCP fallback when the caller asked for inbox/assignee filters the
-    // list tool cannot apply accurately, or for non-open status (MCP list is open-ish).
+    // MCP list is all_inboxes + open — misses no-inbox discussions and
+    // non-open statuses. Prefer failing the proxy error in those cases.
     const status = normalizeFrontSearchStatus(input.status);
-    if (
-      textField(input.inboxName) ||
-      textField(input.assignee) ||
-      status !== "open"
-    ) {
+    if (textField(input.assignee) || status !== "open") {
       throw proxyError;
     }
     const { searchFrontConversationsViaMcp } = await import(
@@ -507,7 +485,6 @@ async function searchFrontConversationsViaProxy(
   const tagName = textField(input.tagName);
   const tagId = textField(input.tagId);
   const status = normalizeFrontSearchStatus(input.status);
-  const inboxName = textField(input.inboxName);
   const assignee = textField(input.assignee);
   const participant = textField(input.participant);
   const teammateHint = textField(input.teammate);
@@ -544,28 +521,30 @@ async function searchFrontConversationsViaProxy(
     }
     filters.tag = tag;
 
-    // Front Search API: GET /conversations/search/{query}
-    // https://dev.frontapp.com/docs/search-1 — e.g. tag:tag_xxx or is:open tag:tag_xxx
-    const query = buildFrontSearchQuery({ tagId: tag.id, status });
-    const qs = new URLSearchParams({ limit: String(limit) });
-    if (cursor) qs.set("page_token", cursor);
-    const searchPath = `/conversations/search/${encodeURIComponent(query)}?${qs}`;
-
+    // Prefer GET /tags/{id}/conversations — includes discussions with no inbox.
+    // Front Search API only covers team/private inbox conversations
+    // (https://dev.frontapp.com/docs/search-1), so it under-counts tags on
+    // internal discussions.
+    const tagListQuery =
+      status === "open"
+        ? `tag:${tag.id} statuses:assigned,unassigned`
+        : status === "all"
+          ? `tag:${tag.id}`
+          : `tag:${tag.id} is:${status}`;
     try {
       const response = await frontProxyGet(
         userId,
         connection.accountId,
-        searchPath,
+        buildTagConversationsPath(tag.id, limit, cursor, status),
       );
       const envelope = asRecord(response);
       const nextCursor = pageTokenFromNext(asRecord(envelope._pagination).next);
       const conversations = resultsFrom(response).map(compactConversation);
       const total =
         typeof envelope._total === "number" ? envelope._total : undefined;
-
       return {
-        query,
-        source: "search",
+        query: tagListQuery,
+        source: "tag_conversations",
         filters,
         account: connection.accountName ?? connection.accountId,
         count: conversations.length,
@@ -573,15 +552,17 @@ async function searchFrontConversationsViaProxy(
         conversations,
         nextCursor,
         hasMore: Boolean(nextCursor),
-        note: "Used Front Core Search API (GET /conversations/search/{query}) via Connect Proxy.",
+        note: "Used GET /tags/{id}/conversations (includes discussions with no inbox). Front Search API is inbox-scoped and would miss those.",
       };
-    } catch (searchError) {
-      // Older path: list a tag's conversations. Prefer Search API; keep as backup.
+    } catch (tagListError) {
+      const query = buildFrontSearchQuery({ tagId: tag.id, status });
+      const qs = new URLSearchParams({ limit: String(limit) });
+      if (cursor) qs.set("page_token", cursor);
       try {
         const response = await frontProxyGet(
           userId,
           connection.accountId,
-          buildTagConversationsPath(tag.id, limit, cursor, status),
+          `/conversations/search/${encodeURIComponent(query)}?${qs}`,
         );
         const envelope = asRecord(response);
         const nextCursor = pageTokenFromNext(
@@ -591,13 +572,8 @@ async function searchFrontConversationsViaProxy(
         const total =
           typeof envelope._total === "number" ? envelope._total : undefined;
         return {
-          query:
-            status === "open"
-              ? `tag:${tag.id} statuses:assigned,unassigned`
-              : status === "all"
-                ? `tag:${tag.id}`
-                : `tag:${tag.id} is:${status}`,
-          source: "tag_conversations",
+          query,
+          source: "search",
           filters,
           account: connection.accountName ?? connection.accountId,
           count: conversations.length,
@@ -605,23 +581,16 @@ async function searchFrontConversationsViaProxy(
           conversations,
           nextCursor,
           hasMore: Boolean(nextCursor),
-          note: `Front Search API failed (${searchError instanceof Error ? searchError.message : "error"}); used /tags/{id}/conversations backup.`,
+          note: `GET /tags/{id}/conversations failed (${tagListError instanceof Error ? tagListError.message : "error"}); fell back to inbox-scoped Search API (discussions without an inbox may be missing).`,
         };
-      } catch (tagListError) {
+      } catch (searchError) {
         throw new Error(
-          `Front Search API failed (${searchError instanceof Error ? searchError.message : "error"}); tag conversations backup also failed (${tagListError instanceof Error ? tagListError.message : "error"}).`,
+          `Front tag conversations failed (${tagListError instanceof Error ? tagListError.message : "error"}); Search API also failed (${searchError instanceof Error ? searchError.message : "error"}).`,
         );
       }
     }
   }
 
-  if (inboxName) {
-    filters.inbox = await resolveInboxByName(
-      userId,
-      connection.accountId,
-      inboxName,
-    );
-  }
   if (assignee) {
     filters.assignee = await resolveTeammate(
       userId,
@@ -636,12 +605,9 @@ async function searchFrontConversationsViaProxy(
       participant,
     );
   }
-  // No default participant filter: open inventory should return company-visible
-  // open conversations. Pass participant/assignee explicitly when scoping to Jim.
 
   const query = buildFrontSearchQuery({
     tagId: filters.tag?.id,
-    inboxId: filters.inbox?.id,
     assigneeId: filters.assignee?.id,
     participantId: filters.participant?.id,
     status,
@@ -671,7 +637,7 @@ async function searchFrontConversationsViaProxy(
       conversations,
       nextCursor,
       hasMore: Boolean(nextCursor),
-      note: "Used Front Core Search API (GET /conversations/search/{query}) via Connect Proxy.",
+      note: "Used Front Core Search API (inbox-scoped). For tag inventory including no-inbox discussions, pass tag_id/tag_name.",
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "search failed";

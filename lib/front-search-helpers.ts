@@ -63,12 +63,13 @@ export function normalizeFrontSearchStatus(
 
 /**
  * Build a Front search query from resolved filter IDs.
- * Defaults to `is:open` for inbox-zero inventory; pass status "all" for tag-only
- * (no is: filter — see https://dev.frontapp.com/docs/search-1).
+ * Defaults to `is:open`. Pass status "all" to omit `is:`.
+ * Note: Front's Search API only covers team/private **inbox** conversations —
+ * discussions with no inbox membership will not appear; use
+ * `/tags/{id}/conversations` for full tag inventory.
  */
 export function buildFrontSearchQuery(filters: {
   tagId?: string;
-  inboxId?: string;
   assigneeId?: string;
   participantId?: string;
   status?: FrontSearchStatus | string;
@@ -79,7 +80,6 @@ export function buildFrontSearchQuery(filters: {
     parts.push(`is:${status}`);
   }
   const tagId = text(filters.tagId);
-  const inboxId = text(filters.inboxId);
   const assigneeId = text(filters.assigneeId);
   const participantId = text(filters.participantId);
   if (tagId) {
@@ -87,12 +87,6 @@ export function buildFrontSearchQuery(filters: {
       throw new Error("Front returned an invalid tag ID.");
     }
     parts.push(`tag:${tagId}`);
-  }
-  if (inboxId) {
-    if (!/^inb_[a-zA-Z0-9]+$/.test(inboxId)) {
-      throw new Error("Front returned an invalid inbox ID.");
-    }
-    parts.push(`inbox:${inboxId}`);
   }
   if (assigneeId) {
     if (!/^tea_[a-zA-Z0-9]+$/.test(assigneeId)) {
@@ -107,9 +101,8 @@ export function buildFrontSearchQuery(filters: {
     parts.push(`participant:${participantId}`);
   }
   if (parts.length === 0) {
-    // Bare search with no filters is too broad for Chief inventory.
     throw new Error(
-      'Front search needs at least one filter (tag, inbox, assignee, participant, or status other than "all").',
+      'Front search needs at least one filter (tag, assignee, participant, or status other than "all").',
     );
   }
   return parts.join(" ");
@@ -118,7 +111,6 @@ export function buildFrontSearchQuery(filters: {
 /** @deprecated Prefer buildFrontSearchQuery — kept for call sites / tests. */
 export function buildOpenSearchQuery(filters: {
   tagId?: string;
-  inboxId?: string;
   assigneeId?: string;
   participantId?: string;
   status?: FrontSearchStatus | string;

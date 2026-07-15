@@ -11,16 +11,16 @@ Pipedream is the default connector path:
 
 `search_front_conversations`:
 
-1. Resolve tag id via `tag_id` argument, Config **Front — Chief Inbox Zero tag id**
-   (`front.inbox_zero_tag_id`), or name lookup (company `/tags` then
-   teammate `/teammates/{id}/tags` — the teammate path is often rejected for
-   private tags even when `/tags` works)
-2. Call **Front Search API** via Proxy: `/conversations/search/…`
-   (default `is:open tag:…`; pass tool `status=all` for tag-only / all
-   non-trashed statuses)
-3. If Search fails, try `/tags/{id}/conversations`
-4. If Proxy fails entirely, MCP `list-conversations` + client tag filter
-   (recent ~100 only; includes `sampleTags` for name matching)
+1. Resolve tag id via `tag_id`, Config **Front — Chief Inbox Zero tag id**,
+   or name lookup
+2. **Primary for tags:** `GET /tags/{id}/conversations` — includes Front
+   **discussions with no inbox** (Search API alone misses those)
+3. If that fails, fall back to inbox-scoped Search API
+4. If Proxy fails entirely on open inventory, MCP `list-conversations`
+   (also inbox-scoped / recent page only)
+
+No `inbox` tool parameter — tag inventory is not scoped to an inbox.
+Pass `status=all` for full tag inventory (not just open).
 
 `diagnose_pipedream_connect` probes `/me`, company `/tags`, teammate
 `/teammates/{tea}/tags` (when Config teammate id is set), and

@@ -148,7 +148,8 @@ Chief still requires approval before any action.
 
 Chief also uses Pipedream's Connect API Proxy when a prebuilt MCP action is
 missing or too narrow — for example, searching open Front conversations
-(`search_front_conversations`, with optional tag/inbox/assignee filters)
+(`search_front_conversations`, with optional tag/assignee filters; tagged
+inventory uses `/tags/{id}/conversations` so no-inbox discussions are included)
 reuses the same Front OAuth grant without storing a Front API token in Chief.
 If private-tag inventory cannot resolve Front `/me`, set **Config → Front —
 teammate id** once (e.g. `tea_lm2n2` for jim@homejab.com). When teammate-scoped
