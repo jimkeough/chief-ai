@@ -133,9 +133,10 @@ slide-to-send card, through the one executor.
 → Front · Official MCP**, Chief shows the deployment-specific redirect URL.
 Create a Front developer app with an OAuth feature, register that URL, enable
 only **MCP Server** under Feature Access, and paste the client ID and secret into
-Chief. Choose `read`, optional `write`, and optional `send`, save, then authorize
-as your Front user. The app secret and user tokens are write-only, encrypted in
-Supabase Vault, and never enter model context.
+Chief, save, then authorize as your Front user. Chief requests Front's
+`feature:mcp` OAuth scope; choose Read / Write / Send in the Front developer
+app's Resource permissions. The app secret and user tokens are write-only,
+encrypted in Supabase Vault, and never enter model context.
 
 The Front Inbox requires **Config → Front — Chief Inbox Zero tag id** (`tag_…`).
 Chief calls official `search_conversations` with `scope=all_inboxes` and that

@@ -976,10 +976,17 @@ into Chief; then complete per-user OAuth consent. A callback registered for
 Claude does not authorize Chief—the same Front app needs Chief's second redirect
 URL.
 
-**Current mitigation:** Settings → Connections now displays the exact redirect
-URL, stores client credentials and tokens in Vault, validates scopes, and starts
-OAuth. **Future concierge:** provide a screenshot-level Front walkthrough and
-verify common mistakes before redirect (wrong Feature Access boxes, missing
-callback, requested `send` exceeding app permissions). Front's no-DCR constraint
-means creating the developer app remains manual unless Chief later operates a
-shared published OAuth app, which would change the sovereign trust model.
+**Doc trap (hit live):** Front's MCP docs still say OAuth scopes are
+`read` / `write` / `send`, and their example JSON uses those strings. Front's
+live authorization-server metadata only advertises `feature:mcp`. Requesting
+`read`/`write`/`send` returns `invalid_scope`. Resource Read/Write/Send still
+belong on the Front developer app's permission grid; they are not OAuth scopes.
+
+**Current mitigation:** Settings → Connections displays the exact redirect URL,
+stores client credentials and tokens in Vault, requests `feature:mcp`, offers
+an “Apply database update” control when the Front OAuth tables/RPCs are missing,
+and auto-applies pending migrations on save (including the older read/write/send
+RPC). Front app Resource Read/Write/Send do not affect credential save.
+**Future concierge:** screenshot-level Front walkthrough plus a
+preflight that verifies Feature Access, callback URL, and that the live
+`scopes_supported` list matches what Chief will request.

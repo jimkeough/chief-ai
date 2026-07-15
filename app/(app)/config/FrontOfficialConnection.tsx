@@ -2,25 +2,32 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Scope = "read" | "write" | "send";
 type Config = {
   configured: boolean;
   connected: boolean;
   clientId: string | null;
-  scopes: Scope[];
+  scopes: string[];
+  needsMigration?: boolean;
 };
 
 const inputClass =
   "w-full rounded-control border bg-transparent px-3 py-2.5 text-[14.5px] text-ink outline-none placeholder:text-ink-3";
 
+function looksLikeSchemaGap(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return /chief_front_|front_oauth|does not exist|schema cache|migration|database update|Could not find the (table|function)/i.test(
+    message,
+  );
+}
+
 export default function FrontOfficialConnection() {
   const [config, setConfig] = useState<Config | null>(null);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [scopes, setScopes] = useState<Scope[]>(["read", "write"]);
   const [redirectUri, setRedirectUri] = useState("/api/front/callback");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsMigration, setNeedsMigration] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/front/config", { cache: "no-store" });
@@ -29,11 +36,13 @@ export default function FrontOfficialConnection() {
       error?: string;
     };
     if (!response.ok || !body.config) {
-      throw new Error(body.error || "Couldn't load Front setup.");
+      const message = body.error || "Couldn't load Front setup.";
+      if (looksLikeSchemaGap(message)) setNeedsMigration(true);
+      throw new Error(message);
     }
+    setNeedsMigration(Boolean(body.config.needsMigration));
     setConfig(body.config);
     setClientId(body.config.clientId ?? "");
-    if (body.config.scopes.length > 0) setScopes(body.config.scopes);
   }, []);
 
   useEffect(() => {
@@ -45,6 +54,31 @@ export default function FrontOfficialConnection() {
     );
   }, [load]);
 
+  const applyMigration = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/setup/migrate", { method: "POST" });
+      const body = (await response.json().catch(() => ({}))) as {
+        applied?: string[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(body.error || "Couldn't apply the database update.");
+      }
+      await load();
+      setNeedsMigration(false);
+      setError(null);
+    } catch (cause) {
+      const message =
+        cause instanceof Error ? cause.message : "Couldn't apply the database update.";
+      setNeedsMigration(true);
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const save = async () => {
     setBusy(true);
     setError(null);
@@ -52,15 +86,18 @@ export default function FrontOfficialConnection() {
       const response = await fetch("/api/front/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, clientSecret, scopes }),
+        body: JSON.stringify({ clientId, clientSecret }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         config?: Config;
         error?: string;
       };
       if (!response.ok || !body.config) {
-        throw new Error(body.error || "Couldn't save Front setup.");
+        const message = body.error || "Couldn't save Front setup.";
+        if (looksLikeSchemaGap(message)) setNeedsMigration(true);
+        throw new Error(message);
       }
+      setNeedsMigration(false);
       setConfig(body.config);
       setClientSecret("");
     } catch (cause) {
@@ -82,23 +119,11 @@ export default function FrontOfficialConnection() {
       setConfig({ configured: false, connected: false, clientId: null, scopes: [] });
       setClientId("");
       setClientSecret("");
-      setScopes(["read", "write"]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Couldn't disconnect Front.");
     } finally {
       setBusy(false);
     }
-  };
-
-  const toggleScope = (scope: Scope) => {
-    if (scope === "read") return;
-    setScopes((current) =>
-      current.includes(scope)
-        ? current.filter((candidate) => candidate !== scope)
-        : (["read", "write", "send"] as Scope[]).filter(
-            (candidate) => candidate === "read" || current.includes(candidate) || candidate === scope,
-          ),
-    );
   };
 
   return (
@@ -135,7 +160,8 @@ export default function FrontOfficialConnection() {
         style={{ borderColor: "var(--hairline)" }}
       >
         In Front, keep only <strong className="text-ink">MCP Server</strong> under
-        Feature Access and add this Redirect URL:
+        Feature Access, set Resource permissions (Read / Write / Send) there, and
+        add this Redirect URL:
         <button
           type="button"
           onClick={() => void navigator.clipboard.writeText(redirectUri)}
@@ -147,13 +173,41 @@ export default function FrontOfficialConnection() {
         </button>
       </div>
 
+      {needsMigration && (
+        <div
+          className="flex flex-col gap-3 rounded-control border p-3"
+          style={{ borderColor: "var(--hairline)" }}
+        >
+          <div className="text-[13.5px] font-semibold text-ink">
+            One quick database update
+          </div>
+          <p className="text-[12.5px] leading-relaxed text-ink-3">
+            Official Front MCP needs a table and Vault RPCs that aren&apos;t in this
+            database yet. This applies pending migrations on your own Supabase —
+            Front Read / Write / Send settings do not affect this step.
+          </p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void applyMigration()}
+            className="h-11 rounded-control px-4 text-[13.5px] font-semibold text-white disabled:opacity-50"
+            style={{ background: "var(--teal)" }}
+          >
+            {busy ? "Applying…" : "Apply database update"}
+          </button>
+        </div>
+      )}
+
       {config?.connected ? (
         <>
-          <div className="flex items-center justify-between rounded-control border p-3" style={{ borderColor: "var(--hairline)" }}>
+          <div
+            className="flex items-center justify-between rounded-control border p-3"
+            style={{ borderColor: "var(--hairline)" }}
+          >
             <div>
               <div className="text-[13.5px] font-semibold text-ink">Connected</div>
               <div className="mt-0.5 font-mono text-[11px] text-ink-3">
-                {config.scopes.join(" · ")}
+                feature:mcp
               </div>
             </div>
             <button
@@ -197,36 +251,20 @@ export default function FrontOfficialConnection() {
               style={{ borderColor: "var(--hairline)" }}
             />
           </label>
-          <fieldset className="flex flex-col gap-2">
-            <legend className="text-[12px] text-ink-3">OAuth scopes</legend>
-            <div className="flex flex-wrap gap-2">
-              {(["read", "write", "send"] as Scope[]).map((scope) => (
-                <label
-                  key={scope}
-                  className="flex items-center gap-2 rounded-chip border px-3 py-2 text-[12px] text-ink"
-                  style={{ borderColor: "var(--hairline)" }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={scopes.includes(scope)}
-                    disabled={scope === "read"}
-                    onChange={() => toggleScope(scope)}
-                  />
-                  {scope}
-                </label>
-              ))}
-            </div>
-            <p className="text-[11.5px] leading-relaxed text-ink-3">
-              Read is required. Write covers drafts, tags, comments, assignment, and
-              status changes. Add send only if Chief may send approved messages.
-            </p>
-          </fieldset>
+          <p className="text-[11.5px] leading-relaxed text-ink-3">
+            Chief requests Front&apos;s OAuth scope{" "}
+            <span className="font-mono">feature:mcp</span> (what Front&apos;s
+            authorization server actually accepts). Set Read / Write / Send under
+            the Front developer app&apos;s Resource permissions — those are not
+            OAuth scopes, even though Front&apos;s docs still mention them that way.
+          </p>
 
           {config?.configured ? (
             <button
               type="button"
               disabled={busy}
               onClick={() => {
+                setError(null);
                 window.location.href = "/api/front/connect";
               }}
               className="h-11 rounded-control px-4 text-[13.5px] font-semibold text-white disabled:opacity-50"

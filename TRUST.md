@@ -117,8 +117,9 @@ Anthropic mode if you turn it on and it misbehaves.
 
 Front data flows directly between Chief and `mcp.frontapp.com`; Pipedream is not
 in the Front path. You create the Front developer app, choose its resource
-permissions, and authorize as your own Front teammate. Front enforces both the
-app's requested `read`/`write`/`send` scopes and that teammate's live access.
+permissions, and authorize as your own Front teammate. The OAuth grant uses
+Front's `feature:mcp` scope; Front still enforces the developer app's Resource
+permissions (Read / Write / Send) and that teammate's live access.
 
 Chief stores the developer-app client secret, OAuth access token, and refresh
 token as one encrypted Supabase Vault value. Browser roles may read only

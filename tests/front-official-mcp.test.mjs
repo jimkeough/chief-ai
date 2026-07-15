@@ -8,21 +8,27 @@ import {
   parseFrontMcpJson,
 } from "../lib/front-mcp-read-helpers.ts";
 import {
+  FRONT_OAUTH_SCOPE,
+  frontOAuthScopeString,
   frontRedirectUri,
   normalizeFrontScopes,
 } from "../lib/front-oauth-helpers.ts";
 
-test("builds the Front OAuth callback and validates narrow scopes", () => {
+test("builds the Front OAuth callback and uses feature:mcp", () => {
   assert.equal(
     frontRedirectUri("https://chief.example.com/"),
     "https://chief.example.com/api/front/callback",
   );
-  assert.deepEqual(normalizeFrontScopes(["send", "read", "write", "unknown"]), [
-    "read",
-    "write",
-    "send",
+  assert.equal(FRONT_OAUTH_SCOPE, "feature:mcp");
+  assert.equal(frontOAuthScopeString(), "feature:mcp");
+  assert.deepEqual(normalizeFrontScopes(["send", "read", "write"]), [
+    "feature:mcp",
   ]);
-  assert.throws(() => normalizeFrontScopes(["write"]), /requires the read scope/);
+  assert.deepEqual(normalizeFrontScopes(["feature:mcp"]), ["feature:mcp"]);
+  assert.throws(
+    () => normalizeFrontScopes(["openid"]),
+    /only supports the "feature:mcp" scope/,
+  );
 });
 
 test("builds official Front MCP tag searches", () => {
