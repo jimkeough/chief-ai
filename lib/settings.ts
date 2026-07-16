@@ -24,6 +24,7 @@ export type SettingKey =
   | "mcp.tool_overrides"
   | "front.teammate_id"
   | "front.inbox_zero_tag_id"
+  | "front.open_queries"
   | "pipedream.front_oauth_app_id"
   | "updates.enabled";
 
@@ -177,10 +178,19 @@ export const SETTING_DEFS: SettingDef[] = [
     key: "front.inbox_zero_tag_id",
     label: "Front — Chief Inbox Zero tag id",
     description:
-      "Required for the Front Inbox. Front tag id (tag_…) for Core REST GET /tags/{id}/conversations (full tagged inventory; MCP search under-counts).",
+      "Optional. Front tag id (tag_…) for the tag-based Inbox (Core REST GET /tags/{id}/conversations). Prefer Front — open queries below for a personal open queue.",
     default: "",
     singleLine: true,
     placeholder: "tag_…",
+  },
+  {
+    key: "front.open_queries",
+    label: "Front — open queries (one per line)",
+    description:
+      "The Front Inbox runs each Front search query with your API token, then unions + de-dupes the results — mirroring how Front builds your Open view from several sub-lists. One query per line, e.g. is:open inbox:inb_…, is:open assignee:tea_…, is:open participant:you@example.com. Test each in the Front · API playground first.",
+    default: "",
+    rows: 5,
+    placeholder: "is:open inbox:inb_j61ni\nis:open inbox:inb_jc25a\nis:open assignee:tea_lm2n2",
   },
   {
     key: "pipedream.front_oauth_app_id",

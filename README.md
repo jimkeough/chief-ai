@@ -138,15 +138,22 @@ Chief, save, then authorize as your Front user. Chief requests Front's
 app's Resource permissions. The app secret and user tokens are write-only,
 encrypted in Supabase Vault, and never enter model context.
 
-The Front Inbox requires **Config → Front — Chief Inbox Zero tag id** (`tag_…`).
-For the Inbox, the most reliable credential is a **Front API token** (Settings →
-Connections → **Front · API token**): create one in Front under Settings →
-Developers → API tokens with Shared-resources access and paste it in. Chief reads
-tagged inventory with it via Front Core REST `GET /tags/{id}/conversations` —
-full account access (no OAuth expiry/refresh, no namespace 403s), including
-no-inbox discussions that MCP `search_conversations` under-counts. The token is
-stored per user with RLS enabled and no browser policy, so only service-role
-server code reads it; it never enters the browser or model context.
+The Front Inbox reads through a **Front API token** (Settings → Connections →
+**Front · API token**): create one in Front under Settings → Developers → API
+tokens with Shared-resources access and paste it in. It has full account access
+(no OAuth expiry/refresh, no namespace 403s), is stored per user with RLS enabled
+and no browser policy so only service-role server code reads it, and never enters
+the browser or model context.
+
+The recommended Inbox source is **Config → Front — open queries**: one Front
+search query per line (e.g. `is:open inbox:inb_…`, `is:open assignee:tea_…`,
+`is:open participant:you@example.com`). Chief runs each with the API token,
+paginates it, then unions + de-dupes the results — mirroring how Front assembles
+its own "Open" view from several sub-lists, because no single API filter captures
+"open for me." Objective filters (inbox / assignee / participant / tag) resolve
+with a token; per-user markers (star / subscribe) do not. Validate each query in
+the **Front · API playground** first. Alternatively, set **Front — Chief Inbox
+Zero tag id** (`tag_…`) for a tag-based inbox via `GET /tags/{id}/conversations`.
 
 If no API token is set, tagged inventory falls back to the official Front OAuth
 grant against the same Core REST endpoint, then to official MCP

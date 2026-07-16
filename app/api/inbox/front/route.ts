@@ -15,6 +15,7 @@ import {
 } from "@/lib/front-search";
 import { getFrontOAuthStatus } from "@/lib/front-auth";
 import { getFrontApiStatus } from "@/lib/front-api";
+import { parseOpenQueries, searchFrontOpenQueue } from "@/lib/front-open-queue";
 import type { FrontTagInboxResponse, InboxThreadSummary } from "@/lib/inbox-source";
 import { getAppSettings } from "@/lib/settings";
 
@@ -64,6 +65,44 @@ export async function GET(req: Request) {
   }
 
   const settings = await getAppSettings().catch(() => null);
+
+  // Preferred path: a personal "open for me" queue built by unioning several
+  // Front search queries with the API token — mirrors how Front assembles its
+  // own Open view from your inboxes, assigned, subscribed, discussions, etc.
+  const openQueries = parseOpenQueries(settings?.["front.open_queries"]);
+  if (openQueries.length > 0 && api?.configured) {
+    try {
+      const { conversations, total, perQuery } = await searchFrontOpenQueue(openQueries);
+      const threads = conversations.slice(0, MAX_THREADS).map(toThread);
+      const failed = perQuery.filter((entry) => entry.error);
+      const body: FrontTagInboxResponse = {
+        provider: "front-tag",
+        connected: true,
+        tagId: "",
+        tagName: "Open for you",
+        account: "Front",
+        source: "open_queries",
+        total,
+        threads,
+        nextCursor: null,
+        hasMore: false,
+        note:
+          `Open for you — ${total} unique across ${openQueries.length} quer${openQueries.length === 1 ? "y" : "ies"}` +
+          (failed.length
+            ? `. ${failed.length} errored: ${failed.map((entry) => `"${entry.query}": ${entry.error}`).join(" | ").slice(0, 240)}`
+            : "."),
+      };
+      return Response.json(body);
+    } catch (error) {
+      const body: FrontTagInboxResponse = {
+        provider: "front-tag",
+        connected: true,
+        error: error instanceof Error ? error.message : "Front open queue failed.",
+      };
+      return Response.json(body, { status: 502 });
+    }
+  }
+
   const tagIdRaw = textField(settings?.["front.inbox_zero_tag_id"]);
   if (!tagIdRaw) {
     const body: FrontTagInboxResponse = {
@@ -71,7 +110,7 @@ export async function GET(req: Request) {
       connected: true,
       needsTag: true,
       message:
-        "Set Config → Front — Chief Inbox Zero tag id (tag_…) to use Front as your inbox. That tag is the only stable Front inbox filter.",
+        "Set Config → Front — open queries (recommended) for your personal open queue, or Front — Chief Inbox Zero tag id for a tag-based inbox.",
     };
     return Response.json(body);
   }
