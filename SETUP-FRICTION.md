@@ -994,8 +994,18 @@ Resource Read/Write/Send do not affect credential save.
 
 **Doc trap #2 (hit live):** Front MCP `search_conversations` with a tag filter
 still under-counts vs Core REST `GET /tags/{id}/conversations` (no-inbox
-discussions missing — same gap as Core Search). Inbox and tagged Chief tools now
-prefer the Core tag endpoint (official OAuth, then Pipedream proxy).
+discussions missing — same gap as Core Search). Inbox and tagged Chief tools
+prefer the Core tag endpoint (official OAuth), falling back to official MCP
+`search_conversations` when Core REST can't reach the tag. Pipedream is no longer
+in the Front path.
+
+**Doc trap #3 (hit live):** A private/personal Front tag (e.g. "Chief Inbox
+Zero") returns Core REST 403 `"This agent is not allowed to read the tag"` unless
+the Front OAuth app's **Namespace access** includes Shared + Private resources.
+Enable those (with Tags → Read) and reconnect, or make the tag company/shared.
+The MCP fallback reads it as the authorizing teammate but may under-count
+no-inbox discussions. The legacy Pipedream Front OAuth app id (`oa_…`) is unused
+by the official connection.
 
 **Future concierge:** screenshot-level Front walkthrough plus a
 preflight that verifies Feature Access, callback URL, and that the live
