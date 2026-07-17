@@ -45,12 +45,23 @@ export default function ChiefConversation() {
   const [attachError, setAttachError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Keep the newest turn in view while streaming.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, streaming]);
+
+  // Grow the composer to fit what's typed, capped by the textarea's CSS
+  // max-height (which then scrolls). Runs whenever the draft changes, so
+  // clearing it on send snaps back to a single row.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
 
   const submit = () => {
     const text = draft.trim();
@@ -252,6 +263,7 @@ export default function ChiefConversation() {
             </svg>
           </button>
           <textarea
+            ref={textareaRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -262,7 +274,7 @@ export default function ChiefConversation() {
             }}
             rows={1}
             placeholder="Ask Chief…"
-            className="max-h-32 min-h-[44px] flex-1 resize-none rounded-control border bg-transparent px-3.5 py-2.5 text-[18px] leading-snug text-ink outline-none placeholder:text-ink-3"
+            className="max-h-48 min-h-[44px] flex-1 resize-none overflow-y-auto rounded-control border bg-transparent px-3.5 py-2.5 text-[18px] leading-snug text-ink outline-none placeholder:text-ink-3"
             style={{ borderColor: "var(--hairline)" }}
           />
           <button
