@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test:chief-read": "node --no-warnings --experimental-strip-types --test tests/chief-read-format.test.mjs",
     "test:document-import": "node --no-warnings --experimental-strip-types --test tests/document-import.test.mjs",
     "test:front-mcp": "node --no-warnings --experimental-strip-types --test tests/front-official-mcp.test.mjs",
     "test:pipedream-front": "node --no-warnings --experimental-strip-types --test tests/pipedream-front-search.test.mjs",

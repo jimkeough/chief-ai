@@ -23,83 +23,7 @@ import {
 import { getInstructionsBlock } from "@/lib/kb/instructions";
 import { listKbDocuments } from "@/lib/kb/store";
 import { listContacts } from "@/lib/contacts";
-import { daysSince } from "@/lib/format";
-
-const STATUS_LABEL: Record<string, string> = {
-  open: "open",
-  waiting: "waiting",
-  done: "done",
-};
-
-// Render one task as a compact, model-readable block, carrying EVERYTHING
-// Chief needs to reason about it: all of its metadata (priority, status,
-// impact, effort, category, delegate, due date) and its full notes — the notes
-// are where the real substance lives (links, sub-steps, who's involved), so
-// they're included in full and only clipped if a single note is pathologically
-// long.
-const MAX_NOTE_CHARS = 8000;
-
-function renderTask(
-  t: Task,
-  index: number,
-  projectNames?: Map<string, string>,
-): string {
-  const meta: string[] = [];
-  meta.push(STATUS_LABEL[t.status] ?? t.status);
-  if (t.status === "waiting") {
-    if (t.waiting_on) meta.push(`waiting on ${t.waiting_on}`);
-    if (t.waiting_since) {
-      const d = daysSince(t.waiting_since);
-      if (d !== null) meta.push(`waiting ${d}d`);
-    }
-  }
-  const projectName = t.project_id ? projectNames?.get(t.project_id) : undefined;
-  if (projectName) meta.push(`project: ${projectName}`);
-  if (t.due_at) meta.push(`due ${t.due_at.slice(0, 10)}`);
-
-  const lines = [
-    `${index + 1}. ${t.title} [${meta.join(", ")}]`,
-    `   id: ${t.id}`,
-  ];
-  const notes = (t.notes ?? "").trim();
-  if (notes) {
-    const clipped =
-      notes.length > MAX_NOTE_CHARS
-        ? `${notes.slice(0, MAX_NOTE_CHARS)}…`
-        : notes;
-    lines.push(
-      "   notes:",
-      clipped
-        .split("\n")
-        .map((l) => `   ${l}`)
-        .join("\n"),
-    );
-  }
-  return lines.join("\n");
-}
-
-export function buildTaskDigest(
-  tasks: Task[],
-  projectNames?: Map<string, string>,
-): string {
-  const open = tasks.filter((t) => t.status !== "done");
-  const done = tasks.filter((t) => t.status === "done");
-  if (open.length === 0 && done.length === 0) {
-    return "The user has no tasks on their list yet.";
-  }
-  const render = (t: Task, i: number) => renderTask(t, i, projectNames);
-  const parts = [
-    `The user currently has ${open.length} open task(s)${
-      done.length ? ` and ${done.length} completed` : ""
-    }. Each task below includes its full details and the complete notes. Open tasks, in the user's manual order (the order IS the priority — top of the list matters most; there are no priority/impact/effort ratings):`,
-    "",
-    open.map(render).join("\n\n"),
-  ];
-  if (done.length) {
-    parts.push("", "Recently completed:", done.map(render).join("\n\n"));
-  }
-  return parts.join("\n");
-}
+import { taskLine } from "@/lib/chief-read-format";
 
 // Render Chief's editable "current state" for each active/paused project — the
 // headline (current_state) first, then supporting detail. The next action
@@ -202,13 +126,11 @@ function compactStateValue(value: string | null): string | null {
     : text;
 }
 
-// One task line, titles + minimal facts only. No notes, no deprecated metadata.
-function compactTaskLine(t: Task): string {
-  const meta: string[] = [STATUS_LABEL[t.status] ?? t.status];
-  if (t.status === "waiting" && t.waiting_on) meta.push(`waiting on ${t.waiting_on}`);
-  if (t.due_at) meta.push(`due ${t.due_at.slice(0, 10)}`);
-  return `   - ${t.title} [${meta.join(", ")}] (id: ${t.id})`;
-}
+// One compact task line, indented under its project. No notes, no project
+// label (the project is the section header), no deprecated metadata. Shares the
+// renderer with the read tools so the format stays identical everywhere.
+const compactTaskLine = (t: Task): string =>
+  taskLine(t, undefined, { indent: true, showProject: false });
 
 function renderCompactProject(
   p: ProjectWithState,
