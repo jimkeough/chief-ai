@@ -191,14 +191,8 @@ export function compileDocumentEntities(
             title: entity.title.trim(),
             ...(optional(entity.notes) ? { notes: entity.notes!.trim() } : {}),
             ...(entity.status ? { status: entity.status } : {}),
-            ...(entity.priority ? { priority: entity.priority } : {}),
-            ...(entity.impact ? { impact: entity.impact } : {}),
-            ...(entity.effort ? { effort: entity.effort } : {}),
-            ...(optional(entity.category)
-              ? { category: entity.category!.trim() }
-              : {}),
-            ...(optional(entity.delegateTo)
-              ? { delegate_to: entity.delegateTo!.trim() }
+            ...(optional(entity.waitingOn)
+              ? { waiting_on: entity.waitingOn!.trim() }
               : {}),
             ...(optional(entity.dueAt) ? { due_at: entity.dueAt!.trim() } : {}),
             ...projectRef,
@@ -211,16 +205,10 @@ export function compileDocumentEntities(
     }
     const args: Record<string, unknown> = { id: existing.id };
     changedText(args, "notes", entity.notes, existing.notes);
-    changedText(args, "category", entity.category, existing.category);
-    changedText(args, "delegate_to", entity.delegateTo, existing.delegate_to);
+    changedText(args, "waiting_on", entity.waitingOn, existing.waiting_on);
     changedText(args, "due_at", entity.dueAt, existing.due_at);
-    for (const [key, incoming, current] of [
-      ["status", entity.status, existing.status],
-      ["priority", entity.priority, existing.priority],
-      ["impact", entity.impact, existing.impact],
-      ["effort", entity.effort, existing.effort],
-    ] as const) {
-      if (incoming !== undefined && incoming !== current) args[key] = incoming;
+    if (entity.status !== undefined && entity.status !== existing.status) {
+      args.status = entity.status;
     }
     if (
       projectRef.project_id &&

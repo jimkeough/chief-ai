@@ -46,7 +46,7 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         },
         status: {
           type: "string",
-          enum: ["not_started", "in_progress", "blocked", "waiting", "done"],
+          enum: ["open", "waiting", "done"],
           description: "Only tasks with this status.",
         },
         include_done: {

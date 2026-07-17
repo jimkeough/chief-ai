@@ -33,7 +33,7 @@ export async function GET() {
   const day = new Date().toISOString().slice(0, 10);
   const fingerprint = JSON.stringify([
     day,
-    snapshot.top.map((r) => [r.task.id, r.unblocked]),
+    snapshot.top.map((r) => r.task.id),
     snapshot.waiting.map((w) => [w.taskId, w.state]),
   ]);
 
@@ -58,10 +58,10 @@ export async function GET() {
           {
             role: "user",
             content: [
-              "TOP TASKS (fixed order):",
+              "TOP TASKS (fixed manual order):",
               ...snapshot.top.map(
                 (r, i) =>
-                  `${i + 1}. ${r.task.title}${r.unblocked ? " (just unblocked — they replied)" : ""}${
+                  `${i + 1}. ${r.task.title}${
                     r.task.due_at ? ` (due ${r.task.due_at.slice(0, 10)})` : ""
                   }`,
               ),
@@ -95,11 +95,8 @@ export async function GET() {
     top: snapshot.top.map((r) => ({
       id: r.task.id,
       title: r.task.title,
-      priority: r.task.priority,
       due_at: r.task.due_at,
       project_id: r.task.project_id,
-      unblocked: r.unblocked,
-      effortNote: r.effortNote,
     })),
     waiting: snapshot.waiting,
     openCount: snapshot.openCount,

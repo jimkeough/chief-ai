@@ -12,14 +12,9 @@ export async function PATCH(request: Request, { params }: Params) {
     title: body.title,
     notes: body.notes,
     status: body.status,
-    priority: body.priority,
-    impact: body.impact,
-    category: body.category,
-    delegateTo: body.delegateTo,
-    effort: body.effort,
     dueAt: body.dueAt,
     projectId: body.projectId,
-    waitingOnContactId: body.waitingOnContactId,
+    waitingOn: body.waitingOn,
     sort: body.sort,
   });
   if (!task) {

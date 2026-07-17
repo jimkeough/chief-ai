@@ -50,12 +50,8 @@ export type TaskEntity = SourceEvidence & {
   kind: "task";
   title: string;
   notes?: string;
-  status?: "not_started" | "in_progress" | "blocked" | "waiting" | "done";
-  priority?: "P0" | "P1" | "P2" | "P3" | "P4";
-  impact?: "low" | "medium" | "high";
-  effort?: "s" | "m" | "l";
-  category?: string;
-  delegateTo?: string;
+  status?: "open" | "waiting" | "done";
+  waitingOn?: string;
   dueAt?: string;
   projectName?: string;
 };
@@ -128,26 +124,14 @@ const entityProperties = {
   summary: string,
   status: {
     type: "string",
-    enum: [
-      "active",
-      "paused",
-      "done",
-      "archived",
-      "not_started",
-      "in_progress",
-      "blocked",
-      "waiting",
-    ],
+    // Project statuses (active/paused/done/archived) and task statuses
+    // (open/waiting/done) share this field.
+    enum: ["active", "paused", "done", "archived", "open", "waiting"],
   },
   owner: string,
   currentState: string,
   waitingOn: string,
   notes: string,
-  priority: { type: "string", enum: ["P0", "P1", "P2", "P3", "P4"] },
-  impact: { type: "string", enum: ["low", "medium", "high"] },
-  effort: { type: "string", enum: ["s", "m", "l"] },
-  category: string,
-  delegateTo: string,
   dueAt: string,
   projectName: string,
   email: string,
@@ -185,19 +169,7 @@ export function documentEntityTool(): Anthropic.Tool {
 
 const ENUMS: Record<string, readonly string[]> = {
   kind: DOCUMENT_ENTITY_KINDS,
-  status: [
-    "active",
-    "paused",
-    "done",
-    "archived",
-    "not_started",
-    "in_progress",
-    "blocked",
-    "waiting",
-  ],
-  priority: ["P0", "P1", "P2", "P3", "P4"],
-  impact: ["low", "medium", "high"],
-  effort: ["s", "m", "l"],
+  status: ["active", "paused", "done", "archived", "open", "waiting"],
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {

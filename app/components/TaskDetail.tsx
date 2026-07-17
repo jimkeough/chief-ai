@@ -1,25 +1,21 @@
 "use client";
 
 // Task detail — the task on its own page. Title and notes edit in place; status
-// and priority are one-tap pill selectors; the due date is a native date field.
-// Everything writes through PATCH /api/tasks/[id]; delete removes the task and
-// returns to the list. Kept deliberately direct — the ranking narrative and
-// Chief proposals live elsewhere.
+// is a one-tap pill selector; "waiting on" is free text; the due date is a
+// native date field. Everything writes through PATCH /api/tasks/[id]; delete
+// removes the task and returns to the list. Kept deliberately minimal — a task
+// holds only what needs doing (manual order is the priority, set on the list).
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Task, TaskPriority, TaskStatus } from "@/lib/tasks";
+import type { Task, TaskStatus } from "@/lib/tasks";
 
 const STATUSES: { value: TaskStatus; label: string }[] = [
-  { value: "not_started", label: "To do" },
-  { value: "in_progress", label: "In progress" },
+  { value: "open", label: "Open" },
   { value: "waiting", label: "Waiting" },
-  { value: "blocked", label: "Blocked" },
   { value: "done", label: "Done" },
 ];
-
-const PRIORITIES: TaskPriority[] = ["P0", "P1", "P2", "P3", "P4"];
 
 function toDateInput(iso: string | null): string {
   if (!iso) return "";
@@ -42,6 +38,8 @@ export default function TaskDetail({
   const [titleDraft, setTitleDraft] = useState(task.title);
   const [notesDraft, setNotesDraft] = useState(task.notes ?? "");
   const [notesDirty, setNotesDirty] = useState(false);
+  const [waitingDraft, setWaitingDraft] = useState(task.waiting_on ?? "");
+  const [waitingDirty, setWaitingDirty] = useState(false);
 
   async function patch(body: Record<string, unknown>) {
     setBusy(true);
@@ -64,6 +62,11 @@ export default function TaskDetail({
   async function saveNotes() {
     await patch({ notes: notesDraft.trim() || null });
     setNotesDirty(false);
+  }
+
+  async function saveWaitingOn() {
+    await patch({ waitingOn: waitingDraft.trim() || null });
+    setWaitingDirty(false);
   }
 
   async function remove() {
@@ -210,36 +213,34 @@ export default function TaskDetail({
         </div>
       </div>
 
-      {/* Priority */}
-      <div className="flex flex-col gap-2">
-        <div className="font-mono text-[10px] tracking-[0.1em] text-ink-3">
-          PRIORITY
+      {/* Waiting on — free text (who or what this is blocked on) */}
+      {task.status === "waiting" && (
+        <div className="flex flex-col gap-2">
+          <div className="font-mono text-[10px] tracking-[0.1em] text-ink-3">
+            WAITING ON
+          </div>
+          <input
+            value={waitingDraft}
+            onChange={(e) => {
+              setWaitingDraft(e.target.value);
+              setWaitingDirty(true);
+            }}
+            placeholder="Person, company, event, or dependency…"
+            className="h-11 w-full rounded-control border border-hairline bg-surface px-3 text-[15px] text-ink placeholder:text-ink-3"
+          />
+          {waitingDirty && (
+            <button
+              type="button"
+              onClick={saveWaitingOn}
+              disabled={busy}
+              className="h-10 self-start rounded-control px-4 font-mono text-[11px] tracking-[0.1em] disabled:opacity-50"
+              style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+            >
+              {busy ? "SAVING…" : "SAVE"}
+            </button>
+          )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {PRIORITIES.map((p) => {
-            const on = task.priority === p;
-            const hot = p === "P0" || p === "P1";
-            return (
-              <button
-                key={p}
-                type="button"
-                disabled={busy}
-                onClick={() => void patch({ priority: on ? null : p })}
-                className="h-9 w-11 rounded-chip font-mono text-[11px] disabled:opacity-50"
-                style={
-                  on
-                    ? hot
-                      ? { background: "var(--copper-fill)", border: "1px solid var(--copper-border)", color: "var(--copper)" }
-                      : { background: "var(--teal-fill)", color: "var(--teal-on-fill)" }
-                    : { border: "1px solid var(--hairline)", color: "var(--ink-2)" }
-                }
-              >
-                {p}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      )}
 
       {/* Due date */}
       <div className="flex flex-col gap-2">

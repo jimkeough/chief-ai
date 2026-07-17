@@ -17,11 +17,8 @@ import ProposalGroup from "@/app/components/ProposalCards";
 type TopRow = {
   id: string;
   title: string;
-  priority: string | null;
   due_at: string | null;
   project_id: string | null;
-  unblocked: boolean;
-  effortNote: string | null;
 };
 type WaitingRow = {
   taskId: string;
@@ -274,27 +271,11 @@ export default function HomeClient() {
                 <div className="text-[16px] font-medium leading-[1.3] text-ink">
                   {t.title}
                 </div>
-                <div className="flex gap-[7px] whitespace-nowrap font-mono text-[11px] text-ink-3">
-                  {t.priority && (
-                    <span
-                      className={
-                        t.priority === "P0" || t.priority === "P1"
-                          ? "text-copper"
-                          : undefined
-                      }
-                    >
-                      {t.priority}
-                    </span>
-                  )}
-                  {t.unblocked ? (
-                    <span style={{ color: "var(--ok)" }}>unblocked today</span>
-                  ) : (
-                    <>
-                      {dueLabelShort(t.due_at) && <span>{dueLabelShort(t.due_at)}</span>}
-                      {t.effortNote && <span>{t.effortNote}</span>}
-                    </>
-                  )}
-                </div>
+                {dueLabelShort(t.due_at) && (
+                  <div className="flex gap-[7px] whitespace-nowrap font-mono text-[11px] text-ink-3">
+                    <span>{dueLabelShort(t.due_at)}</span>
+                  </div>
+                )}
               </div>
               <svg width="7" height="12" viewBox="0 0 7 12" className="shrink-0" aria-hidden="true">
                 <path

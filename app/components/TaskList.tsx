@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Task } from "@/lib/tasks";
 import { dueLabel, isOverdue } from "@/lib/format";
-import { PriorityTag, TaskCheckbox } from "./TaskBits";
+import { TaskCheckbox } from "./TaskBits";
 
 async function patchTask(id: string, body: Record<string, unknown>) {
   await fetch(`/api/tasks/${id}`, {
@@ -24,11 +24,10 @@ function TaskRowMeta({ task }: { task: Task }) {
   const due = dueLabel(task.due_at);
   return (
     <div className="flex shrink-0 items-center gap-[7px] whitespace-nowrap font-mono text-[11px]">
-      <PriorityTag priority={task.priority} />
       {task.status === "waiting" ? (
-        <span className="text-ink-3">waiting</span>
-      ) : task.status === "blocked" ? (
-        <span className="text-copper">blocked</span>
+        <span className="text-ink-3">
+          {task.waiting_on ? `waiting · ${task.waiting_on}` : "waiting"}
+        </span>
       ) : due ? (
         <span className={isOverdue(task.due_at) ? "text-copper" : "text-ink-3"}>
           {due}
@@ -68,14 +67,16 @@ export default function TaskList({
 
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const ordered = order.map((id) => byId.get(id)).filter((t): t is Task => !!t);
+  // The "next" tag lands on the first actionable (open) row — a waiting row is
+  // never the next action while an open one exists.
   const firstOpenId = markFirst
-    ? ordered.find((t) => t.status !== "done")?.id ?? null
+    ? ordered.find((t) => t.status === "open")?.id ?? null
     : null;
 
   async function toggle(task: Task) {
     setBusy(task.id);
     await patchTask(task.id, {
-      status: task.status === "done" ? "not_started" : "done",
+      status: task.status === "done" ? "open" : "done",
     });
     setBusy(null);
     router.refresh();

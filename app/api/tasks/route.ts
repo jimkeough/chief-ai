@@ -20,14 +20,9 @@ export async function POST(request: Request) {
     title,
     notes: body.notes ?? null,
     status: body.status,
-    priority: body.priority ?? null,
-    impact: body.impact ?? null,
-    category: body.category ?? null,
-    delegateTo: body.delegateTo ?? null,
-    effort: body.effort ?? null,
     dueAt: body.dueAt ?? null,
     projectId: body.projectId ?? null,
-    waitingOnContactId: body.waitingOnContactId ?? null,
+    waitingOn: body.waitingOn ?? null,
   });
   return NextResponse.json({ task }, { status: 201 });
 }

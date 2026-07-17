@@ -40,10 +40,7 @@ import {
   updateTask,
   getTask,
   type Task,
-  type TaskEffort,
-  type TaskImpact,
   type TaskPatch,
-  type TaskPriority,
   type TaskStatus,
 } from "@/lib/tasks";
 import {
@@ -206,13 +203,8 @@ export async function POST(req: Request) {
           title,
           notes: opt(safeArgs.notes) ?? null,
           status: opt(safeArgs.status) as TaskStatus | undefined,
-          priority: (opt(safeArgs.priority) as TaskPriority | undefined) ?? null,
-          impact: (opt(safeArgs.impact) as TaskImpact | undefined) ?? null,
-          effort: (opt(safeArgs.effort) as TaskEffort | undefined) ?? null,
-          category: opt(safeArgs.category) ?? null,
-          delegateTo: opt(safeArgs.delegate_to) ?? null,
           dueAt: opt(safeArgs.due_at) ?? null,
-          waitingOnContactId: opt(safeArgs.waiting_on_contact_id) ?? null,
+          waitingOn: opt(safeArgs.waiting_on) ?? null,
           projectId,
           source: "chief",
         });
@@ -259,26 +251,13 @@ export async function POST(req: Request) {
         if (opt(safeArgs.title)) set("title", opt(safeArgs.title), before.title);
         if (safeArgs.notes !== undefined)
           set("notes", opt(safeArgs.notes) ?? null, before.notes);
-        if (opt(safeArgs.priority))
-          set("priority", opt(safeArgs.priority) as TaskPriority, before.priority);
-        if (opt(safeArgs.impact))
-          set("impact", opt(safeArgs.impact) as TaskImpact, before.impact);
-        if (opt(safeArgs.effort))
-          set("effort", opt(safeArgs.effort) as TaskEffort, before.effort);
         if (opt(safeArgs.status))
           set("status", opt(safeArgs.status) as TaskStatus, before.status);
-        if (opt(safeArgs.category))
-          set("category", opt(safeArgs.category), before.category);
-        if (opt(safeArgs.delegate_to))
-          set("delegateTo", opt(safeArgs.delegate_to), before.delegate_to);
+        // waiting_on: an explicit empty string clears it.
+        if (safeArgs.waiting_on !== undefined)
+          set("waitingOn", opt(safeArgs.waiting_on) ?? null, before.waiting_on);
         if (opt(safeArgs.due_at))
           set("dueAt", opt(safeArgs.due_at), before.due_at);
-        if (opt(safeArgs.waiting_on_contact_id))
-          set(
-            "waitingOnContactId",
-            opt(safeArgs.waiting_on_contact_id),
-            before.waiting_on_contact_id,
-          );
         if (opt(safeArgs.project_id))
           set("projectId", opt(safeArgs.project_id), before.project_id);
 

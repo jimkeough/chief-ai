@@ -1,5 +1,5 @@
-// Task detail — a single task on its own page. Shows and edits the full record
-// (title, status, priority, due, notes) and links back to its project. What
+// Task detail — a single task on its own page. Shows and edits the record
+// (title, status, waiting on, due, notes) and links back to its project. What
 // Chief sees when opened here is the task itself.
 
 import { notFound } from "next/navigation";
@@ -32,7 +32,7 @@ export default async function TaskDetailPage({
             title: task.title,
             notes: task.notes,
             status: task.status,
-            priority: task.priority,
+            waiting_on: task.waiting_on,
             due_at: task.due_at,
             project_id: task.project_id,
             project_name: project?.name ?? null,

@@ -55,7 +55,7 @@ export default async function ProjectDetailPage({
             id: t.id,
             title: t.title,
             status: t.status,
-            priority: t.priority,
+            waiting_on: t.waiting_on,
             due_at: t.due_at,
           })),
         }}

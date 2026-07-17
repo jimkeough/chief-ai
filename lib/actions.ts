@@ -98,39 +98,19 @@ const enumStr = (description: string, values: string[]) => ({
 });
 
 // Friendly labels for task fields, used in the approval-card preview.
-const TASK_PRIORITY_LABEL: Record<string, string> = {
-  P0: "P0 (do now)",
-  P1: "P1 (high)",
-  P2: "P2 (medium)",
-  P3: "P3 (low)",
-  P4: "P4 (backlog)",
-};
 const TASK_STATUS_LABEL: Record<string, string> = {
-  not_started: "not started",
-  in_progress: "in progress",
-  blocked: "blocked",
+  open: "open",
   waiting: "waiting on someone",
   done: "done",
 };
-const TASK_EFFORT_LABEL: Record<string, string> = { s: "small", m: "medium", l: "large" };
 
-const TASK_STATUS_VALUES = [
-  "not_started",
-  "in_progress",
-  "blocked",
-  "waiting",
-  "done",
-];
+const TASK_STATUS_VALUES = ["open", "waiting", "done"];
 
 // Build the changed-fields lines shared by the create/update task previews.
 function taskFieldLines(a: Record<string, unknown>): string[] {
   const lines: string[] = [];
-  if (a.priority) lines.push(`priority → ${TASK_PRIORITY_LABEL[String(a.priority)] ?? a.priority}`);
   if (a.status) lines.push(`status → ${TASK_STATUS_LABEL[String(a.status)] ?? a.status}`);
-  if (a.impact) lines.push(`impact → ${a.impact}`);
-  if (a.effort) lines.push(`effort → ${TASK_EFFORT_LABEL[String(a.effort)] ?? a.effort}`);
-  if (a.category) lines.push(`category → ${a.category}`);
-  if (a.delegate_to) lines.push(`delegate → ${a.delegate_to}`);
+  if (a.waiting_on) lines.push(`waiting on → ${a.waiting_on}`);
   if (a.project_name) lines.push(`project → ${a.project_name}`);
   if (a.due_at) lines.push(`due → ${String(a.due_at).slice(0, 10)}`);
   return lines;
@@ -154,25 +134,20 @@ export const WRITE_ACTIONS = [
     tier: "yellow",
     label: "Add task",
     description:
-      "Propose a NEW task on the user's task list. This does NOT create it immediately — it shows the user an Approve/Dismiss card. Call this only when the user clearly wants to capture a new task, or when you're making a concrete recommendation to add one. Fill in priority/impact/effort when you can infer them; leave them out if you're unsure.",
+      "Propose a NEW task on the user's task list — a lightweight personal to-do. This does NOT create it immediately — it shows the user an Approve/Dismiss card. Call this only when the user clearly wants to capture a new task, or when you're making a concrete recommendation to add one. Only the title is required; keep it minimal. Manual order is the priority — do not try to rank it. To delegate, set status to \"waiting\" and put the person in waiting_on.",
     input_schema: {
       type: "object",
       properties: {
         title: str("Short task title (the action to take)."),
         notes: str("Optional details: links, sub-steps, who's involved."),
-        priority: enumStr("Optional priority.", ["P0", "P1", "P2", "P3", "P4"]),
-        impact: enumStr("Optional impact.", ["low", "medium", "high"]),
-        effort: enumStr("Optional rough effort size.", ["s", "m", "l"]),
         status: enumStr(
-          "Optional status (defaults to not started). Use \"waiting\" when the task is blocked on someone else replying or delivering.",
+          "Optional status (defaults to open). Use \"waiting\" when the task is blocked on someone/something else (a reply, a delivery, an event).",
           TASK_STATUS_VALUES,
         ),
-        category: str("Optional category/grouping label."),
-        delegate_to: str("Optional person to delegate this to (a name)."),
-        due_at: str("Optional due date, ISO 8601 (e.g. 2026-07-12)."),
-        waiting_on_contact_id: str(
-          "When status is \"waiting\": the id of the saved CONTACT being waited on (from the contacts list). Powers the Waiting-on strip.",
+        waiting_on: str(
+          "Optional free text: the person, company, event, or dependency this task is waiting on. Set it when status is \"waiting\" (including delegation — the person it's delegated to).",
         ),
+        due_at: str("Optional due date, ISO 8601 (e.g. 2026-07-12)."),
         project_id: str(
           "Optional: the id of the project/workstream this task belongs to (from the CURRENT STATE: PROJECTS section). Set this when creating a task as a project's next action.",
         ),
@@ -200,26 +175,21 @@ export const WRITE_ACTIONS = [
     tier: "yellow",
     label: "Update task",
     description:
-      "Propose a change to an EXISTING task — reprioritize, delegate, change status (including marking it done or waiting), or edit its details. This does NOT apply immediately — it shows the user an Approve/Dismiss card. You MUST pass the task's `id` (shown in the task list as `id: …`). Include only the fields you want to change; leave the rest out. Don't change the title unless the user wants it renamed.",
+      "Propose a change to an EXISTING task — change status (including marking it done or waiting), set/clear what it's waiting on, change the due date, move it to a project, or edit its title/notes. This does NOT apply immediately — it shows the user an Approve/Dismiss card. You MUST pass the task's `id` (shown in the task list as `id: …`). Include only the fields you want to change; leave the rest out. Don't change the title unless the user wants it renamed. To delegate, set status to \"waiting\" and put the person in waiting_on. Manual order is the priority — there is no priority field.",
     input_schema: {
       type: "object",
       properties: {
         id: str("The id of the task to update (from the task list)."),
         title: str("Optional new title (only if renaming)."),
         notes: str("Optional new notes (replaces existing notes)."),
-        priority: enumStr("New priority.", ["P0", "P1", "P2", "P3", "P4"]),
-        impact: enumStr("New impact.", ["low", "medium", "high"]),
-        effort: enumStr("New effort size.", ["s", "m", "l"]),
         status: enumStr(
-          "New status. Use \"waiting\" when the task is blocked on someone else replying or delivering.",
+          "New status. Use \"waiting\" when the task is blocked on someone/something else replying or delivering.",
           TASK_STATUS_VALUES,
         ),
-        category: str("New category/grouping label."),
-        delegate_to: str("Person to delegate this to (a name)."),
-        due_at: str("New due date, ISO 8601 (e.g. 2026-07-12)."),
-        waiting_on_contact_id: str(
-          "When setting status to \"waiting\": the id of the saved CONTACT being waited on (from the contacts list). Powers the Waiting-on strip.",
+        waiting_on: str(
+          "Free text: the person, company, event, or dependency this task is waiting on. Pass an empty string to clear it.",
         ),
+        due_at: str("New due date, ISO 8601 (e.g. 2026-07-12)."),
         project_id: str(
           "Move the task to this project/workstream (its id from the CURRENT STATE: PROJECTS section).",
         ),
@@ -293,9 +263,9 @@ export const WRITE_ACTIONS = [
   },
 
   // --- Contact capture ------------------------------------------------------
-  // Save a person to the user's contacts (a real table here — tasks reference
-  // waiting_on_contact_id and the communications log attributes messages), so
-  // future conversations know who they are. Gated like every write.
+  // Save a person to the user's contacts (a real table here — the communications
+  // log attributes messages to them), so future conversations know who they are.
+  // Gated like every write.
   {
     key: "save_contact",
     via: "contacts",

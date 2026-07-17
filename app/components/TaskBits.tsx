@@ -1,8 +1,5 @@
 // Small shared pieces of the task-row vocabulary (design spec 1b/1c):
-// the 20px checkbox (teal-filled when done) and the mono priority tag
-// (P0/P1 copper — attention; the rest stay quiet).
-
-import type { TaskPriority } from "@/lib/tasks";
+// the 20px checkbox (teal-filled when done).
 
 export function TaskCheckbox({
   done,
@@ -38,15 +35,5 @@ export function TaskCheckbox({
         </svg>
       )}
     </button>
-  );
-}
-
-export function PriorityTag({ priority }: { priority: TaskPriority | null }) {
-  if (!priority) return null;
-  const hot = priority === "P0" || priority === "P1";
-  return (
-    <span className={`font-mono text-[11px] ${hot ? "text-copper" : "text-ink-2"}`}>
-      {priority}
-    </span>
   );
 }

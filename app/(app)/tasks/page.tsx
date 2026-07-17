@@ -26,7 +26,7 @@ export default async function TasksPage() {
             id: t.id,
             title: t.title,
             status: t.status,
-            priority: t.priority,
+            waiting_on: t.waiting_on,
             project_id: t.project_id,
             due_at: t.due_at,
           })),

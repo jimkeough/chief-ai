@@ -37,14 +37,9 @@ export const dynamic = "force-dynamic";
 const TASK_FIELDS = [
   "title",
   "notes",
-  "priority",
-  "impact",
-  "effort",
   "status",
-  "category",
-  "delegateTo",
+  "waitingOn",
   "dueAt",
-  "waitingOnContactId",
   "projectId",
 ] as const;
 const PROJECT_FIELDS = ["name", "summary", "status", "owner"] as const;
