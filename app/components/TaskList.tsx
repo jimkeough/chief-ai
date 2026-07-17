@@ -42,6 +42,7 @@ export default function TaskList({
   reorderable = false,
   markFirst = false,
   emptyLabel = "Nothing here.",
+  projectNameById,
 }: {
   tasks: Task[];
   reorderable?: boolean;
@@ -49,6 +50,10 @@ export default function TaskList({
   // the old standalone NEXT ACTION card.
   markFirst?: boolean;
   emptyLabel?: string;
+  // When provided, each row shows a compact chip with its project's name
+  // (looked up by project_id). Omitted on the project detail screen, where the
+  // project is already the context.
+  projectNameById?: Record<string, string>;
 }) {
   const router = useRouter();
   const [order, setOrder] = useState(() => tasks.map((t) => t.id));
@@ -139,6 +144,9 @@ export default function TaskList({
     >
       {ordered.map((task, i) => {
         const done = task.status === "done";
+        const projectName = task.project_id
+          ? projectNameById?.[task.project_id]
+          : undefined;
         return (
           <div
             key={task.id}
@@ -174,6 +182,14 @@ export default function TaskList({
                   style={{ background: "var(--teal-dim)", color: "var(--teal)" }}
                 >
                   NEXT
+                </span>
+              )}
+              {projectName && (
+                <span
+                  className="max-w-[40%] shrink-0 truncate rounded-chip bg-raised px-1.5 py-0.5 font-mono text-[9px] tracking-[0.04em] text-ink-3"
+                  title={projectName}
+                >
+                  {projectName}
                 </span>
               )}
               <span className="truncate">{task.title}</span>
