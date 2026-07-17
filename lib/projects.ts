@@ -11,6 +11,14 @@
 // action is NOT stored here — it's computed from the tasks (see
 // lib/tasks.ts#firstOpenTask): the first open task in the project's manual
 // sort order, always, with no separate AI-settable override.
+//
+// DEPRECATED columns: `project_state.next_action` and `next_task_id` still
+// exist in the database (retained for backward compatibility) but are dead —
+// deliberately absent from STATE_COLUMNS, the ProjectState type, and every
+// read/write path. Nothing selects, displays, writes, or feeds them to Chief.
+// Do not reintroduce them: selecting them here would leak stale values back
+// into the project page's Chief snapshot. Next action is the computed first
+// open task, full stop.
 
 import { createClient } from "@/lib/supabase/server";
 
