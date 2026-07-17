@@ -6,6 +6,7 @@
 // pointer-based so it works with a thumb.
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Task } from "@/lib/tasks";
 import { dueLabel, isOverdue } from "@/lib/format";
@@ -40,10 +41,14 @@ function TaskRowMeta({ task }: { task: Task }) {
 export default function TaskList({
   tasks,
   reorderable = false,
+  markFirst = false,
   emptyLabel = "Nothing here.",
 }: {
   tasks: Task[];
   reorderable?: boolean;
+  // Tag the first open (non-done) row as the project's next action, replacing
+  // the old standalone NEXT ACTION card.
+  markFirst?: boolean;
   emptyLabel?: string;
 }) {
   const router = useRouter();
@@ -63,6 +68,9 @@ export default function TaskList({
 
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const ordered = order.map((id) => byId.get(id)).filter((t): t is Task => !!t);
+  const firstOpenId = markFirst
+    ? ordered.find((t) => t.status !== "done")?.id ?? null
+    : null;
 
   async function toggle(task: Task) {
     setBusy(task.id);
@@ -153,14 +161,39 @@ export default function TaskList({
               disabled={busy === task.id}
               onToggle={() => toggle(task)}
             />
-            <div
-              className={`min-w-0 flex-1 text-[15px] font-medium ${
+            <Link
+              href={`/tasks/${task.id}`}
+              className={`flex min-w-0 flex-1 items-center gap-2 text-[15px] font-medium ${
                 done ? "text-ink-3 line-through" : task.status === "waiting" ? "text-ink-2" : "text-ink"
               }`}
             >
-              {task.title}
-            </div>
+              {firstOpenId === task.id && (
+                <span
+                  className="shrink-0 rounded-chip px-1.5 py-0.5 font-mono text-[9px] tracking-[0.08em]"
+                  style={{ background: "var(--teal-dim)", color: "var(--teal)" }}
+                >
+                  NEXT
+                </span>
+              )}
+              <span className="truncate">{task.title}</span>
+            </Link>
             <TaskRowMeta task={task} />
+            <svg
+              width="6"
+              height="10"
+              viewBox="0 0 7 12"
+              className="ml-0.5 shrink-0"
+              aria-hidden="true"
+            >
+              <path
+                d="M1 1l5 5-5 5"
+                stroke="var(--ink-3)"
+                strokeWidth="1.6"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </div>
         );
       })}

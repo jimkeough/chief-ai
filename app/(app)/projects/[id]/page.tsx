@@ -1,17 +1,17 @@
-// Project detail — the living record, built to the design spec: header with
-// status chip + goal, editable CURRENT STATE with the copper stale strip,
-// the teal NEXT ACTION card (linked task when one is set), the WAITING ON /
-// BLOCKERS pair, and the project's reorderable task list.
+// Project detail — the living record: an editable header (name + one-liner),
+// the editable CURRENT STATE card with the copper stale strip, an editable
+// WAITING ON card, and the reorderable task list whose top row carries the
+// "next" tag (the next action is simply the top task, no separate card).
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import AddTask from "@/app/components/AddTask";
 import ChiefPageSnapshot from "@/app/components/ChiefPageSnapshot";
 import ProjectChiefAction from "@/app/components/ProjectChiefAction";
+import ProjectHeader from "@/app/components/ProjectHeader";
 import StateCard from "@/app/components/StateCard";
-import StatusChip from "@/app/components/StatusChip";
 import TaskList from "@/app/components/TaskList";
-import { dueLabel } from "@/lib/format";
+import WaitingOnCard from "@/app/components/WaitingOnCard";
 import { getProject, getProjectState } from "@/lib/projects";
 import { getNumericSetting } from "@/lib/settings";
 import { listTasks } from "@/lib/tasks";
@@ -34,10 +34,6 @@ export default async function ProjectDetailPage({
   ]);
 
   const openTasks = tasks.filter((t) => t.status !== "done");
-  const nextTask =
-    (state?.next_task_id && tasks.find((t) => t.id === state.next_task_id)) ||
-    null;
-  const nextActionText = nextTask ? nextTask.title : state?.next_action ?? null;
 
   return (
     <div className="flex flex-col gap-4 pt-2">
@@ -87,17 +83,12 @@ export default async function ProjectDetailPage({
         />
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h1 className="text-[22px] font-semibold leading-tight text-ink">
-          {project.name}
-        </h1>
-        <div className="flex items-center gap-2">
-          <StatusChip status={project.status} />
-          {project.summary && (
-            <span className="text-[14px] text-ink-2">{project.summary}</span>
-          )}
-        </div>
-      </div>
+      <ProjectHeader
+        projectId={project.id}
+        name={project.name}
+        summary={project.summary}
+        status={project.status}
+      />
 
       <StateCard
         projectId={project.id}
@@ -106,70 +97,12 @@ export default async function ProjectDetailPage({
         agingDays={agingDays}
       />
 
-      {/* Next action */}
-      {nextActionText && (
-        <div className="flex flex-col gap-2">
-          <div className="text-micro text-ink-3">NEXT ACTION</div>
-          <div
-            className="box-border flex min-h-[52px] items-center gap-3 rounded-card px-3.5 py-[7px]"
-            style={{
-              background: "var(--teal-dim)",
-              border: "1px solid var(--teal-border)",
-            }}
-          >
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <div className="text-[16px] font-medium text-ink">
-                {nextActionText}
-              </div>
-              <div className="flex gap-[7px] whitespace-nowrap font-mono text-[11px] text-ink-3">
-                {nextTask?.priority && (
-                  <span
-                    className={
-                      nextTask.priority === "P0" || nextTask.priority === "P1"
-                        ? "text-copper"
-                        : undefined
-                    }
-                  >
-                    {nextTask.priority}
-                  </span>
-                )}
-                {nextTask?.due_at && <span>due {dueLabel(nextTask.due_at)}</span>}
-                {nextTask ? (
-                  <span className="text-teal">linked task</span>
-                ) : (
-                  <span>from state record</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <WaitingOnCard
+        projectId={project.id}
+        waitingOn={state?.waiting_on ?? null}
+      />
 
-      {/* Waiting on / blockers */}
-      <div className="flex gap-2.5">
-        <div className="flex flex-1 flex-col gap-1 rounded-card border border-hairline bg-surface px-3.5 py-3">
-          <div className="font-mono text-[10px] tracking-[0.1em] text-ink-3">
-            WAITING ON
-          </div>
-          <div
-            className={`text-[14.5px] leading-snug ${state?.waiting_on ? "text-ink" : "text-ink-3"}`}
-          >
-            {state?.waiting_on || "None"}
-          </div>
-        </div>
-        <div className="flex flex-1 flex-col gap-1 rounded-card border border-hairline bg-surface px-3.5 py-3">
-          <div className="font-mono text-[10px] tracking-[0.1em] text-ink-3">
-            BLOCKERS
-          </div>
-          <div
-            className={`text-[14.5px] leading-snug ${state?.blockers ? "text-ink" : "text-ink-3"}`}
-          >
-            {state?.blockers || "None"}
-          </div>
-        </div>
-      </div>
-
-      {/* Tasks */}
+      {/* Tasks — the top row is the next action (tagged "next"). */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="text-micro text-ink-3">TASKS · {openTasks.length}</div>
@@ -182,6 +115,7 @@ export default async function ProjectDetailPage({
         <TaskList
           tasks={openTasks}
           reorderable
+          markFirst
           emptyLabel="No open tasks for this project."
         />
         <AddTask projectId={project.id} />

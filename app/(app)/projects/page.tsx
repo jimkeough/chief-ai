@@ -1,5 +1,6 @@
-// Projects — the list. Each row: name, status chip, and the current-state
-// headline (the living record's first line) in quiet ink.
+// Projects — the list. Each row: name, a status chip only when the project
+// isn't active (active is the silent default), and the current-state headline
+// (the living record's first line) in quiet ink.
 
 import Link from "next/link";
 import NewProject from "@/app/components/NewProject";
@@ -37,7 +38,7 @@ export default async function ProjectsPage() {
                   <span className="truncate text-[16px] font-semibold text-ink">
                     {p.name}
                   </span>
-                  <StatusChip status={p.status} />
+                  {p.status !== "active" && <StatusChip status={p.status} />}
                 </div>
                 {p.state?.current_state && (
                   <div className="mt-1 truncate text-[14px] text-ink-2">
