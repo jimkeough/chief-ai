@@ -14,16 +14,20 @@ is gitignored; general setup is in `README.md`.
 
 ### Release discipline
 
-- Every pull request in this Chief repo must increase the app version.
-  Run `npm run release:patch` by default; use `release:minor` or `release:major`
-  when the change warrants it. These commands keep `package.json` and
-  `package-lock.json` synchronized.
+- Version bumps are **not** required on every PR. Bump only when you intend to
+  ship a release to deployed installs: run `npm run release:patch` (or
+  `release:minor` / `release:major`). Merging a version change to `main` is what
+  cuts the GitHub release the in-app update check reads, so keep routine PRs at
+  the current version and move fast. When you do bump, those commands keep
+  `package.json` and `package-lock.json` synchronized.
 - `package.json` is the single source of truth. Runtime UI and release automation
   read it directly; do not copy the current version into `README.md`, `TRUST.md`,
   `CLAUDE.md`, or other helper files.
-- Before finishing a PR, run `npm run release:check` and review whether the change
-  also requires updates to `README.md` (user/setup behavior), `TRUST.md` (security,
-  privacy, or data-flow contract), or other agent guidance.
+- Before finishing a PR, run `npm run release:check` (it validates the version
+  format and that the lockfile + embedded updater workflow stay in sync — it no
+  longer enforces a version increase) and review whether the change also requires
+  updates to `README.md` (user/setup behavior), `TRUST.md` (security, privacy, or
+  data-flow contract), or other agent guidance.
 - Changes to `.github/workflows/upstream-updates.yml` must also update the embedded
   copy in `lib/updater-workflow.ts`; run `npm run release:sync-updater`, and
   `release:check` will enforce exact parity.
