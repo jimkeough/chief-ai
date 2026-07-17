@@ -16,12 +16,6 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { listTasks, type Task } from "@/lib/tasks";
 import { listProjectsWithState } from "@/lib/projects";
 import { buildTaskDigest, buildProjectDigest } from "@/lib/chief";
-import {
-  DEFAULT_FRONT_INBOX_ZERO_TAG,
-  searchFrontConversations,
-  searchTaggedOpenConversations,
-} from "@/lib/front-search";
-import { diagnosePipedreamConnect } from "@/lib/pipedream-diagnose";
 
 export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   {
@@ -58,82 +52,6 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         include_done: {
           type: "boolean",
           description: "Include completed tasks (default false).",
-        },
-      },
-    },
-  },
-  {
-    name: "diagnose_pipedream_connect",
-    description:
-      "Diagnose whether Pipedream Connect Proxy works versus Pipedream MCP for Front (and probes another connected app when possible). Use when Front tag search says credentials were rejected but Calendar/MCP tools still work — those are different paths. Returns a summary plus per-target probe results. Read-only.",
-    input_schema: {
-      type: "object",
-      properties: {},
-    },
-  },
-  {
-    name: "search_front_conversations",
-    description:
-      "Search Front conversations. When a tag_id/tag_name is provided, uses Core REST GET /tags/{id}/conversations for the full tagged inventory (MCP search under-counts no-inbox discussions). Without a tag, uses official MCP search_conversations. Default status is open; pass status=\"all\" for full inventory. Prefer tag_id / Config front.inbox_zero_tag_id. Read-only.",
-    input_schema: {
-      type: "object",
-      properties: {
-        tag_name: {
-          type: "string",
-          description: "Optional exact Front tag name filter (company or private teammate tag).",
-        },
-        tag_id: {
-          type: "string",
-          description:
-            "Optional Front tag id (tag_…). Skips list_tags name lookup. Prefer Config → Front — Chief Inbox Zero tag id for that tag.",
-        },
-        status: {
-          type: "string",
-          description:
-            'Default "open". Use "all" for every non-trashed status on a tagged list.',
-        },
-        assignee: {
-          type: "string",
-          description: "Optional teammate name, email, or tea_ id for filters.teammateId.",
-        },
-        limit: {
-          type: "number",
-          description: "Page size (max 100 for tag lists).",
-        },
-        cursor: {
-          type: "string",
-          description: "nextCursor from the previous page.",
-        },
-      },
-    },
-  },
-  {
-    name: "search_front_tagged_conversations",
-    description: `List conversations for a Front tag (default "${DEFAULT_FRONT_INBOX_ZERO_TAG}") via Core REST GET /tags/{id}/conversations — the full tag inventory, including no-inbox discussions that MCP search_conversations under-counts. Pass status=\"all\" for every non-trashed status.`,
-    input_schema: {
-      type: "object",
-      properties: {
-        tag_name: {
-          type: "string",
-          description: `Exact Front tag name (default "${DEFAULT_FRONT_INBOX_ZERO_TAG}").`,
-        },
-        tag_id: {
-          type: "string",
-          description:
-            "Front tag id (tag_…). Prefer Config → Front — Chief Inbox Zero tag id.",
-        },
-        status: {
-          type: "string",
-          description:
-            'Default "open". Use "all" for full tag inventory including no-inbox discussions.',
-        },
-        limit: {
-          type: "number",
-          description: "Page size for /tags/{id}/conversations (max 100).",
-        },
-        cursor: {
-          type: "string",
-          description: "nextCursor from the previous page.",
         },
       },
     },
@@ -183,41 +101,6 @@ export async function runChiefReadTool(
     const projects = await listProjectsWithState().catch(() => []);
     const projectNames = new Map(projects.map((p) => [p.id, p.name]));
     return buildTaskDigest(filtered, projectNames);
-  }
-
-  if (name === "diagnose_pipedream_connect") {
-    return JSON.stringify(await diagnosePipedreamConnect());
-  }
-
-  if (name === "search_front_conversations") {
-    const tagName = typeof args.tag_name === "string" ? args.tag_name : undefined;
-    const tagId = typeof args.tag_id === "string" ? args.tag_id : undefined;
-    const result = await searchFrontConversations({
-      tagName,
-      tagId,
-      status: typeof args.status === "string" ? args.status : undefined,
-      assignee: typeof args.assignee === "string" ? args.assignee : undefined,
-      participant:
-        typeof args.participant === "string" ? args.participant : undefined,
-      teammate: typeof args.teammate === "string" ? args.teammate : undefined,
-      limit: typeof args.limit === "number" ? args.limit : undefined,
-      cursor: typeof args.cursor === "string" ? args.cursor : undefined,
-      // Never silently under-count a tagged inventory via inbox-scoped Search.
-      allowSearchFallback: !(tagName || tagId),
-    });
-    return JSON.stringify(result);
-  }
-
-  if (name === "search_front_tagged_conversations") {
-    const result = await searchTaggedOpenConversations({
-      tagName: typeof args.tag_name === "string" ? args.tag_name : undefined,
-      tagId: typeof args.tag_id === "string" ? args.tag_id : undefined,
-      status: typeof args.status === "string" ? args.status : undefined,
-      teammate: typeof args.teammate === "string" ? args.teammate : undefined,
-      limit: typeof args.limit === "number" ? args.limit : undefined,
-      cursor: typeof args.cursor === "string" ? args.cursor : undefined,
-    });
-    return JSON.stringify(result);
   }
 
   return `Unknown tool: ${name}`;

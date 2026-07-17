@@ -129,37 +129,23 @@ slide-to-send card, through the one executor.
 
 ### Connections
 
-**Front uses Front's official hosted MCP server.** In **Settings → Connections
-→ Front · Official MCP**, Chief shows the deployment-specific redirect URL.
-Create a Front developer app with an OAuth feature, register that URL, enable
-only **MCP Server** under Feature Access, and paste the client ID and secret into
-Chief, save, then authorize as your Front user. Chief requests Front's
-`feature:mcp` OAuth scope; choose Read / Write / Send in the Front developer
-app's Resource permissions. The app secret and user tokens are write-only,
-encrypted in Supabase Vault, and never enter model context.
+**Front connects through Front's official hosted MCP server only.** In
+**Settings → Connections → Front · Official MCP**, Chief shows the
+deployment-specific redirect URL. Create a Front developer app with an OAuth
+feature, register that URL, enable only **MCP Server** under Feature Access, and
+paste the client ID and secret into Chief, save, then authorize as your Front
+user. Chief requests Front's `feature:mcp` OAuth scope; choose Read / Write /
+Send in the Front developer app's Resource permissions. The app secret and user
+tokens are write-only, encrypted in Supabase Vault, and never enter model
+context. Once connected, Front's native MCP tools (`search_conversations`,
+`read_conversation`, drafts, tags, etc.) are available to Chief chat and go
+through the approval executor for any write/send.
 
-The Front Inbox reads through a **Front API token** (Settings → Connections →
-**Front · API token**): create one in Front under Settings → Developers → API
-tokens with Shared-resources access and paste it in. It has full account access
-(no OAuth expiry/refresh, no namespace 403s), is stored per user with RLS enabled
-and no browser policy so only service-role server code reads it, and never enters
-the browser or model context.
-
-The recommended Inbox source is **Config → Front — open queries**: one Front
-search query per line (e.g. `is:open inbox:inb_…`, `is:open assignee:tea_…`,
-`is:open participant:you@example.com`). Chief runs each with the API token,
-paginates it, then unions + de-dupes the results — mirroring how Front assembles
-its own "Open" view from several sub-lists, because no single API filter captures
-"open for me." Objective filters (inbox / assignee / participant / tag) resolve
-with a token; per-user markers (star / subscribe) do not. Validate each query in
-the **Front · API playground** first. Alternatively, set **Front — Chief Inbox
-Zero tag id** (`tag_…`) for a tag-based inbox via `GET /tags/{id}/conversations`.
-
-If no API token is set, tagged inventory falls back to the official Front OAuth
-grant against the same Core REST endpoint, then to official MCP
-`search_conversations`. Pipedream is no longer used for Front. Conversation
-detail uses official MCP `read_conversation`. Front write and send tools always
-go through Chief's approval executor.
+The **Inbox page is email only** (Gmail / IMAP — see above). Chief does not use
+Front's Core REST API; the earlier tag/API-token/open-queries inbox was removed
+because Front's REST API and beta MCP can't reliably assemble a personal "open
+for me" view (no per-user search modifiers, no MCP search pagination). Ask Chief
+about Front threads in chat instead, where it uses the native MCP tools.
 
 Pipedream remains the guided provider for other apps. Its one-time setup stores
 the owner-controlled Connect project's OAuth credentials in Supabase Vault.
