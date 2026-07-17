@@ -72,13 +72,12 @@ export default async function TasksPage({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <ProjectFilter projects={filterProjects} selected={selectedProject} />
-          {open.length > 0 && <TasksChiefAction />}
-        </div>
+        {open.length > 0 && <TasksChiefAction />}
       </div>
 
       <AddTask />
+
+      <ProjectFilter projects={filterProjects} selected={selectedProject} />
 
       <TaskList
         tasks={open}
