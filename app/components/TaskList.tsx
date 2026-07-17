@@ -47,6 +47,7 @@ export default function TaskList({
   markFirst = false,
   emptyLabel = "Nothing here.",
   projectNameById,
+  fullOrderIds,
 }: {
   tasks: Task[];
   reorderable?: boolean;
@@ -58,6 +59,12 @@ export default function TaskList({
   // (looked up by project_id). Omitted on the project detail screen, where the
   // project is already the context.
   projectNameById?: Record<string, string>;
+  // The complete open-task order (all projects), in manual order. When `tasks`
+  // is a filtered subset, a reorder is translated back into this full order so
+  // the filtered tasks only permute among the global slots they already occupy
+  // — hidden tasks keep their positions. Omit when `tasks` is already the full
+  // list (the reorder then covers exactly those ids).
+  fullOrderIds?: string[];
 }) {
   const router = useRouter();
   const [order, setOrder] = useState(() => tasks.map((t) => t.id));
@@ -144,10 +151,20 @@ export default function TaskList({
       window.removeEventListener("pointerup", up);
       setDragId(null);
       setOrder((finalOrder) => {
+        // Translate the (possibly filtered) reorder into the full open-task
+        // order: walk the global order and, at each slot currently held by a
+        // visible task, drop in the next visible task in its new position.
+        // Hidden tasks stay exactly where they are.
+        let ids = finalOrder;
+        if (fullOrderIds) {
+          const visible = new Set(finalOrder);
+          let vi = 0;
+          ids = fullOrderIds.map((id) => (visible.has(id) ? finalOrder[vi++] : id));
+        }
         fetch("/api/tasks/reorder", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: finalOrder }),
+          body: JSON.stringify({ ids }),
         }).then(() => router.refresh());
         return finalOrder;
       });

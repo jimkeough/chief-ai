@@ -43,6 +43,11 @@ export default async function TasksPage({
     : tasks;
   const open = visible.filter((t) => t.status !== "done");
   const done = visible.filter((t) => t.status === "done").slice(0, 10);
+  // The full open-task order (all projects) — lets a within-project reorder map
+  // back onto the global manual order instead of collapsing it.
+  const fullOpenOrderIds = tasks
+    .filter((t) => t.status !== "done")
+    .map((t) => t.id);
 
   return (
     <div className="flex flex-col gap-6 pt-2">
@@ -66,7 +71,7 @@ export default async function TasksPage({
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="text-micro text-ink-3">TASKS · {open.length}</div>
-          {open.length > 1 && !selectedProject && (
+          {open.length > 1 && (
             <div className="font-mono text-[10px] text-ink-3">
               HOLD ⋮⋮ TO REORDER
             </div>
@@ -81,8 +86,9 @@ export default async function TasksPage({
 
       <TaskList
         tasks={open}
-        reorderable={!selectedProject}
+        reorderable
         projectNameById={projectNameById}
+        fullOrderIds={fullOpenOrderIds}
         emptyLabel={
           selectedProject
             ? "No open tasks in this project."
