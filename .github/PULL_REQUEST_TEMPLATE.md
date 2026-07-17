@@ -8,9 +8,10 @@
 
 ## Release checklist
 
-- [ ] I increased the Chief version with `npm run release:patch` (or the
-      appropriate `release:minor` / `release:major` command).
 - [ ] `npm run release:check` and `npm run typecheck` pass.
+- [ ] If this PR should ship a release to deployed installs, I bumped the Chief
+      version with `npm run release:patch` (or `release:minor` / `release:major`).
+      Routine PRs stay at the current version.
 - [ ] I reviewed `README.md`, `TRUST.md`, `AGENTS.md`, and `CLAUDE.md`, updating
       only the contracts affected by this change.
 - [ ] If I changed the upstream updater workflow, I ran

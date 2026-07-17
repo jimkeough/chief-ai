@@ -53,10 +53,12 @@ you.) See `.github/workflows/upstream-updates.yml` and `TRUST.md`.
 ### Shipping a Chief release
 
 `package.json` is Chief's single version source; the app, update check, and
-GitHub release workflow all read it directly. Every Chief pull request must
-increase that version with `npm run release:patch` (or `release:minor` /
-`release:major`) and pass `npm run release:check`. Merging the version bump to
-`main` creates the matching GitHub release automatically.
+GitHub release workflow all read it directly. Version bumps are not required on
+every PR — bump only when you want to ship an update to deployed installs, with
+`npm run release:patch` (or `release:minor` / `release:major`). Merging that
+version change to `main` creates the matching GitHub release automatically.
+Every PR should still pass `npm run release:check` (version format + lockfile
+and updater sync).
 
 Do not copy the current version into helper docs. Instead, update the relevant
 contract when behavior changes: `README.md` for user/setup instructions,
