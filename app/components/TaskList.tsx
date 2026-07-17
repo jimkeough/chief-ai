@@ -93,16 +93,22 @@ export default function TaskList({
     if (!reorderable) return;
     startEvent.preventDefault();
     setDragId(taskId);
-    const ROW_H = 50;
 
     const move = (e: PointerEvent) => {
       const list = listRef.current;
       if (!list) return;
-      const rect = list.getBoundingClientRect();
-      const index = Math.min(
-        Math.max(Math.floor((e.clientY - rect.top) / ROW_H), 0),
-        order.length - 1,
-      );
+      // Rows vary in height (a project badge and a wrapping title can push a row
+      // past one line), so find the drop index from each row's real midpoint
+      // rather than a fixed row height.
+      const rows = Array.from(list.children) as HTMLElement[];
+      let index = rows.length - 1;
+      for (let r = 0; r < rows.length; r++) {
+        const rect = rows[r].getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) {
+          index = r;
+          break;
+        }
+      }
       setOrder((cur) => {
         const from = cur.indexOf(taskId);
         if (from === -1 || from === index) return cur;
@@ -172,27 +178,29 @@ export default function TaskList({
             />
             <Link
               href={`/tasks/${task.id}`}
-              className={`flex min-w-0 flex-1 items-center gap-2 text-[15px] font-medium ${
+              className={`flex min-w-0 flex-1 flex-col items-start gap-1 text-[15px] font-medium ${
                 done ? "text-ink-3 line-through" : task.status === "waiting" ? "text-ink-2" : "text-ink"
               }`}
             >
-              {firstOpenId === task.id && (
-                <span
-                  className="shrink-0 rounded-chip px-1.5 py-0.5 font-mono text-[9px] tracking-[0.08em]"
-                  style={{ background: "var(--teal-dim)", color: "var(--teal)" }}
-                >
-                  NEXT
-                </span>
-              )}
               {projectName && (
                 <span
-                  className="max-w-[40%] shrink-0 truncate rounded-chip bg-raised px-1.5 py-0.5 font-mono text-[9px] tracking-[0.04em] text-ink-3"
+                  className="max-w-full truncate rounded-chip bg-raised px-1.5 py-0.5 font-mono text-[9px] tracking-[0.04em] text-ink-3"
                   title={projectName}
                 >
                   {projectName}
                 </span>
               )}
-              <span className="truncate">{task.title}</span>
+              <span className="flex items-start gap-1.5">
+                {firstOpenId === task.id && (
+                  <span
+                    className="mt-0.5 shrink-0 rounded-chip px-1.5 py-0.5 font-mono text-[9px] tracking-[0.08em]"
+                    style={{ background: "var(--teal-dim)", color: "var(--teal)" }}
+                  >
+                    NEXT
+                  </span>
+                )}
+                <span className="break-words">{task.title}</span>
+              </span>
             </Link>
             <TaskRowMeta task={task} />
             <svg
