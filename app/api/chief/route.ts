@@ -218,11 +218,20 @@ export async function POST(req: Request) {
   const gatedServerNames = [
     ...new Set(brokerWrites.map((w) => displayName(w.server))),
   ];
+  // Is GitHub connected this turn? That's what makes Chief's review-gated dev
+  // loop (propose branch/PR → user merges → Vercel deploys) actually available,
+  // so the system prompt can tell Chief it can update its own app rather than
+  // denying the capability. Matches the connection whose App/name is `github`
+  // (the same value the write-tool enrichment cards key off).
+  const canEditApp = brokerServers.some(
+    (s) => (s.app ?? s.name).toLowerCase() === "github",
+  );
 
   const system = await buildChiefSystemPrompt({
     canPropose: actionsEnabled,
     connectedApps,
     gatedServerNames,
+    canEditApp,
     page: page ?? null,
     connectorsWithheld: untrustedTurn,
   });

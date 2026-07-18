@@ -183,6 +183,15 @@ the PR → Vercel deploys. Opening a PR and pushing to a feature branch are
 reversible (standard cards); the production deploy is your merge on GitHub, never
 a Chief tool call.
 
+**How to ask.** Once GitHub is connected (with write actions on), Chief knows it
+can change its own code — just ask in chat: "add a project selector to the task
+screen," "fix this bug," "change how X looks." It reads the relevant files, then
+proposes the branch + PR. Chief also keeps a **data change** separate from a
+**code change**: "move this task to another project" edits your data right now
+(no PR), while "add a way to edit a task's project" is a UI change that ships as a
+PR — if a request could be either, Chief offers both. Without GitHub connected it
+will tell you to connect it here rather than saying it can't modify the app.
+
 Once a preview is up, Chief can sanity-check it with the built-in **`check_routes`**
 tool — it hits the routes you name on the preview URL and reports HTTP status and
 response timing (TTFB + total). It's read-only (GET, `*.vercel.app` only) and runs
