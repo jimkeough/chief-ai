@@ -1010,3 +1010,59 @@ by the official connection.
 **Future concierge:** screenshot-level Front walkthrough plus a
 preflight that verifies Feature Access, callback URL, and that the live
 `scopes_supported` list matches what Chief will request.
+
+### 31. The "model not found" outage — credit exhaustion is a recurring trigger, not a day-0 cliff (2026-07-18, v0.8.36)
+
+**Symptom (hit live, in chat):** `404 {"error":{"message":"Model
+'moonshotai/kimi-k2.7' not found","type":"model_not_found"}}` dumped raw into
+the Chief chat mid-conversation.
+
+**Two-layer root cause.** The immediate cause was a bad id: the free-model
+fallback (`FREE_FALLBACK_MODEL`) was pinned to `moonshotai/kimi-k2.7`, a
+placeholder that was never a real gateway id (the live Kimi ids are
+`kimi-k2`, `kimi-k2.5`, `kimi-k2.6`, `kimi-k2-thinking*`). But the fallback
+only fires when the **primary premium model is unreachable** — so the deeper
+cause was that `claude-sonnet-5` had stopped resolving. The account still had
+prepaid credit, but it had **drained low** (balance ~$3.18, spent-to-date
+~$11.82 on the gateway), and once premium is restricted every request degrades
+to the fallback — which then 404'd on the dead id. A graceful degradation
+became a hard crash.
+
+**The reframe that matters for the log:** entry 22 filed this as the
+"zero-key ≠ zero-cost" *setup* cliff — a one-time card-on-file step. It is
+worse than that: on prepaid gateway credit, premium access silently **lapses
+again every time the balance runs down**, so a deployment that worked for weeks
+can start erroring with no config change. This is a recurring operational
+failure mode, not a day-0 gate.
+
+**Fixes shipped (PR #120):**
+- *Fallback CHAIN, not one id* — `FREE_FALLBACK_MODELS = ["moonshotai/kimi-k2",
+  "moonshotai/kimi-k2.6"]`, so the gateway walks past a dead/renamed id instead
+  of hard-failing. A regression test forbids the `kimi-k2.7` placeholder.
+- *Error translation + transient retry* (`lib/ai-errors.ts`) — provider errors
+  are classified and streamed as an actionable sentence ("needs Vercel credits
+  or a BYOK key…") instead of a raw JSON blob; `429`/`5xx` retry with backoff.
+- *Model preflight* — a **MODEL HEALTH** panel in Config → AI verifies the
+  primary + fallback ids against the live gateway catalog.
+
+**Operational fix (Jim, this session):** topped up gateway credit and **enabled
+auto-replenish** (via the Vercel Pro upgrade, $20/mo incl. $20 credit). That is
+the durable answer to the recurring-drain trigger — premium `claude-sonnet-5`
+stops lapsing when the balance can't hit zero.
+
+**Limitation observed live — the preflight checks existence, not entitlement.**
+During the actual outage all three models would still have shown green in MODEL
+HEALTH, because the gateway *catalog* lists `claude-sonnet-5` regardless of
+whether this account has credit to *use* it (and indeed the panel now shows all
+three green post-topup). So the panel catches the bogus-id class (the kimi-k2.7
+bug) but NOT the credit-drain class. To catch that we'd need a live low-balance
+warning (Chief already reads `/v1/credits` for the Usage panel — surface a
+threshold alert) and/or a tiny entitlement probe.
+
+**Still owed (item 4 — the default-model policy):** the reason a zero-cost
+deploy hits this at all is that the default is premium (`claude-sonnet-5`) while
+the account may not be entitled to it, so the *unhappy path is the default
+path*. Proposed: smart-default to a free model (`moonshotai/kimi-k2`) only when
+no premium credential/credit is detected, keeping premium automatic for
+paid/BYOK users — plus the low-credit warning above so the lapse is visible
+before it becomes an error.
