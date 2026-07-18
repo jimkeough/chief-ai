@@ -494,6 +494,55 @@ export default function ConfigClient({
       </Section>
       )}
 
+      {section === "connections" && (
+      <Section label="DEVELOPER">
+        <div className={card} style={cardStyle}>
+          <div className="text-[12.5px] leading-snug text-ink-3">
+            Let Chief change this app&apos;s own code. It reads the repo, then
+            proposes a branch and pull request you review and merge — Vercel
+            deploys the merge. Connect GitHub under Advanced · Direct MCP (App
+            field <span className="font-mono">github</span>) with write actions
+            on first. On Vercel the repo is detected automatically.
+          </div>
+          <button
+            type="button"
+            onClick={() => void runIntent({ id: "app.update" })}
+            className="flex h-12 items-center justify-center gap-2 rounded-control border text-[15px] font-semibold text-ink"
+            style={{ borderColor: "var(--teal-border)", background: "var(--surface)" }}
+          >
+            <span className="font-serif text-[17px] italic text-teal">C</span>
+            Update this app
+          </button>
+          <div className="flex flex-col gap-1.5">
+            <div className="text-[14px] font-medium text-ink">
+              Repo (owner/repo) — optional
+            </div>
+            <div className="text-[12.5px] leading-snug text-ink-3">
+              Only for local or non-Vercel dev. On Vercel, Chief detects the repo
+              automatically, so leave this blank.
+            </div>
+            <input
+              value={settings["devmode.repo"] ?? ""}
+              placeholder="owner/repo"
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, "devmode.repo": e.target.value }))
+              }
+              className={inputCls}
+              style={{ borderColor: "var(--hairline)" }}
+            />
+            <button
+              onClick={() => void saveSettings()}
+              disabled={saving}
+              className="mt-1 flex h-11 items-center justify-center rounded-control text-[14.5px] font-semibold disabled:opacity-50"
+              style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+            >
+              {saving ? "Saving…" : savedFlash ? "Saved" : "Save"}
+            </button>
+          </div>
+        </div>
+      </Section>
+      )}
+
       {/* Chief settings */}
       {section === "chief" && (
       <Section label="CHIEF SETTINGS">
@@ -504,7 +553,8 @@ export default function ConfigClient({
                 d.key !== "updates.enabled" &&
                 d.key !== "ai.auto_refill_enabled" &&
                 d.key !== "mcp.servers" &&
-                d.key !== "mcp.tool_overrides",
+                d.key !== "mcp.tool_overrides" &&
+                d.key !== "devmode.repo",
             )
             .map((d) => (
             <div key={d.key} className="flex flex-col gap-1.5">

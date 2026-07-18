@@ -127,8 +127,11 @@ export function findEnrichment(
     server.toolPrefix && toolName.startsWith(server.toolPrefix)
       ? toolName.slice(server.toolPrefix.length)
       : toolName;
-  const app = server.app ?? server.name;
-  return ENRICHMENTS.find((e) => e.app === app && e.tool === bareTool);
+  // Match the app slug case-insensitively: a connection whose App field is
+  // "GitHub" must get the same "github" cards as one set to "github" (otherwise
+  // the capability turns on but the curated cards silently drop).
+  const app = (server.app ?? server.name).toLowerCase();
+  return ENRICHMENTS.find((e) => e.app.toLowerCase() === app && e.tool === bareTool);
 }
 
 /** Apply an enrichment's model-facing polish (description/schema) to a broker

@@ -26,6 +26,7 @@ export type SettingKey =
   | "front.teammate_id"
   | "pipedream.front_oauth_app_id"
   | "vercel.bypass_secret"
+  | "devmode.repo"
   | "updates.enabled";
 
 export type SettingDef = {
@@ -211,6 +212,19 @@ export const SETTING_DEFS: SettingDef[] = [
     default: "",
     singleLine: true,
     placeholder: "(blank unless previews are protected)",
+  },
+  // Dev-mode repo override — the "owner/repo" Chief's dev mode edits. On Vercel
+  // the repo is auto-detected from VERCEL_GIT_* env (lib/deploy-target.ts); this
+  // is only the fallback for local / non-Vercel dev. Rendered in Config →
+  // Developer, not the auto Chief-settings list.
+  {
+    key: "devmode.repo",
+    label: "Developer — repo (owner/repo)",
+    description:
+      "Optional. The GitHub repo Chief's dev mode edits, as owner/repo. Only needed for local or non-Vercel dev — on Vercel the repo is detected automatically.",
+    default: "",
+    singleLine: true,
+    placeholder: "owner/repo",
   },
   // Set once the user completes the one-tap "Enable auto-updates" step
   // (see lib/updater-workflow.ts). Gates the "Get this update" button so it

@@ -13,7 +13,8 @@ export type ChiefIntent =
       taskId: string;
       contactName: string;
     }
-  | { id: "tasks.triage_open" };
+  | { id: "tasks.triage_open" }
+  | { id: "app.update" };
 
 export type ChiefIntentId = ChiefIntent["id"] | "document.review" | "general";
 
@@ -27,6 +28,7 @@ const CHIEF_INTENT_IDS: ChiefIntentId[] = [
   "project.plan_next_steps",
   "home.draft_follow_up",
   "tasks.triage_open",
+  "app.update",
 ];
 
 export function isChiefIntentId(value: unknown): value is ChiefIntentId {
@@ -117,6 +119,15 @@ export function resolveChiefIntent(intent: ChiefIntent): ResolvedChiefIntent {
         apiText:
           "Review the open tasks in the page context. Identify what should happen first, flag unclear or unfiled work, and propose only the concrete task or project updates that would improve the plan. Do not execute anything.",
         title: "Triage open tasks",
+      };
+    case "app.update":
+      return {
+        displayText: "Update this app",
+        apiText: [
+          "I want to change this app's own code. Help me make the change through the review-gated dev loop.",
+          "If what I want isn't already clear, ask me one focused question first. Then read the relevant files before proposing any edit — don't guess file contents — and propose a branch, the commits, and a pull request for me to review and merge. Do not merge or deploy; my merge is the approval.",
+        ].join(" "),
+        title: "Update this app",
       };
   }
 }

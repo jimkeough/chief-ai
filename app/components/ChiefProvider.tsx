@@ -891,6 +891,13 @@ export default function ChiefProvider({
             messages: historyRef.current,
             page: effectivePage,
             sessionId: activeSessionId,
+            // Dev mode: an "Update this app" session tells the route to load the
+            // engineer persona + repo-editing toolset instead of the
+            // chief-of-staff loop. Keyed off the persisted session intent so it
+            // survives reload.
+            ...(sessionIntentRef.current === "app.update"
+              ? { mode: "dev" }
+              : {}),
             ...(atts.length ? { attachments: atts } : {}),
           }),
         });

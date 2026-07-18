@@ -29,6 +29,7 @@ import { findRelatedKbEntries } from "@/lib/kb/related";
 import { listProjects } from "@/lib/projects";
 import { applyAttachments, type ChatAttachment } from "@/lib/chat-attachments";
 import { loadChiefAttachments } from "@/lib/chief-attachments";
+import { getDeployTarget } from "@/lib/deploy-target";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,15 +78,18 @@ export async function POST(req: Request) {
   const webFetchEnabled =
     settings["web.fetch_enabled"].trim().toLowerCase() === "on";
 
-  const { messages, page, attachments, attachmentIds, sessionId } = (await req
-    .json()
-    .catch(() => ({}))) as {
-    messages?: ChatMessage[];
-    page?: ChiefPageContext | null;
-    attachments?: ChatAttachment[];
-    attachmentIds?: string[];
-    sessionId?: string | null;
-  };
+  const { messages, page, attachments, attachmentIds, sessionId, mode } =
+    (await req.json().catch(() => ({}))) as {
+      messages?: ChatMessage[];
+      page?: ChiefPageContext | null;
+      attachments?: ChatAttachment[];
+      attachmentIds?: string[];
+      sessionId?: string | null;
+      mode?: string;
+    };
+  // Dev mode: the "Update this app" entry. Loads the engineer persona and
+  // narrows the toolset to the app-editing apps (GitHub/Vercel/Supabase).
+  const devMode = mode === "dev";
   let resolvedAttachments = Array.isArray(attachments) ? attachments : [];
   if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
     try {
@@ -120,6 +124,15 @@ export async function POST(req: Request) {
     if (front) {
       brokerServers = brokerServers.filter((server) => !isFrontServer(server));
       brokerServers.push(front);
+    }
+    // Dev mode narrows the connected apps to the ones that edit/inspect the app
+    // itself — GitHub (repo reads + gated writes), Vercel and Supabase (reads).
+    // The rest (Gmail, Front, calendars, CRM…) are noise for a code change.
+    if (devMode) {
+      const DEV_APPS = new Set(["github", "vercel", "supabase"]);
+      brokerServers = brokerServers.filter((s) =>
+        DEV_APPS.has((s.app ?? s.name).toLowerCase()),
+      );
     }
   }
 
@@ -226,12 +239,18 @@ export async function POST(req: Request) {
   const canEditApp = brokerServers.some(
     (s) => (s.app ?? s.name).toLowerCase() === "github",
   );
+  // In dev mode, resolve which repo/Vercel project this deployment edits so the
+  // engineer prompt can name it exactly (auto-detected on Vercel, else the
+  // devmode.repo override).
+  const deployTarget = devMode ? await getDeployTarget().catch(() => null) : null;
 
   const system = await buildChiefSystemPrompt({
     canPropose: actionsEnabled,
     connectedApps,
     gatedServerNames,
     canEditApp,
+    mode: devMode ? "dev" : "default",
+    deployTarget,
     page: page ?? null,
     connectorsWithheld: untrustedTurn,
   });
@@ -240,7 +259,15 @@ export async function POST(req: Request) {
   // (projects/tasks/KB — always available; reads are safe and let it verify
   // what's saved instead of re-proposing), plus the brokered connector tools
   // (reads always, writes when enabled).
-  const writeTools = actionsEnabled ? writeActionTools() : [];
+  // In dev mode the workspace write actions (task/project/KB edits) don't apply
+  // — the only writes are the gated GitHub connector tools. Keep just
+  // check_routes from the native read tools (deploy sanity check); drop the
+  // task/project read-backs and KB tools.
+  const writeTools = actionsEnabled && !devMode ? writeActionTools() : [];
+  const nativeReadTools = devMode
+    ? CHIEF_READ_TOOLS.filter((t) => t.name === "check_routes")
+    : CHIEF_READ_TOOLS;
+  const kbTools = devMode ? [] : KB_TOOLS;
   // Anthropic's native web_fetch — server-side, returns results inline (never a
   // client tool_use block, so the dispatch loop ignores it). Placed first so it
   // stays inside the cached tool prefix. Typed loosely (the SDK's Tool union
@@ -255,8 +282,8 @@ export async function POST(req: Request) {
   const clientTools = [
     ...serverTools,
     ...writeTools,
-    ...CHIEF_READ_TOOLS,
-    ...KB_TOOLS,
+    ...nativeReadTools,
+    ...kbTools,
     ...brokerToolDefs,
   ];
   const runKbTool = makeKbToolRunner();

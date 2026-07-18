@@ -1,6 +1,6 @@
 # Chief dev-mode — build plan (for review)
 
-Status: **proposal, under review.** Companion to `DEVLOOP-PLAN.md`, which
+Status: **decisions resolved (2026-07-18); Phase A implemented.** Companion to `DEVLOOP-PLAN.md`, which
 established the review-gated GitHub → Vercel loop (Chief opens a PR, you merge,
 Vercel deploys). That plan wired the *capability*; this plan adds a **dedicated
 "Update app" entry** so the capability is fast, precise, and hard to misfire.
@@ -148,12 +148,39 @@ reversible-until-*you*-merge contract whole.
 - **Phase D — optional Vercel MCP deep reads.** Only if `check_routes` + PR
   status checks prove insufficient.
 
-## 8. Open questions
+## 8. Open questions — RESOLVED (2026-07-18)
 
-1. **Credential path:** confirm (A) first-party GitHub MCP over (B) native token,
-   or build (B) for lower setup friction? (Recommendation: A now, B in reserve.)
-2. **Button placement:** a Config → Developer entry, a Home affordance, or both?
-3. **Local/non-Vercel dev:** is the Config-field identity fallback worth building
-   now, or is dev mode hosted-only to start?
-4. **Autonomy line:** keep "Chief opens a PR, you merge" — never auto-merge —
-   consistent with `DEVLOOP-PLAN.md` §10.4? (Recommendation: yes.)
+1. **Credential path:** ✅ **(A) first-party GitHub MCP now**, native-token path
+   (B) kept in reserve.
+2. **Button placement:** ✅ **Config → Developer** — an "Update this app" entry
+   that opens Chief in dev mode.
+3. **Local/non-Vercel dev:** ✅ **Build the fallback now.** Identity
+   auto-detects from Vercel env; a `devmode.repo` setting (`owner/repo`) is the
+   override for local/non-Vercel dev. Shipped as a normal setting so it renders
+   in Config with no custom UI.
+4. **Autonomy line:** ✅ **Keep "Chief opens a PR, you merge" — never
+   auto-merge**, consistent with `DEVLOOP-PLAN.md` §10.4.
+
+## 9. Phase A — what shipped
+
+- `lib/deploy-target.ts` — `getDeployTarget()` reads `VERCEL_GIT_*` /
+  `VERCEL_PROJECT_*` at runtime, falls back to the `devmode.repo` setting, else
+  reports unknown identity.
+- `lib/chief.ts` — a dedicated engineer system prompt (`mode: "dev"`) that
+  injects the resolved identity, states the read → branch → PR → verify loop,
+  the data-vs-code rule, the repo checks, and the Supabase reads-only /
+  migration-file-PR convention. Skips the chief-of-staff workspace snapshot.
+- `app/api/chief/route.ts` — reads `mode` from the request; in dev mode narrows
+  brokered servers to GitHub/Vercel/Supabase, drops task/project/KB write+read
+  tools (keeps `check_routes`), and passes the deploy target into the prompt.
+- `lib/chief-intents.ts` + `app/components/ChiefProvider.tsx` — an `app.update`
+  intent whose session sends `mode: "dev"` to the route (survives reload via the
+  persisted session intent).
+- `app/(app)/config/ConfigClient.tsx` — a **DEVELOPER** section with the
+  "Update this app" button.
+- `lib/settings.ts` — the optional `devmode.repo` override field.
+- `lib/tool-enrichments.ts` — `findEnrichment` now matches the app slug
+  case-insensitively, so `GitHub` vs `github` no longer silently drops the cards.
+
+Deferred (Phase D): connecting Vercel MCP for build-log / runtime-error reads —
+`check_routes` + the PR's Vercel status check cover the basics for now.
