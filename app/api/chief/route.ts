@@ -33,6 +33,13 @@ import { getDeployTarget } from "@/lib/deploy-target";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Chief streams a multi-turn tool loop (model turns + connector/MCP round-trips),
+// so it needs a real budget — without this it inherited the short platform
+// default and got killed mid-stream, which surfaces to the client as a bare
+// "network error". 60s is the Hobby ceiling and matches the other model-loop
+// routes (import, inbox). Dev mode (reading repo files over the GitHub MCP) is
+// the heaviest case and the one that was timing out.
+export const maxDuration = 60;
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
