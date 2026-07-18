@@ -500,9 +500,10 @@ export default function ConfigClient({
           <div className="text-[12.5px] leading-snug text-ink-3">
             Let Chief change this app&apos;s own code. It reads the repo, then
             proposes a branch and pull request you review and merge — Vercel
-            deploys the merge. Connect GitHub under Advanced · Direct MCP (App
-            field <span className="font-mono">github</span>) with write actions
-            on first. On Vercel the repo is detected automatically.
+            deploys the merge. First tap <span className="text-ink">Connect
+            GitHub</span> under Advanced · Direct MCP above (paste a token, that&apos;s
+            it) and make sure write actions are on. On Vercel the repo is detected
+            automatically.
           </div>
           <button
             type="button"

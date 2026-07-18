@@ -37,6 +37,9 @@ type Draft = {
   allowedTools: string;
   trustReadAnnotations: boolean;
   hasSecret: boolean;
+  /** When set, this draft was started from a known-service preset — the form
+   *  hides the plumbing (name/url/app/auth) and asks only for the token. */
+  preset: "github" | null;
 };
 
 const emptyDraft = (): Draft => ({
@@ -49,6 +52,25 @@ const emptyDraft = (): Draft => ({
   allowedTools: "",
   trustReadAnnotations: false,
   hasSecret: false,
+  preset: null,
+});
+
+// One-tap GitHub setup: everything is known except the token. The app slug
+// `github` is what turns on Chief's curated branch/commit/PR approval cards and
+// enables dev mode's "Update this app" loop; read tools auto-run (trusted
+// first-party server), writes stay gated.
+const GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/";
+const githubDraft = (): Draft => ({
+  id: null,
+  name: "GitHub",
+  url: GITHUB_MCP_URL,
+  authType: "bearer",
+  authorizationToken: "",
+  app: "github",
+  allowedTools: "",
+  trustReadAnnotations: true,
+  hasSecret: false,
+  preset: "github",
 });
 
 const inputClass =
@@ -171,8 +193,13 @@ export default function ManualMcpConnections() {
       allowedTools: connection.allowedTools.join(", "),
       trustReadAnnotations: connection.trustReadAnnotations,
       hasSecret: connection.hasSecret,
+      preset: null,
     });
   };
+
+  const hasGithub = connections.some(
+    (c) => (c.app ?? c.name).toLowerCase() === "github",
+  );
 
   const save = async () => {
     if (!draft || busy) return;
@@ -403,7 +430,66 @@ export default function ManualMcpConnections() {
         );
       })}
 
-      {draft && (
+      {draft && draft.preset === "github" && (
+        <div className="flex flex-col gap-3">
+          <div className="text-[14px] font-semibold text-ink">Connect GitHub</div>
+          <div className="text-[12.5px] leading-snug text-ink-3">
+            Chief already knows the server ({" "}
+            <span className="font-mono text-[11px]">{GITHUB_MCP_URL}</span>) — just
+            paste a token. Create a{" "}
+            <a
+              href="https://github.com/settings/personal-access-tokens/new"
+              target="_blank"
+              rel="noreferrer"
+              className="text-teal underline"
+            >
+              fine-grained PAT
+            </a>{" "}
+            scoped to your repo with <span className="text-ink">Contents</span> and{" "}
+            <span className="text-ink">Pull requests</span> set to Read and write.
+            It&apos;s stored write-only in Vault, never shown to Chief.
+          </div>
+          <label className="flex flex-col gap-1.5 text-[12px] text-ink-3">
+            GitHub token (PAT)
+            <input
+              type="password"
+              value={draft.authorizationToken}
+              onChange={(event) =>
+                setDraft((current) =>
+                  current
+                    ? { ...current, authorizationToken: event.target.value }
+                    : current,
+                )
+              }
+              placeholder="github_pat_…"
+              autoComplete="new-password"
+              className={inputClass}
+              style={{ borderColor: "var(--hairline)" }}
+            />
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setDraft(null)}
+              className="h-11 flex-1 rounded-control border text-[14px] text-ink-2"
+              style={{ borderColor: "var(--hairline)" }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={busy || !draft.authorizationToken.trim()}
+              className="h-11 flex-1 rounded-control text-[14px] font-semibold disabled:opacity-50"
+              style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+            >
+              {busy ? "Connecting…" : "Connect GitHub"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {draft && draft.preset !== "github" && (
         <div className="flex flex-col gap-3">
           <div className="text-[14px] font-semibold text-ink">
             {draft.id ? "Edit MCP connection" : "Add MCP connection"}
@@ -552,17 +638,32 @@ export default function ManualMcpConnections() {
       )}
 
       {!draft && (
-        <button
-          type="button"
-          onClick={() => {
-            setError(null);
-            setDraft(emptyDraft());
-          }}
-          className="flex h-11 items-center justify-center rounded-control text-[14.5px] font-semibold"
-          style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
-        >
-          Add MCP connection
-        </button>
+        <div className="flex flex-col gap-2">
+          {!hasGithub && (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setDraft(githubDraft());
+              }}
+              className="flex h-11 items-center justify-center gap-2 rounded-control text-[14.5px] font-semibold"
+              style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+            >
+              Connect GitHub
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setDraft(emptyDraft());
+            }}
+            className="flex h-11 items-center justify-center rounded-control border text-[14.5px] font-semibold text-ink"
+            style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
+          >
+            Add another MCP connection
+          </button>
+        </div>
       )}
     </div>
   );
