@@ -36,6 +36,8 @@ import {
   resolveProjectRef,
   matchTasks,
 } from "@/lib/chief-read-format";
+import { getSetting } from "@/lib/settings";
+import { checkRoutes, formatRouteChecks } from "@/lib/vercel-checks";
 
 export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
   {
@@ -124,6 +126,28 @@ export const CHIEF_READ_TOOLS: Anthropic.Tool[] = [
         id: { type: "string", description: "The id of the task to read." },
       },
       required: ["id"],
+    },
+  },
+  {
+    name: "check_routes",
+    description:
+      'Probe one or more routes on a Vercel PREVIEW deployment and report HTTP status and response timing (TTFB + total). Use it to sanity-check a preview after a branch is pushed: pass the preview URL and the key paths to hit (e.g. ["/", "/tasks"]). Read-only — GET requests only, and only to *.vercel.app hosts. If the preview has Deployment Protection on, the stored Vercel automation bypass secret is used automatically. Note: deployment status, build logs, and runtime errors come from the connected Vercel tools, not this one.',
+    input_schema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description:
+            "The preview deployment URL (https, a *.vercel.app host). Get it from the Vercel deployment.",
+        },
+        paths: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'Route paths to check, e.g. ["/", "/tasks"]. Defaults to ["/"]. Up to 10.',
+        },
+      },
+      required: ["url"],
     },
   },
 ];
@@ -266,6 +290,15 @@ export async function runChiefReadTool(
     // One extra query only when the task is filed under a project (for its name).
     const project = task.project_id ? await getProject(task.project_id) : null;
     return renderTaskDetail(task, project?.name ?? null);
+  }
+
+  if (name === "check_routes") {
+    const url = typeof args.url === "string" ? args.url : "";
+    if (!url.trim()) return "Provide the preview deployment URL to check.";
+    const secret = (await getSetting("vercel.bypass_secret")).trim() || null;
+    const res = await checkRoutes({ base: url, paths: args.paths, secret });
+    if ("error" in res) return `Can't check routes: ${res.error}`;
+    return formatRouteChecks(res.origin, res.results);
   }
 
   return `Unknown tool: ${name}`;

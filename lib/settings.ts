@@ -24,6 +24,7 @@ export type SettingKey =
   | "mcp.tool_overrides"
   | "front.teammate_id"
   | "pipedream.front_oauth_app_id"
+  | "vercel.bypass_secret"
   | "updates.enabled";
 
 export type SettingDef = {
@@ -180,6 +181,20 @@ export const SETTING_DEFS: SettingDef[] = [
     default: "",
     singleLine: true,
     placeholder: "oa_…",
+  },
+  // Vercel automation bypass secret — lets Chief's route checks reach a
+  // protected preview (sent as the x-vercel-protection-bypass header). Stored
+  // in the user's own DB and read only server-side by the check_routes tool;
+  // never placed in model context. Blank = only unprotected previews are
+  // reachable. See DEVLOOP-PLAN.md §7.
+  {
+    key: "vercel.bypass_secret",
+    label: "Vercel — automation bypass secret (optional)",
+    description:
+      "Only needed if your Vercel preview deployments have Deployment Protection on. Paste the project's Automation Bypass Secret (Vercel → Project → Settings → Deployment Protection) so Chief can check protected preview routes. Blank = only unprotected previews are reachable.",
+    default: "",
+    singleLine: true,
+    placeholder: "(blank unless previews are protected)",
   },
   // Set once the user completes the one-tap "Enable auto-updates" step
   // (see lib/updater-workflow.ts). Gates the "Get this update" button so it

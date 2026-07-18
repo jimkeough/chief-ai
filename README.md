@@ -183,10 +183,17 @@ the PR → Vercel deploys. Opening a PR and pushing to a feature branch are
 reversible (standard cards); the production deploy is your merge on GitHub, never
 a Chief tool call.
 
-**Protected previews:** if Deployment Protection is on, Chief's route checks and
-(later) browser inspection need Vercel's **automation bypass secret** to reach
-the preview. That secret belongs in Supabase Vault alongside your other
-connector credentials — not in the repo. See `DEVLOOP-PLAN.md` §7.
+Once a preview is up, Chief can sanity-check it with the built-in **`check_routes`**
+tool — it hits the routes you name on the preview URL and reports HTTP status and
+response timing (TTFB + total). It's read-only (GET, `*.vercel.app` only) and runs
+without approval, like the other reads.
+
+**Protected previews:** if Deployment Protection is on, `check_routes` needs
+Vercel's **automation bypass secret** to reach the preview. Paste it into
+**Config → "Vercel — automation bypass secret"** (Vercel → Project → Settings →
+Deployment Protection). Like your AI keys, it's stored only in your own database
+and read server-side — never placed in model context. Blank = only unprotected
+previews are reachable. See `DEVLOOP-PLAN.md` §7.
 
 ## For Claude Code
 

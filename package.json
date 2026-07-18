@@ -11,6 +11,7 @@
     "test:document-import": "node --no-warnings --experimental-strip-types --test tests/document-import.test.mjs",
     "test:front-mcp": "node --no-warnings --experimental-strip-types --test tests/front-official-mcp.test.mjs",
     "test:pipedream-front": "node --no-warnings --experimental-strip-types --test tests/pipedream-front-search.test.mjs",
+    "test:vercel-checks": "node --no-warnings --experimental-strip-types --test tests/vercel-checks.test.mjs",
     "release:check": "node scripts/check-release.mjs",
     "release:sync-updater": "node scripts/sync-updater-workflow.mjs",
     "release:patch": "npm version patch --no-git-tag-version",
