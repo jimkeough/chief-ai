@@ -175,12 +175,59 @@ export async function callMcpTool(
   try {
     client = await connect(server);
     const res = await client.callTool({ name: remoteName, arguments: args });
-    const blocks = (res?.content ?? []) as Array<{ type?: string; text?: string }>;
-    const text = blocks
-      .map((c) => (c.type === "text" ? (c.text ?? "") : ""))
-      .filter(Boolean)
-      .join("\n")
-      .trim();
+    // MCP results carry more than plain text: a tool can return the payload as an
+    // embedded `resource` (with inline text OR a base64 `blob`) or a
+    // `resource_link`. GitHub's get_file_contents, for one, returns the file body
+    // as a resource block and only a "successfully downloaded" line as text — so
+    // extracting `text` alone drops the actual content. Render every block kind.
+    const blocks = (res?.content ?? []) as Array<{
+      type?: string;
+      text?: string;
+      data?: string;
+      mimeType?: string;
+      uri?: string;
+      name?: string;
+      resource?: { uri?: string; mimeType?: string; text?: string; blob?: string };
+    }>;
+    const looksTextual = (mime?: string): boolean =>
+      !mime ||
+      /^text\//i.test(mime) ||
+      /(json|xml|javascript|typescript|yaml|toml|csv|markdown|html|svg|x-sh|source)/i.test(
+        mime,
+      );
+    const decodeBlob = (b64: string): string => {
+      try {
+        return Buffer.from(b64, "base64").toString("utf8");
+      } catch {
+        return "";
+      }
+    };
+    const renderBlock = (c: (typeof blocks)[number]): string => {
+      if (c.type === "text") return c.text ?? "";
+      if (c.type === "resource" && c.resource) {
+        const r = c.resource;
+        if (typeof r.text === "string" && r.text) return r.text;
+        if (typeof r.blob === "string" && r.blob) {
+          const decoded = looksTextual(r.mimeType) ? decodeBlob(r.blob) : "";
+          return (
+            decoded ||
+            `[binary resource${r.uri ? ` ${r.uri}` : ""} (${r.mimeType ?? "unknown type"}) omitted]`
+          );
+        }
+        return r.uri ? `[resource ${r.uri}]` : "";
+      }
+      if (c.type === "resource_link" && c.uri) {
+        return `[resource: ${c.name ?? c.uri} — ${c.uri}]`;
+      }
+      if (c.type === "image") return `[image omitted (${c.mimeType ?? "image"})]`;
+      return "";
+    };
+    // Guard against a huge file blowing the model's context; keep it generous.
+    const MAX_RESULT_CHARS = 120_000;
+    let text = blocks.map(renderBlock).filter(Boolean).join("\n").trim();
+    if (text.length > MAX_RESULT_CHARS) {
+      text = `${text.slice(0, MAX_RESULT_CHARS)}\n…[truncated ${text.length - MAX_RESULT_CHARS} chars]`;
+    }
     if ((res as { isError?: boolean })?.isError) {
       throw new Error(text || "The MCP server rejected the request.");
     }
