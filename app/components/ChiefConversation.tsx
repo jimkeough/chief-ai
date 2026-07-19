@@ -34,7 +34,9 @@ export default function ChiefConversation() {
     messages,
     streaming,
     send,
-    runIntent,
+    startDevChat,
+    sessionIntent,
+    page,
     revisePlan,
     approve,
     dismiss,
@@ -133,22 +135,38 @@ export default function ChiefConversation() {
           <div className="flex items-start gap-3 pt-4">
             <ChiefMonogram size={28} className="mt-1 shrink-0" />
             <div className="flex flex-col gap-3">
-              <p className="chief-voice text-narrative text-ink">
-                What can I take off your plate?
-              </p>
-              <button
-                type="button"
-                onClick={() => void runIntent({ id: "app.update" })}
-                className="flex items-center gap-2 self-start rounded-control border px-3 py-2 text-left text-[13px] text-ink-2"
-                style={{ borderColor: "var(--teal-border)" }}
-              >
-                <span className="font-serif text-[15px] italic text-teal">C</span>
-                Update this app
-              </button>
-              <p className="text-[12px] leading-snug text-ink-3">
-                Attach a file with the clip to have me read it. To build a
-                project/task plan from a document, use Config → Setup Chief.
-              </p>
+              {sessionIntent === "app.update" ? (
+                <>
+                  <p className="chief-voice text-narrative text-ink">
+                    What would you like to update?
+                  </p>
+                  <p className="text-[12px] leading-snug text-ink-3">
+                    I can see the page you&apos;re on
+                    {page?.label ? ` — ${page.label}` : ""}. Tell me the change and
+                    I&apos;ll read the code, then propose a branch + PR for you to
+                    review.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="chief-voice text-narrative text-ink">
+                    What can I take off your plate?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void startDevChat()}
+                    className="flex items-center gap-2 self-start rounded-control border px-3 py-2 text-left text-[13px] text-ink-2"
+                    style={{ borderColor: "var(--teal-border)" }}
+                  >
+                    <span className="font-serif text-[15px] italic text-teal">C</span>
+                    Update this app
+                  </button>
+                  <p className="text-[12px] leading-snug text-ink-3">
+                    Attach a file with the clip to have me read it. To build a
+                    project/task plan from a document, use Config → Setup Chief.
+                  </p>
+                </>
+              )}
             </div>
           </div>
         ) : (

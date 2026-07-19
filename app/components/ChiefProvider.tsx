@@ -127,6 +127,10 @@ type ChiefContextValue = {
   newChat: (intent?: ChiefIntentId, title?: string) => Promise<boolean>;
   switchSession: (id: string) => Promise<void>;
   runIntent: (intent: ChiefIntent) => Promise<void>;
+  /** Open an "Update this app" (dev-mode) chat with no auto model turn. */
+  startDevChat: () => Promise<void>;
+  /** The current session's intent — drives the empty-state greeting. */
+  sessionIntent: ChiefIntentId;
   uploadDocuments: (attachments: ChatAttachment[]) => Promise<void>;
   send: (
     text: string,
@@ -311,6 +315,9 @@ export default function ChiefProvider({
   const transitionRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
   const sessionIntentRef = useRef<ChiefIntentId>("general");
+  // Reactive mirror of the session intent, so the empty-state UI can show the
+  // right greeting (e.g. the dev-mode "what would you like to update?" opener).
+  const [sessionIntent, setSessionIntent] = useState<ChiefIntentId>("general");
   const sessionTitleRef = useRef("New chat");
   const desiredTitleRef = useRef<string | undefined>(undefined);
   const ensureSessionPromiseRef =
@@ -455,6 +462,7 @@ export default function ChiefProvider({
       const history = Array.isArray(record.history) ? record.history : [];
       sessionIdRef.current = record.id;
       sessionIntentRef.current = record.intent;
+      setSessionIntent(record.intent);
       sessionTitleRef.current = record.title;
       desiredTitleRef.current = record.title;
       historyRef.current = history;
@@ -615,6 +623,7 @@ export default function ChiefProvider({
       sessionEpochRef.current += 1;
       sessionIdRef.current = null;
       sessionIntentRef.current = intent;
+      setSessionIntent(intent);
       desiredTitleRef.current = cleanTitle(title);
       sessionTitleRef.current = desiredTitleRef.current ?? "New chat";
       ensureSessionPromiseRef.current = null;
@@ -1205,6 +1214,14 @@ export default function ChiefProvider({
     [newChat, send],
   );
 
+  // Open a dev-mode ("Update this app") chat WITHOUT firing a model turn — the
+  // empty state shows a canned "what would you like to update?" greeting and
+  // waits for the user, so there's no slow/verbose auto-generated opener.
+  const startDevChat = useCallback(async (): Promise<void> => {
+    if (!(await newChat("app.update", "Update this app"))) return;
+    setOpen(true);
+  }, [newChat]);
+
   const uploadDocuments = useCallback(
     async (attachments: ChatAttachment[]): Promise<void> => {
       if (
@@ -1346,6 +1363,8 @@ export default function ChiefProvider({
       newChat,
       switchSession,
       runIntent,
+      startDevChat,
+      sessionIntent,
       uploadDocuments,
       send,
       revisePlan,
@@ -1368,6 +1387,8 @@ export default function ChiefProvider({
       newChat,
       switchSession,
       runIntent,
+      startDevChat,
+      sessionIntent,
       uploadDocuments,
       send,
       revisePlan,
