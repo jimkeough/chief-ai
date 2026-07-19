@@ -34,7 +34,7 @@ import { listProjects } from "@/lib/projects";
 import { applyAttachments, type ChatAttachment } from "@/lib/chat-attachments";
 import { loadChiefAttachments } from "@/lib/chief-attachments";
 import { getDeployTarget } from "@/lib/deploy-target";
-import { getMailAccount } from "@/lib/mail";
+import { getMailProvider } from "@/lib/mail";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -276,12 +276,13 @@ export async function POST(req: Request) {
   // — the only writes are the gated GitHub connector tools. Keep just
   // check_routes from the native read tools (deploy sanity check); drop the
   // task/project read-backs and KB tools.
-  // Email actions (archive_email/reply_email) run against a connected IMAP
-  // account — without one they fail with "No mail account is connected". Don't
-  // offer them when no mail is connected, so Chief can't propose an archive/reply
-  // that's doomed to error.
+  // Email actions (archive_email/reply_email) run against the active mail
+  // provider — IMAP *or* Gmail-via-MCP (getMailProvider, the same check the
+  // executor uses). Gate on that exact signal so the tools are offered iff they
+  // can actually run: without it they fail with "No mail account is connected",
+  // and using getMailAccount() (IMAP-only) wrongly hid them for Gmail-MCP users.
   const mailConnected = !devMode
-    ? Boolean(await getMailAccount().catch(() => null))
+    ? Boolean(await getMailProvider().catch(() => null))
     : false;
   const emailActions = new Set(["archive_email", "reply_email"]);
   const writeTools =
