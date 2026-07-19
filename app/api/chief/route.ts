@@ -11,6 +11,10 @@ import { getToolOverrides, effectiveMode } from "@/lib/tool-overrides";
 import { recordCommunication } from "@/lib/communications";
 import {
   PROPOSALS_MARKER,
+  SUGGESTIONS_MARKER,
+  SUGGEST_REPLIES_TOOL,
+  SUGGEST_REPLIES_TOOL_NAME,
+  sanitizeSuggestedReplies,
   getWriteAction,
   isEmptyUpdate,
   toProposedAction,
@@ -153,6 +157,7 @@ export async function POST(req: Request) {
       ...writeActionTools().map((t) => t.name),
       ...CHIEF_READ_TOOLS.map((t) => t.name),
       ...KB_TOOLS.map((t) => t.name),
+      SUGGEST_REPLIES_TOOL_NAME,
     ]);
     // Chief is meant to read across ALL connected apps, so the per-turn tool
     // budget is generous (and tunable). It's still capped to keep input tokens
@@ -300,11 +305,14 @@ export async function POST(req: Request) {
           { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 },
         ] as unknown as Anthropic.Tool[])
       : [];
+  // Quick-reply chips are for the normal chief-of-staff loop, not dev mode.
+  const chipTools = devMode ? [] : [SUGGEST_REPLIES_TOOL];
   const clientTools = [
     ...serverTools,
     ...writeTools,
     ...nativeReadTools,
     ...kbTools,
+    ...chipTools,
     ...brokerToolDefs,
   ];
   const runKbTool = makeKbToolRunner();
@@ -431,8 +439,15 @@ export async function POST(req: Request) {
           // their results back. Unknown names are default-denied.
           const proposals: ProposedAction[] = [];
           const results: Anthropic.ToolResultBlockParam[] = [];
+          let suggestedReplies: string[] = [];
           for (const block of toolUses) {
             const argsObj = (block.input ?? {}) as Record<string, unknown>;
+            // Quick-reply chips: capture and end the turn (handled after the
+            // loop). Not a proposal, not a read — nothing runs.
+            if (block.name === SUGGEST_REPLIES_TOOL_NAME) {
+              suggestedReplies = sanitizeSuggestedReplies(argsObj.replies);
+              continue;
+            }
             // Static registered write action -> proposal.
             if (getWriteAction(block.name)) {
               // A no-op update (only an id, nothing to change) isn't worth an
@@ -556,6 +571,19 @@ export async function POST(req: Request) {
               encoder.encode(
                 PROPOSALS_MARKER +
                   JSON.stringify({ proposals: named }),
+              ),
+            );
+            break;
+          }
+          // Quick-reply chips end the turn once there's nothing left to run:
+          // emit the trailing blob for the UI to render as tappable chips. (If a
+          // read also fired this turn, feed it back first; the model can
+          // re-suggest on the next turn.)
+          if (results.length === 0 && suggestedReplies.length > 0) {
+            controller.enqueue(
+              encoder.encode(
+                SUGGESTIONS_MARKER +
+                  JSON.stringify({ suggestions: suggestedReplies }),
               ),
             );
             break;

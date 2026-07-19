@@ -59,6 +59,52 @@ export type WriteAction = {
  *  The chat client splits on this to peel proposals off the text stream. */
 export const PROPOSALS_MARKER = "\u001e";
 
+/** Separator before the trailing quick-reply chips blob (ASCII group separator —
+ *  never appears in prose). The chat client splits on this to peel Chief's
+ *  suggested tappable replies off the text stream, like PROPOSALS_MARKER. */
+export const SUGGESTIONS_MARKER = "";
+
+/** The name Chief calls to surface tappable quick-reply chips. Handled specially
+ *  in the chief route (not a proposal, not a read) — see route.ts. */
+export const SUGGEST_REPLIES_TOOL_NAME = "suggest_replies";
+
+/** Model-facing definition of the quick-reply tool. Behavioral guidance (when to
+ *  use it) lives in the system prompt; this stays terse. */
+export const SUGGEST_REPLIES_TOOL: Anthropic.Tool = {
+  name: SUGGEST_REPLIES_TOOL_NAME,
+  description:
+    "Show the user up to 3 short (1–4 word) tappable quick-reply chips instead of writing options out in prose. Tapping one sends it as the user's next message. Use for an obvious next step or a single quick clarifying choice — not every turn.",
+  input_schema: {
+    type: "object",
+    properties: {
+      replies: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "2–3 short tappable option labels (1–4 words each), in priority order.",
+      },
+    },
+    required: ["replies"],
+  },
+};
+
+/** Normalize model-supplied chip labels: trim, drop blanks/dups, clip length,
+ *  cap count. Returns [] when nothing usable. */
+export function sanitizeSuggestedReplies(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== "string") continue;
+    const label = raw.trim().replace(/\s+/g, " ").slice(0, 40);
+    if (!label || seen.has(label.toLowerCase())) continue;
+    seen.add(label.toLowerCase());
+    out.push(label);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
 export type ProposedAction = {
   key: string;
   label: string;

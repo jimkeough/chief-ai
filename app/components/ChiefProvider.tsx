@@ -21,7 +21,11 @@ import {
   useState,
 } from "react";
 import { usePathname } from "next/navigation";
-import { PROPOSALS_MARKER, type ProposedAction } from "@/lib/actions";
+import {
+  PROPOSALS_MARKER,
+  SUGGESTIONS_MARKER,
+  type ProposedAction,
+} from "@/lib/actions";
 import type { ChiefPageContext } from "@/lib/chief";
 import type { UndoDescriptor } from "@/lib/undo";
 import type { ChatAttachment } from "@/lib/chat-attachments";
@@ -82,7 +86,19 @@ export type ChiefMessage = {
   plan?: ProposalPlan;
   /** Files attached to this (user) turn, for display only — name + kind. */
   attachments?: { name: string; kind: ChatAttachment["kind"] }[];
+  /** Tappable quick-reply chips Chief offered after this assistant turn. */
+  suggestions?: string[];
 };
+
+/** Index of the earliest trailing-blob marker (proposals or suggestions) in the
+ *  stream buffer, or -1 if neither is present yet. */
+function firstMarkerIndex(buffer: string): number {
+  const a = buffer.indexOf(PROPOSALS_MARKER);
+  const b = buffer.indexOf(SUGGESTIONS_MARKER);
+  if (a === -1) return b;
+  if (b === -1) return a;
+  return Math.min(a, b);
+}
 
 type SendOptions = {
   /** Model-facing text when it needs more context than the visible user turn. */
@@ -929,7 +945,7 @@ export default function ChiefProvider({
         const decoder = new TextDecoder();
         let buffer = "";
         const render = () => {
-          const cut = buffer.indexOf(PROPOSALS_MARKER);
+          const cut = firstMarkerIndex(buffer);
           const textPart = cut === -1 ? buffer : buffer.slice(0, cut);
           updateMessages((msgs) => {
             const out = [...msgs];
@@ -950,7 +966,34 @@ export default function ChiefProvider({
         render();
 
         const cut = buffer.indexOf(PROPOSALS_MARKER);
-        const finalText = (cut === -1 ? buffer : buffer.slice(0, cut)).trim();
+        const textEnd = firstMarkerIndex(buffer);
+        const finalText = (textEnd === -1 ? buffer : buffer.slice(0, textEnd)).trim();
+
+        // Quick-reply chips: a trailing suggestions blob, peeled off like
+        // proposals and attached to this assistant turn for the UI to render.
+        const sCut = buffer.indexOf(SUGGESTIONS_MARKER);
+        if (sCut !== -1) {
+          try {
+            const sBlob = JSON.parse(buffer.slice(sCut + 1)) as {
+              suggestions?: string[];
+            };
+            const chips = (sBlob.suggestions ?? [])
+              .filter((s): s is string => typeof s === "string" && !!s.trim())
+              .slice(0, 3);
+            if (chips.length > 0) {
+              updateMessages((msgs) => {
+                const out = [...msgs];
+                const last = out[out.length - 1];
+                if (last?.role === "assistant") {
+                  out[out.length - 1] = { ...last, suggestions: chips };
+                }
+                return out;
+              });
+            }
+          } catch {
+            /* malformed suggestions blob — ignore, no chips */
+          }
+        }
         historyRef.current = [
           ...historyRef.current,
           {

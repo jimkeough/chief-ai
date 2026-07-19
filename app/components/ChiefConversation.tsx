@@ -215,6 +215,27 @@ export default function ChiefConversation() {
                       />
                     </div>
                   )}
+                  {m.suggestions &&
+                    m.suggestions.length > 0 &&
+                    i === messages.length - 1 &&
+                    !streaming && (
+                      <div className="flex flex-wrap gap-2 pl-9">
+                        {m.suggestions.map((s, k) => (
+                          <button
+                            key={k}
+                            type="button"
+                            onClick={() => void send(s)}
+                            className="rounded-full border px-3 py-1.5 text-[13px] font-medium text-ink"
+                            style={{
+                              borderColor: "var(--teal-border)",
+                              background: "var(--surface)",
+                            }}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                 </div>
               ),
             )}

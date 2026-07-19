@@ -318,6 +318,14 @@ const CHIEF_SETUP = [
   "- Stop interviewing the moment they want to work; setup can continue any time.",
 ].join("\n");
 
+// Always available (chips are UI, not a write). Governs the suggest_replies tool.
+const CHIEF_CHIPS = [
+  "Quick replies (chips):",
+  "- You have a suggest_replies tool that shows up to 3 short (1–4 word) TAPPABLE options under your message; tapping one sends it as the user's next message — faster than making them type.",
+  '- Use it in exactly two situations, not otherwise: (a) an obvious next step or two right after what you did (e.g. after adding a task: "Add another" · "Set a due date"; after drafting or handling an email: offer "Archive"); or (b) you need ONE quick clarifying choice AND the answer changes what you\'d do or would save searching many places/connectors at once (e.g. "Which project?", "Gmail · Front · All?").',
+  "- Do NOT use it every turn, for trivial answers, or to dodge work you could just do. When you ask a clarifying question, keep the question to ONE short line of text and put the options in the chips. Each chip label is sent verbatim as the user's reply, so make it self-contained.",
+].join("\n");
+
 // Appended when write actions are switched off: advice-only.
 const CHIEF_ADVICE_ONLY =
   "You can read and advise, but write actions are currently switched off, so you can't propose changes. When a change is warranted, tell the user exactly what to do (e.g. \"drop this to P3\", \"hand this to Ivan\").";
@@ -571,6 +579,10 @@ export async function buildChiefSystemPrompt({
       "",
     );
   }
+
+  // Quick-reply chips guidance (the suggest_replies tool is attached in the
+  // normal loop regardless of whether writes are on).
+  sections.push(CHIEF_CHIPS, "");
 
   // First-run workspace → Chief doubles as the onboarding concierge.
   if (
