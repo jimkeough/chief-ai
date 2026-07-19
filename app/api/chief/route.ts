@@ -306,8 +306,9 @@ export async function POST(req: Request) {
           { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 },
         ] as unknown as Anthropic.Tool[])
       : [];
-  // Quick-reply chips are for the normal chief-of-staff loop, not dev mode.
-  const chipTools = devMode ? [] : [SUGGEST_REPLIES_TOOL];
+  // Quick-reply chips: the chief-of-staff loop uses them for next steps, and dev
+  // mode uses them for the "Check the build" verify affordance.
+  const chipTools = [SUGGEST_REPLIES_TOOL];
   const clientTools = [
     ...serverTools,
     ...writeTools,
