@@ -261,7 +261,7 @@ export default function ConfigClient({
 }: {
   section?: ConfigSection;
 }) {
-  const { runIntent, uploadDocuments } = useChief();
+  const { runIntent, startDevChat, uploadDocuments } = useChief();
   const reviewInputRef = useRef<HTMLInputElement>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const startReview = async (files: FileList | null) => {
@@ -520,7 +520,7 @@ export default function ConfigClient({
           </div>
           <button
             type="button"
-            onClick={() => void runIntent({ id: "app.update" })}
+            onClick={() => void startDevChat()}
             className="flex h-12 items-center justify-center gap-2 rounded-control border text-[15px] font-semibold text-ink"
             style={{ borderColor: "var(--teal-border)", background: "var(--surface)" }}
           >
