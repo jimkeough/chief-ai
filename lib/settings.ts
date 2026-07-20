@@ -27,6 +27,7 @@ export type SettingKey =
   | "pipedream.front_oauth_app_id"
   | "vercel.bypass_secret"
   | "devmode.repo"
+  | "devmode.sandbox_enabled"
   | "updates.enabled";
 
 export type SettingDef = {
@@ -225,6 +226,19 @@ export const SETTING_DEFS: SettingDef[] = [
     default: "",
     singleLine: true,
     placeholder: "owner/repo",
+  },
+  // Sandbox dev environment (SANDBOX-PLAN.md). Off by default and Sovereign-only:
+  // when on, Chief may spin up an ephemeral Vercel Sandbox to clone + build the
+  // app before opening a PR. Needs the deployment's Vercel OIDC token; it never
+  // writes to production (the human-merge gate is unchanged).
+  {
+    key: "devmode.sandbox_enabled",
+    label: "Developer — sandbox dev environment",
+    description:
+      "Off by default. When on, Chief can launch an ephemeral Vercel Sandbox to clone and build the app in an isolated VM before proposing a PR. Sovereign edition only; requires the Vercel OIDC token. Never touches production data or deploys on its own.",
+    default: "off",
+    singleLine: true,
+    placeholder: "off",
   },
   // Set once the user completes the one-tap "Enable auto-updates" step
   // (see lib/updater-workflow.ts). Gates the "Get this update" button so it
