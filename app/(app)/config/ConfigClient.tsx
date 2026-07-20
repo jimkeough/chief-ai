@@ -529,6 +529,36 @@ export default function ConfigClient({
           </button>
           <div className="flex flex-col gap-1.5">
             <div className="text-[14px] font-medium text-ink">
+              Sandbox dev environment — experimental
+            </div>
+            <div className="text-[12.5px] leading-snug text-ink-3">
+              Off by default. When on, Chief can spin up an ephemeral Vercel
+              Sandbox to clone and build the app in an isolated VM before
+              proposing a PR. Sovereign edition only; never touches production
+              data or deploys on its own.
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings["devmode.sandbox_enabled"] === "on"}
+              onClick={() =>
+                setSettings((s) => ({
+                  ...s,
+                  "devmode.sandbox_enabled":
+                    s["devmode.sandbox_enabled"] === "on" ? "off" : "on",
+                }))
+              }
+              className="flex h-11 items-center justify-between rounded-control border px-4 text-[14.5px] font-medium text-ink"
+              style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
+            >
+              <span>
+                {settings["devmode.sandbox_enabled"] === "on" ? "On" : "Off"}
+              </span>
+              <span className="text-[12.5px] text-ink-3">tap to toggle</span>
+            </button>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <div className="text-[14px] font-medium text-ink">
               Repo (owner/repo) — optional
             </div>
             <div className="text-[12.5px] leading-snug text-ink-3">
@@ -607,7 +637,8 @@ export default function ConfigClient({
                 d.key !== "ai.auto_refill_enabled" &&
                 d.key !== "mcp.servers" &&
                 d.key !== "mcp.tool_overrides" &&
-                d.key !== "devmode.repo",
+                d.key !== "devmode.repo" &&
+                d.key !== "devmode.sandbox_enabled",
             )
             .map((d) => (
             <div key={d.key} className="flex flex-col gap-1.5">
