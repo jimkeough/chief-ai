@@ -1,13 +1,45 @@
 # Chief sandbox dev-environment — build plan (for review)
 
-Status: **proposal, under review.** Companion to `DEVLOOP-PLAN.md` and
-`DEVMODE-PLAN.md` (which shipped the review-gated GitHub → Vercel loop: Chief
-reads the repo over the GitHub MCP, proposes a branch + commits + PR as gated
-cards, you merge, Vercel deploys). This document proposes the **richer version
-of that loop**: instead of editing through whole-file MCP pushes, Chief spins up
-an on-demand Linux sandbox, clones the repo, edits and *runs* the code there
-(typecheck, tests, dev server), and only then opens the same reviewable PR.
-Written to stand on its own so it can be handed to another reviewer.
+Status: **direction decided (2026-07-20); build starting.** Companion to
+`DEVLOOP-PLAN.md` and `DEVMODE-PLAN.md` (which shipped the review-gated
+GitHub → Vercel loop: Chief reads the repo over the GitHub MCP, proposes a
+branch + commits + PR as gated cards, you merge, Vercel deploys). This document
+describes the **richer version of that loop**: instead of editing through
+whole-file MCP pushes, Chief spins up an on-demand Linux sandbox, launches a
+coding agent that edits and *runs* the code there (typecheck, tests, dev
+server), and only then opens the same reviewable PR. Written to stand on its own
+so it can be handed to another reviewer.
+
+**Decision taken (the crux, resolved in review):**
+
+- **Delegate the engineering to Claude Code, don't hand-roll an agent.** Chief
+  becomes the *product interface + orchestrator*; **Claude Code (headless)** is
+  the engineer that reads, edits, runs, and fixes the code. Chief understands the
+  request and the current screen, manages permissions, and presents the result
+  in its existing chat. This is dramatically less to build and preserves nearly
+  all the product work already shipped.
+- **Host the box in a Vercel Sandbox** the app launches on demand — chosen over a
+  GitHub-Actions-hosted agent because it lets Chief run the app in-VM and stream
+  a **live preview into chat** (the whole point of a slick "Update this app"),
+  and it sits naturally next to the Vercel-hosted app.
+- **Sovereign edition only** (see §6 — this is a scoping *fit*, not a
+  compromise).
+- **The trust contract does not move.** Claude Code opens a PR; **you** merge;
+  Vercel deploys.
+
+These are verified as buildable, not aspirational:
+
+- Vercel ships a guide for exactly this: *"Using Vercel Sandbox to run Claude's
+  Agent SDK"* — <https://vercel.com/kb/guide/using-vercel-sandbox-claude-agent-sdk>
+- …and an open-source, **engine-selectable** starting point: the *Coding Agent
+  Platform* template (Claude Code, Codex CLI, Copilot CLI, Cursor CLI, Gemini
+  CLI, opencode) — <https://vercel.com/templates/next.js/coding-agent-platform>.
+  Adapt this rather than build from scratch; it also delivers "make the engine
+  selectable later" for free.
+- Claude Code headless is real: `claude -p`, `--output-format stream-json`,
+  turn limits, and `--allowedTools` for controlled permissions.
+- Reality check on latency: a sandbox launches in **seconds, not milliseconds**
+  (cold start + `npm install`); a warm base snapshot is what makes it feel fast.
 
 ## 0. What was asked, and what this doc is
 
@@ -25,15 +57,16 @@ The honest answer (see the discussion that produced this doc):
 - **So "give Chief an environment" means: create one on demand,** beside the
   running app, not inside it. That is what a sandbox microVM is.
 
-**Scope of this deliverable: the written plan only.** No code. Two decisions are
-pre-taken to keep the plan honest:
+The architecture is now settled (see the decision box above); what remains is a
+phased build (§7). The trust contract and the edition scope are fixed:
 
-- **The trust contract does not move.** Chief opens a PR; **you** merge; Vercel
-  deploys. A sandbox changes *how Chief authors the change*, never who ships it.
-- **Sovereign-first.** Build and prove this on the single-deployment (Sovereign)
-  edition, where one user's VM on one user's infra is contained. Whether it ever
-  graduates to multi-tenant Chief Cloud is an explicit later decision (§6), not
-  assumed here.
+- **The trust contract does not move.** Claude Code opens a PR; **you** merge;
+  Vercel deploys. The sandbox changes *how the change is authored*, never who
+  ships it.
+- **Sovereign edition only.** Build on the single-deployment edition, where one
+  user's VM runs on that user's own Vercel account, on their dime, in their trust
+  boundary. This is where self-editing is *coherent* — §6 explains why it does
+  not belong in Cloud at all.
 
 ## 1. Why this is worth doing (and where today's loop hurts)
 
@@ -81,53 +114,57 @@ seen build.
 ## 3. The loop, end to end
 
 ```
-Chief (dev mode)            Sandbox (microVM)              GitHub / Vercel
-────────────────            ─────────────────              ───────────────
+Chief (orchestrator)        Vercel Sandbox + Claude Code       GitHub / Vercel
+────────────────────        ────────────────────────────      ───────────────
 1. user asks for a change
-2. spin up sandbox ───────► clone repo @ default branch
-                            npm install (cached snapshot)
-3. edit files directly ───► real fs: read/grep/edit freely
-4. run checks ────────────► npm run typecheck
-                            npm test (focused suites)
-                            npm run dev + hit key routes
-5. self-verify ◄─────────── pass/fail + logs + (optional) screenshot
-   (if red: fix in-VM, loop 4)
-6. propose PR ─────────────────────────────────────────► create_branch + push + PR
-                                                          (SAME gated cards as today)
-7. PR builds preview ──────────────────────────────────► Vercel preview + CI
-8. you REVIEW and MERGE ───────────────────────────────► production deploy
-9. tear down sandbox ─────► VM discarded
+2. spin up sandbox ───────►  clone repo @ default branch
+                             npm install (warm snapshot)
+3. launch Claude Code ────►  claude -p (headless): read / grep /
+                             edit across files, on a real fs
+4. Claude Code runs ──────►  npm run typecheck / test
+   checks in-VM              npm run dev + hit key routes
+5. self-verify ◄──────────   pass/fail + logs + (optional) screenshot
+   (if red: Claude Code fixes in-VM, loops 4)
+6. open PR ────────────────────────────────────────────► branch + push + PR
+7. Chief presents result ◄── live preview + diff, in existing chat
+8. PR builds preview ──────────────────────────────────► Vercel preview + CI
+9. you REVIEW and MERGE ───────────────────────────────► production deploy
+10. tear down sandbox ────►  VM discarded
 ```
 
-Steps 2–5 are the new capability (in the VM, nothing user-facing writes). Step 6
-is unchanged — the existing approval cards. Steps 8 is unchanged — **your merge
-is the only path to production.**
+Steps 2–7 are the new capability (all in the VM; nothing touches production
+data). Step 9 is unchanged — **your merge is the only path to production.**
 
 ## 4. The build — layers
 
-### Layer A — the sandbox runtime
-- **Provider:** `@vercel/sandbox` is the natural first choice (isolated Linux
-  microVM, writable fs, package install, git, snapshots, launchable from the
-  existing Vercel app). Alternatives to weigh: a generic containers/E2B-style
-  backend. Provider choice is **Open Question O1**.
+### Layer A — the sandbox runtime (decided: `@vercel/sandbox`)
+- **Provider: `@vercel/sandbox`** — isolated Linux microVM, writable fs, package
+  install, git, snapshots, launchable straight from the existing Vercel app.
+  Chosen over a GitHub-Actions-hosted agent because it lets us run the app in-VM
+  and stream a live preview; chosen over generic container/E2B backends because
+  it's the tightest fit with the app already on Vercel.
 - **A `lib/sandbox/` seam** that owns: create, run-command, read/write-file,
   snapshot, teardown, with a hard **wall-clock + cost ceiling** per session and a
   **concurrency cap of 1** per user (a dev loop is interactive, not fan-out).
 - **A base snapshot** with Node + deps pre-installed (from `npm ci`) and, if we
   want the app actually runnable in-VM, Docker + Supabase CLI per `AGENTS.md`.
-  The snapshot is the difference between a ~2-minute and a ~20-second cold start.
+  The snapshot is the difference between a multi-minute and a seconds-scale start.
 
-### Layer B — the coding agent inside the VM
-- **Decision — Open Question O2:** run a full coding harness in the VM (Claude
-  Code / Codex / an OSS agent) vs. drive edits from the *existing* Chief turn via
-  a thin set of sandbox tools (`sb_exec`, `sb_read`, `sb_write`, `sb_grep`).
-- **Lean:** start with the thin-tools path — it reuses the dev-mode persona and
-  the broker/gate wholesale, and keeps *one* model in the loop (no nested-agent
-  cost/opacity). Graduate to a full in-VM harness only if the thin path proves
-  too chatty. Either way the **write gate is unchanged**: `sb_exec` runs in a
-  throwaway VM, so it is *not* a production write and can auto-run under a
-  sandbox-scoped allowlist (no `curl | sh`, no writes outside the checkout); the
-  only gated write remains the GitHub PR at step 6.
+### Layer B — the coding agent inside the VM (decided: Claude Code, headless)
+- **Decision:** launch **Claude Code in headless mode** inside the VM as the
+  engineer, rather than hand-rolling an agent loop or driving edits token-by-token
+  from Chief's own turn. Chief orchestrates (understands the ask + screen, sets
+  permissions, presents results); Claude Code reads, edits, runs, and fixes.
+- **How:** follow Vercel's *"Vercel Sandbox + Claude Agent SDK"* guide; adapt the
+  *Coding Agent Platform* template (which is engine-selectable, so Codex / Cursor
+  / Gemini / opencode stay open as later options behind the same seam). Drive
+  Claude Code with `claude -p --output-format stream-json`, a turn limit, and
+  `--allowedTools` scoped to the checkout.
+- **The write gate is unchanged.** Claude Code runs shell in a throwaway VM, so
+  its edits/commands are *not* production writes — they can run under a
+  sandbox-scoped allowlist (no writes outside the checkout, egress limited to the
+  package registry + the repo). The only gated action remains the **PR**, and the
+  only path to production remains **your merge**.
 
 ### Layer C — self-verify
 - Reuse the loop the repo already prescribes: `npm run typecheck`,
@@ -160,40 +197,71 @@ is the only path to production.**
   network beyond package registries + the repo, an allowlist/denylist on
   commands, and it can *never* reach production data or push without the gated
   card.
-- **Multi-tenant makes all of the above worse** — see §6.
 - **It does not remove the human merge**, and shouldn't. This buys a better
   *author*, not an autonomous deployer.
 
-## 6. Interaction with Chief Cloud (the real reason this isn't a slam dunk)
+## 6. Why this is a Sovereign feature by nature (not a compromise)
 
-`CLOUD-PLAN.md` commits to a multi-tenant hosted future. `DEVLOOP-PLAN.md` §5
-already flagged the pattern: a heavy compute runtime is *contained* under
-Sovereign (one VM, one user, one bill) but under Cloud becomes "running N users'
-VMs on operator infra — a real cost/security surface." A per-user microVM that
-clones source, installs arbitrary deps, and runs shell is the largest version of
-that worry in the codebase.
+An early worry was that a sandbox "crosses the sovereignty line" or makes Chief
+Cloud harder. On inspection it does neither — because self-editing only makes
+sense in the Sovereign edition in the first place. Two things were being
+conflated:
 
-**Therefore:** ship this **Sovereign-only** first. Treat "does the sandbox loop
-graduate to Cloud?" as a deliberate later decision gated on (a) observed cost per
-session, (b) an isolation/abuse story for operator-hosted VMs, and (c) whether
-Cloud users even need self-editing (they get auto-updates from the operator; the
-whole point of Cloud is that they *don't* run their own dev loop). It is entirely
-possible the right answer is "sandbox is a Sovereign power-user feature, forever."
+- **Data sovereignty is not implicated.** Sovereignty in Chief (`CLOUD.md`) is
+  about *user data, AI billing, approvals, and exit*. The sandbox operates on
+  **code** — it clones the repo, edits files, opens a PR. It never needs to touch
+  the user's Supabase data. So the "you own your data / we can't see it" promise
+  is untouched.
+- **The only real variable is whose computer runs the box** — and that splits
+  cleanly by edition:
+
+| | Sovereign (one deploy per user) | Cloud (one app, N tenants) |
+| --- | --- | --- |
+| Whose Vercel account runs the sandbox | **the user's own** | the operator's |
+| Whose code it edits | the user's own deployment | one **shared** codebase |
+| Who pays for the VM | the user | the operator |
+
+Under **Sovereign**, every column is the user's: their box, their code, their
+bill, their trust boundary. Chief launching a Vercel Sandbox there is just "the
+user's own workshop on the user's own account." Nothing crosses any line — this
+is the *ideal* home for the feature.
+
+Under **Cloud** it isn't a cost problem so much as a **category error**: the
+Cloud target (`CLOUD-PLAN.md` §2) is *"one multi-tenant hosted app… we ship
+code/updates once."* There is one shared codebase for all tenants, so "tenant A
+edits the app" has nowhere coherent to land — it would either deploy to the
+shared app and hit *everyone*, or require per-tenant forks that destroy the
+"ship once" model. In Cloud, updates flow **from the operator, centrally**; a
+tenant self-editing the shared runtime is not something we want to offer.
+
+**Conclusion:** self-editing is a **Sovereign feature, full stop.** We do *not*
+offer the sandbox loop to Cloud tenants, so the "operator runs N untrusted VMs"
+cost/security surface never materializes. "Sovereign-only" is the correct scope,
+not a hedge. (If per-tenant self-editing under Cloud is ever wanted, it needs
+per-tenant fork infrastructure regardless of sandboxes — a separate, much larger
+product decision.)
 
 ## 7. Suggested phasing
 
-- **Phase 1 — the seam, no agent.** `lib/sandbox/` create/exec/teardown against
-  `@vercel/sandbox`, a base snapshot, cost/time ceilings, and a manual "run
-  typecheck in a sandbox for this branch" spike. Proves provisioning + cost
-  before any model wiring. *Sovereign-only, behind a setting.*
-- **Phase 2 — thin sandbox tools in dev mode.** `sb_exec/read/write/grep` attached
-  in `mode: "dev"` under the sandbox allowlist; dev prompt learns the
-  clone → edit → typecheck → PR loop. Chief authors in the VM, still opens the
-  same PR.
-- **Phase 3 — run + self-verify in-VM.** Docker + Supabase per `AGENTS.md`,
-  `npm run dev`, route probes, optional screenshot back into chat.
-- **Phase 4 — decide the Cloud question (§6).** Only after real cost/isolation
-  data. Default to Sovereign-only until proven otherwise.
+- **Phase 1 — the seam + a provisioning spike.** `lib/sandbox/` create / run /
+  teardown against `@vercel/sandbox`, a base snapshot, and hard cost/time
+  ceilings. Prove it end to end with a trivial job (clone the repo, run
+  `npm run typecheck`, return the result), *Sovereign-only and behind a setting*,
+  before wiring any agent. Establishes the real per-session cost and cold-start
+  numbers. **Note:** this phase can only be truly verified on a live Vercel
+  deploy (the sandbox needs the Vercel runtime + token); expect to validate on a
+  preview, not in CI/typecheck alone.
+- **Phase 2 — launch Claude Code in the VM.** Install Claude Code + the Agent SDK
+  per Vercel's guide; run `claude -p` headless against the checkout with a turn
+  limit and a scoped `--allowedTools`, streaming its progress. It edits, runs
+  `typecheck` / tests, and opens the PR. Chief presents the diff + result in chat.
+- **Phase 3 — run + self-verify + live preview.** Docker + Supabase (local demo
+  keys per `AGENTS.md`), `npm run dev` in-VM, route probes, and stream a live
+  preview / screenshot back into Chief's chat. Wire the "Update this app" entry to
+  this loop; keep the existing GitHub MCP loop as the fallback during transition.
+- **Phase 4 — engine selectability (optional).** The template already abstracts
+  the engine; expose Codex / Cursor / Gemini / opencode as alternates behind the
+  `lib/sandbox/` seam only if there's demand.
 
 ## 8. Trust / `TRUST.md` implications
 
@@ -206,20 +274,17 @@ possible the right answer is "sandbox is a Sovereign power-user feature, forever
 - Screenshots/logs from the VM may capture app content; retain/clean them like
   the existing preview-inspection path.
 
-## 9. Open questions for review
+## 9. Open questions — mostly resolved (2026-07-20)
 
-1. **O1 — provider:** `@vercel/sandbox` (tightest fit with the existing Vercel
-   app) vs. a generic container/E2B backend? What are the real per-session cost
-   and cold-start numbers with a warm base snapshot?
-2. **O2 — in-VM agent:** thin sandbox tools driven by the current Chief turn
-   (recommended first) vs. a full nested coding harness in the VM? When, if ever,
-   is the nested harness worth its cost/opacity?
-3. **O3 — how much to run in-VM:** typecheck + tests only (cheap, no secrets), or
-   the full app via Supabase (richer verify, wants keys)? Does the local
-   demo-key path from `AGENTS.md` cover enough?
-4. **O4 — Cloud:** does this stay Sovereign-only, or is there a real demand for
-   self-editing under multi-tenant Cloud that justifies operator-hosted VMs?
-5. **O5 — autonomy line:** confirm we stop at "Chief opens a PR you merge" even
-   though the sandbox *could* technically merge behind a `red` slide-to-confirm.
-   (Recommendation: stop at PR, same as `DEVLOOP-PLAN.md` §10.4 and
-   `DEVMODE-PLAN.md` §8.4.)
+1. **O1 — provider:** ✅ **`@vercel/sandbox`.** Real per-session cost and
+   cold-start numbers (with a warm snapshot) still to be measured in Phase 1.
+2. **O2 — in-VM agent:** ✅ **Claude Code, headless** (engine-selectable later via
+   the template's abstraction). Superseded the earlier "thin tools" lean.
+3. **O3 — how much to run in-VM:** *open.* Typecheck + tests only (cheap, no
+   secrets) for Phase 2, then the full app via Supabase **local demo keys**
+   (`AGENTS.md`) in Phase 3. Confirm the demo-key path covers enough before
+   injecting any real secret.
+4. **O4 — Cloud:** ✅ **Sovereign-only, by nature** (§6) — not revisited unless
+   per-tenant self-editing becomes a real product ask.
+5. **O5 — autonomy line:** ✅ **stop at "open a PR, you merge"** — same as
+   `DEVLOOP-PLAN.md` §10.4 and `DEVMODE-PLAN.md` §8.4.
