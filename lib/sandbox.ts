@@ -224,6 +224,10 @@ const AGENT_VCPUS = 4;
 const AGENT_SANDBOX_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const AGENT_MAX_TURNS = 30;
 
+/** The env Claude Code needs to authenticate (from resolveSandboxAgentEnv):
+ *  either gateway (ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN) or a direct key. */
+export type AgentEnv = Record<string, string>;
+
 export type AgentRunResult = {
   ok: boolean;
   /** The branch Claude Code's work was pushed to, if we got that far. */
@@ -293,13 +297,14 @@ async function openPullRequest(opts: {
  *  the VM down. Returns the PR link (or a precise failure). Both credentials are
  *  used only inside the VM / for the PR call and are never returned.
  *
- *  `anthropicKey` authenticates Claude Code; `githubToken` clones, pushes, and
- *  opens the PR (needs Contents + Pull Requests write on the repo). */
+ *  `agentEnv` authenticates Claude Code (gateway or direct key — see
+ *  resolveSandboxAgentEnv); `githubToken` clones, pushes, and opens the PR
+ *  (needs Contents + Pull Requests write on the repo). */
 export async function runCodingAgent(opts: {
   target: DeployTarget;
   task: string;
   githubToken: string;
-  anthropicKey: string;
+  agentEnv: AgentEnv;
   maxTurns?: number;
   branchPrefix?: string;
 }): Promise<AgentRunResult> {
@@ -322,8 +327,8 @@ export async function runCodingAgent(opts: {
   if (!opts.githubToken?.trim()) {
     return { ...empty, error: "A GitHub token is required to clone, push, and open the PR." };
   }
-  if (!opts.anthropicKey?.trim()) {
-    return { ...empty, error: "An Anthropic API key is required to run Claude Code." };
+  if (!opts.agentEnv || Object.keys(opts.agentEnv).length === 0) {
+    return { ...empty, error: "No AI credential resolved for Claude Code." };
   }
 
   const slug = target.slug;
@@ -405,7 +410,7 @@ export async function runCodingAgent(opts: {
         "--output-format",
         "json",
       ],
-      { env: { ANTHROPIC_API_KEY: opts.anthropicKey.trim() } },
+      { env: opts.agentEnv },
     );
     const agentOutput = steps[steps.length - 1]?.stdout ?? "";
     if (agent.exitCode !== 0) {

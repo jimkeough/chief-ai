@@ -20,13 +20,16 @@
 //
 // Body: {
 //   "task": "<what to change>",           // required
-//   "token": "<github token>",            // optional; else GITHUB_TOKEN env
-//   "anthropicKey": "<key>",              // optional; else setting / env
+//   "token": "<github token>",            // optional; else connected GitHub / env
+//   "anthropicKey": "<key>",              // optional override; else the app's
+//                                         //   AI provider is used (gateway OIDC
+//                                         //   or the configured Anthropic key)
 //   "maxTurns": 30                        // optional
 // }
 
 import { getAuthed } from "@/lib/auth";
 import { getSetting } from "@/lib/settings";
+import { resolveSandboxAgentEnv } from "@/lib/ai";
 import { getDeployTarget } from "@/lib/deploy-target";
 import {
   getConnectedGithubToken,
@@ -93,19 +96,21 @@ export async function POST(req: Request) {
     );
   }
 
-  const anthropicKey =
-    body.anthropicKey?.trim() ||
-    (await getSetting("ai.byok_anthropic_key").catch(() => "")).trim() ||
-    process.env.ANTHROPIC_API_KEY?.trim() ||
-    "";
-  if (!anthropicKey) {
-    return Response.json(
-      {
-        error:
-          "An Anthropic API key is required to run Claude Code (body `anthropicKey`, the Config BYOK key, or ANTHROPIC_API_KEY). Gateway/OIDC-only setups aren't wired for the in-VM agent yet.",
-      },
-      { status: 400 },
-    );
+  // Claude Code's auth: an explicit key override, otherwise the app's own AI
+  // provider — gateway (OIDC, the sovereign default) or the configured key.
+  let agentEnv: Record<string, string>;
+  const keyOverride = body.anthropicKey?.trim();
+  if (keyOverride) {
+    agentEnv = { ANTHROPIC_API_KEY: keyOverride };
+  } else {
+    const resolved = await resolveSandboxAgentEnv();
+    if ("error" in resolved) {
+      return Response.json(
+        { error: `Claude Code has no AI credential: ${resolved.error}` },
+        { status: 400 },
+      );
+    }
+    agentEnv = resolved;
   }
 
   const target = await getDeployTarget().catch(() => null);
@@ -123,7 +128,7 @@ export async function POST(req: Request) {
     target,
     task,
     githubToken,
-    anthropicKey,
+    agentEnv,
     maxTurns: typeof body.maxTurns === "number" ? body.maxTurns : undefined,
   });
 

@@ -627,7 +627,8 @@ export default function ConfigClient({
                 Leave blank to reuse the GitHub you already connected above. Only
                 paste a token here if you haven&apos;t connected GitHub, or want a
                 different one (fine-grained, this repo, Contents + Pull Requests:
-                write). Claude Code uses your Anthropic key from AI settings.
+                write). Claude Code authenticates with your AI provider from AI
+                settings — the Vercel AI Gateway (default, no key) or your own key.
               </div>
               <input
                 type="password"
