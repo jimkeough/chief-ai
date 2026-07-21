@@ -28,6 +28,7 @@ export type SettingKey =
   | "vercel.bypass_secret"
   | "devmode.repo"
   | "devmode.sandbox_enabled"
+  | "devmode.github_token"
   | "updates.enabled";
 
 export type SettingDef = {
@@ -239,6 +240,18 @@ export const SETTING_DEFS: SettingDef[] = [
     default: "off",
     singleLine: true,
     placeholder: "off",
+  },
+  // GitHub token the sandbox uses to clone (private repo), push the branch, and
+  // open the PR. Stored in your own DB like the other connector secrets; needs
+  // Contents + Pull Requests write on the repo. Rendered in Config → Developer.
+  {
+    key: "devmode.github_token",
+    label: "Developer — sandbox GitHub token",
+    description:
+      "A GitHub token (fine-grained, scoped to this repo: Contents + Pull Requests write) the sandbox uses to clone, push, and open PRs. Only used inside the sandbox / for the PR call.",
+    default: "",
+    singleLine: true,
+    placeholder: "github_pat_… or ghp_…",
   },
   // Set once the user completes the one-tap "Enable auto-updates" step
   // (see lib/updater-workflow.ts). Gates the "Get this update" button so it

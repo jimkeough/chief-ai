@@ -14,8 +14,10 @@
 // used only to construct the clone auth and is never echoed back.
 
 import { getAuthed } from "@/lib/auth";
+import { getSetting } from "@/lib/settings";
 import { getDeployTarget } from "@/lib/deploy-target";
 import {
+  getConnectedGithubToken,
   isSandboxConfigured,
   isSandboxEnabled,
   provisionAndCheck,
@@ -53,7 +55,12 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => ({}))) as { token?: string };
-  const token = body.token?.trim() || process.env.GITHUB_TOKEN?.trim() || null;
+  const token =
+    body.token?.trim() ||
+    (await getSetting("devmode.github_token").catch(() => "")).trim() ||
+    (await getConnectedGithubToken()) ||
+    process.env.GITHUB_TOKEN?.trim() ||
+    null;
 
   const target = await getDeployTarget().catch(() => null);
   if (!target?.slug) {

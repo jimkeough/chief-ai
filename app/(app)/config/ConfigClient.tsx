@@ -276,6 +276,11 @@ export default function ConfigClient({
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [savedFlash, setSavedFlash] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Sandbox dev environment (Config → Developer): a task to run + the live
+  // status/result of a Test or Run, shown inline so verifying needs no curl.
+  const [sbTask, setSbTask] = useState("");
+  const [sbBusy, setSbBusy] = useState<null | "test" | "run">(null);
+  const [sbResult, setSbResult] = useState<string | null>(null);
   const [instructions, setInstructions] = useState<KbDoc[]>([]);
   const [memory, setMemory] = useState<KbDoc[]>([]);
   const [newRule, setNewRule] = useState("");
@@ -368,6 +373,62 @@ export default function ConfigClient({
       setTimeout(() => setSavedFlash(false), 2000);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Sandbox: "Test" boots a VM + clones the repo (cheap sanity check); "Run"
+  // hands a task to Claude Code in the VM and opens a PR. Both save settings
+  // first so the token/flag are persisted, then hit the guarded dev routes and
+  // render the result inline — no terminal, no tokens in the request.
+  const runSandbox = async (mode: "test" | "run") => {
+    setSbResult(null);
+    if (settings["devmode.sandbox_enabled"] !== "on") {
+      setSbResult("Turn the sandbox on above and Save first.");
+      return;
+    }
+    if (mode === "run" && !sbTask.trim()) {
+      setSbResult("Type what you want changed, then tap Run.");
+      return;
+    }
+    setSbBusy(mode);
+    try {
+      await saveSettings();
+      const url =
+        mode === "test" ? "/api/dev/sandbox-check" : "/api/dev/sandbox-agent";
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mode === "run" ? { task: sbTask.trim() } : {}),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        prUrl?: string | null;
+        sandboxName?: string | null;
+        steps?: { label: string; exitCode: number }[];
+      };
+      if (data.error) {
+        setSbResult(`❌ ${data.error}`);
+      } else if (mode === "run" && data.prUrl) {
+        setSbResult(`✅ Done — pull request: ${data.prUrl}`);
+      } else if (mode === "test" && data.ok) {
+        const head = data.steps?.find((s) => s.label.includes("HEAD"));
+        setSbResult(
+          `✅ Sandbox works — booted, cloned the repo${head ? " and read its HEAD" : ""}. You can Run a change now.`,
+        );
+      } else {
+        setSbResult(
+          `⚠️ Finished but didn't ${mode === "run" ? "open a PR" : "pass"}. ${
+            data.steps?.length
+              ? `Last step exit: ${data.steps[data.steps.length - 1].exitCode}.`
+              : ""
+          }`.trim(),
+        );
+      }
+    } catch (e) {
+      setSbResult(`❌ ${e instanceof Error ? e.message : "Request failed."}`);
+    } finally {
+      setSbBusy(null);
     }
   };
 
@@ -557,6 +618,88 @@ export default function ConfigClient({
               <span className="text-[12.5px] text-ink-3">tap to toggle</span>
             </button>
           </div>
+          {settings["devmode.sandbox_enabled"] === "on" && (
+            <div className="flex flex-col gap-1.5">
+              <div className="text-[14px] font-medium text-ink">
+                GitHub token (for the sandbox) — optional
+              </div>
+              <div className="text-[12.5px] leading-snug text-ink-3">
+                Leave blank to reuse the GitHub you already connected above. Only
+                paste a token here if you haven&apos;t connected GitHub, or want a
+                different one (fine-grained, this repo, Contents + Pull Requests:
+                write). Claude Code uses your Anthropic key from AI settings.
+              </div>
+              <input
+                type="password"
+                value={settings["devmode.github_token"] ?? ""}
+                placeholder="github_pat_… or ghp_…"
+                onChange={(e) =>
+                  setSettings((s) => ({
+                    ...s,
+                    "devmode.github_token": e.target.value,
+                  }))
+                }
+                className={inputCls}
+                style={{ borderColor: "var(--hairline)" }}
+              />
+              <textarea
+                value={sbTask}
+                placeholder="What should change? e.g. “add a project picker to the task detail page”"
+                rows={2}
+                onChange={(e) => setSbTask(e.target.value)}
+                className={inputCls}
+                style={{ borderColor: "var(--hairline)" }}
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void runSandbox("test")}
+                  disabled={sbBusy !== null}
+                  className="flex h-11 flex-1 items-center justify-center rounded-control border text-[14px] font-semibold text-ink disabled:opacity-50"
+                  style={{ borderColor: "var(--teal-border)", background: "var(--surface)" }}
+                >
+                  {sbBusy === "test" ? "Testing…" : "Test sandbox"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void runSandbox("run")}
+                  disabled={sbBusy !== null}
+                  className="flex h-11 flex-1 items-center justify-center rounded-control text-[14px] font-semibold disabled:opacity-50"
+                  style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
+                >
+                  {sbBusy === "run" ? "Running…" : "Run change"}
+                </button>
+              </div>
+              {sbBusy === "run" && (
+                <div className="text-[12px] leading-snug text-ink-3">
+                  Working in the sandbox — this can take a few minutes. Keep this
+                  screen open.
+                </div>
+              )}
+              {sbResult && (
+                <div className="text-[12.5px] leading-snug text-ink">
+                  {(() => {
+                    const url = sbResult.match(/https?:\/\/\S+/)?.[0];
+                    if (!url) return sbResult;
+                    const [before] = sbResult.split(url);
+                    return (
+                      <>
+                        {before}
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-teal underline"
+                        >
+                          {url}
+                        </a>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <div className="text-[14px] font-medium text-ink">
               Repo (owner/repo) — optional
@@ -638,7 +781,8 @@ export default function ConfigClient({
                 d.key !== "mcp.servers" &&
                 d.key !== "mcp.tool_overrides" &&
                 d.key !== "devmode.repo" &&
-                d.key !== "devmode.sandbox_enabled",
+                d.key !== "devmode.sandbox_enabled" &&
+                d.key !== "devmode.github_token",
             )
             .map((d) => (
             <div key={d.key} className="flex flex-col gap-1.5">

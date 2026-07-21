@@ -21,6 +21,7 @@
 
 import { Sandbox } from "@vercel/sandbox";
 import { getSetting } from "@/lib/settings";
+import { getMcpServers } from "@/lib/mcp";
 import type { DeployTarget } from "@/lib/deploy-target";
 
 // A dev-loop sandbox is interactive and single-user, not a fan-out — keep it
@@ -85,6 +86,21 @@ export function isSandboxConfigured(): boolean {
 export async function isSandboxEnabled(): Promise<boolean> {
   const raw = await getSetting("devmode.sandbox_enabled").catch(() => "off");
   return raw.trim().toLowerCase() === "on";
+}
+
+/** Reuse the token from an already-connected GitHub MCP connection (the one the
+ *  "Update this app" loop uses), so the sandbox needs no separate PAT. Returns
+ *  null if GitHub isn't connected with a bearer token. */
+export async function getConnectedGithubToken(): Promise<string | null> {
+  try {
+    const servers = await getMcpServers();
+    const github = servers.find(
+      (s) => (s.app ?? s.name).toLowerCase() === "github",
+    );
+    return github?.authorization_token?.trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 /** Phase 1 provisioning spike: spin up a fresh sandbox, clone the target repo
