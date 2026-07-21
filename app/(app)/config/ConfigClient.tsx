@@ -261,7 +261,7 @@ export default function ConfigClient({
 }: {
   section?: ConfigSection;
 }) {
-  const { runIntent, startDevChat, uploadDocuments } = useChief();
+  const { runIntent, uploadDocuments } = useChief();
   const reviewInputRef = useRef<HTMLInputElement>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const startReview = async (files: FileList | null) => {
@@ -661,31 +661,22 @@ export default function ConfigClient({
       <Section label="DEVELOPER">
         <div className={card} style={cardStyle}>
           <div className="text-[12.5px] leading-snug text-ink-3">
-            Let Chief change this app&apos;s own code. It reads the repo, then
-            proposes a branch and pull request you review and merge — Vercel
-            deploys the merge. First tap <span className="text-ink">Connect
-            GitHub</span> under Advanced · Direct MCP above (paste a token, that&apos;s
-            it) and make sure write actions are on. On Vercel the repo is detected
-            automatically.
+            Update this app. Chief edits its own code in an isolated sandbox and
+            opens a pull request you review and merge — nothing deploys until you
+            do. Turn it on below, describe the change, and tap Run. Connect{" "}
+            <span className="text-ink">GitHub</span> above (Advanced · Direct MCP,
+            paste a token) so the sandbox can open the PR; on Vercel the repo is
+            detected automatically.
           </div>
-          <button
-            type="button"
-            onClick={() => void startDevChat()}
-            className="flex h-12 items-center justify-center gap-2 rounded-control border text-[15px] font-semibold text-ink"
-            style={{ borderColor: "var(--teal-border)", background: "var(--surface)" }}
-          >
-            <span className="font-serif text-[17px] italic text-teal">C</span>
-            Update this app
-          </button>
           <div className="flex flex-col gap-1.5">
             <div className="text-[14px] font-medium text-ink">
-              Sandbox dev environment — experimental
+              Update this app — sandbox
             </div>
             <div className="text-[12.5px] leading-snug text-ink-3">
-              Off by default. When on, Chief can spin up an ephemeral Vercel
-              Sandbox to clone and build the app in an isolated VM before
-              proposing a PR. Sovereign edition only; never touches production
-              data or deploys on its own.
+              Off by default. When on, Chief spins up an ephemeral Vercel Sandbox
+              to clone and build the app in an isolated VM, then opens a PR.
+              Sovereign edition only; never touches production data or deploys on
+              its own.
             </div>
             <button
               type="button"

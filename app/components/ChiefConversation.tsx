@@ -34,7 +34,6 @@ export default function ChiefConversation() {
     messages,
     streaming,
     send,
-    startDevChat,
     sessionIntent,
     page,
     revisePlan,
@@ -152,18 +151,10 @@ export default function ChiefConversation() {
                   <p className="chief-voice text-narrative text-ink">
                     What can I take off your plate?
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => void startDevChat()}
-                    className="flex items-center gap-2 self-start rounded-control border px-3 py-2 text-left text-[13px] text-ink-2"
-                    style={{ borderColor: "var(--teal-border)" }}
-                  >
-                    <span className="font-serif text-[15px] italic text-teal">C</span>
-                    Update this app
-                  </button>
                   <p className="text-[12px] leading-snug text-ink-3">
                     Attach a file with the clip to have me read it. To build a
                     project/task plan from a document, use Config → Setup Chief.
+                    To have Chief change its own code, use Config → Developer.
                   </p>
                 </>
               )}
