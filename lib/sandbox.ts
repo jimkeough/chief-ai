@@ -230,6 +230,20 @@ const AGENT_VCPUS = 4;
 const AGENT_SANDBOX_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const AGENT_MAX_TURNS = 30;
 
+// Trim Claude Code's non-essential work for a one-shot, single-user, headless
+// run in a throwaway VM. `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is the
+// umbrella (telemetry, surveys, feedback); `DISABLE_AUTOUPDATER` skips the
+// startup update check; `CLAUDE_CODE_DISABLE_TERMINAL_TITLE` — per the docs —
+// also skips the background small/fast-model request in `claude -p` sessions,
+// which is a real per-run latency win. (max-turns is a ceiling, not a per-run
+// cost, so it's left as-is — lowering it wouldn't speed a small change and
+// would risk truncating a bigger one.)
+const CLAUDE_CODE_FAST_ENV: Record<string, string> = {
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+  DISABLE_AUTOUPDATER: "1",
+  CLAUDE_CODE_DISABLE_TERMINAL_TITLE: "1",
+};
+
 /** The env Claude Code needs to authenticate (from resolveSandboxAgentEnv):
  *  either gateway (ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN) or a direct key. */
 export type AgentEnv = Record<string, string>;
@@ -428,7 +442,8 @@ export async function runCodingAgent(opts: {
         "--output-format",
         "json",
       ],
-      { env: opts.agentEnv },
+      // Perf flags as the base; the resolved auth env wins on any overlap.
+      { env: { ...CLAUDE_CODE_FAST_ENV, ...opts.agentEnv } },
     );
     const agentOutput = steps[steps.length - 1]?.stdout ?? "";
     if (agent.exitCode !== 0) {
