@@ -22,21 +22,27 @@ create table if not exists public.sandbox_jobs (
 create index if not exists sandbox_jobs_user_updated_idx
   on public.sandbox_jobs (user_id, updated_at desc);
 
-create trigger sandbox_jobs_set_updated_at
+-- Idempotent so re-running this file (e.g. if the migration ledger is out of
+-- sync) never fails on an existing object.
+create or replace trigger sandbox_jobs_set_updated_at
   before update on public.sandbox_jobs
   for each row execute function public.set_updated_at();
 
 alter table public.sandbox_jobs enable row level security;
+drop policy if exists "sandbox_jobs_select_own" on public.sandbox_jobs;
 create policy "sandbox_jobs_select_own" on public.sandbox_jobs
   for select to authenticated
   using (user_id = (select auth.uid()));
+drop policy if exists "sandbox_jobs_insert_own" on public.sandbox_jobs;
 create policy "sandbox_jobs_insert_own" on public.sandbox_jobs
   for insert to authenticated
   with check (user_id = (select auth.uid()));
+drop policy if exists "sandbox_jobs_update_own" on public.sandbox_jobs;
 create policy "sandbox_jobs_update_own" on public.sandbox_jobs
   for update to authenticated
   using (user_id = (select auth.uid()))
   with check (user_id = (select auth.uid()));
+drop policy if exists "sandbox_jobs_delete_own" on public.sandbox_jobs;
 create policy "sandbox_jobs_delete_own" on public.sandbox_jobs
   for delete to authenticated
   using (user_id = (select auth.uid()));

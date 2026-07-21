@@ -12,7 +12,33 @@
 
 import type { Client } from "pg";
 import { supabaseDbUrl } from "@/lib/supabase/env";
-import { pgClient, runMigrations } from "@/lib/setup";
+import { pgClient } from "@/lib/setup";
+
+// Create ONLY this feature's table, idempotently — never a full migration
+// replay (that can re-run old, non-idempotent migrations when the migration
+// ledger is out of sync, and fail on objects that already exist). RLS is
+// enabled with no policies so any accidental REST access fails closed; all real
+// access here is direct SQL, which bypasses RLS. updated_at is set explicitly in
+// completeSandboxJob, so no trigger is needed. Mirrors
+// supabase/migrations/20260721120000_sandbox_jobs.sql (which adds the trigger +
+// policies for the REST/RLS-based setup path).
+const ENSURE_SANDBOX_JOBS_SQL = `
+  create table if not exists public.sandbox_jobs (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null,
+    task text not null,
+    status text not null default 'running'
+      check (status in ('running', 'done', 'error')),
+    pr_url text,
+    pr_number integer,
+    error text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  );
+  create index if not exists sandbox_jobs_user_updated_idx
+    on public.sandbox_jobs (user_id, updated_at desc);
+  alter table public.sandbox_jobs enable row level security;
+`;
 
 export type SandboxJob = {
   id: string;
@@ -65,7 +91,9 @@ export async function createSandboxJob(
       return rows[0].id;
     } catch (e) {
       if (/relation .*sandbox_jobs.* does not exist/i.test(String(e))) {
-        await runMigrations();
+        // Create just this table (idempotent) on the same connection, then
+        // retry — no PostgREST cache, no full migration replay.
+        await client.query(ENSURE_SANDBOX_JOBS_SQL);
         const { rows } = await insert();
         return rows[0].id;
       }
