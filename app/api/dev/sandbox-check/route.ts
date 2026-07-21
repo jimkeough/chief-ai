@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     );
   }
 
-  if (!isSandboxConfigured()) {
+  if (!(await isSandboxConfigured())) {
     return Response.json(
       {
         error:

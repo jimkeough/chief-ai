@@ -74,11 +74,20 @@ function clip(s: string): string {
     : t;
 }
 
-/** The Sandbox SDK authenticates with the deployment's Vercel OIDC token
- *  (injected on Vercel; `vercel env pull` locally). Without it, provisioning
- *  can't run — check this before offering the capability. */
-export function isSandboxConfigured(): boolean {
-  return Boolean(process.env.VERCEL_OIDC_TOKEN?.trim());
+/** The Sandbox SDK authenticates with the deployment's Vercel OIDC token.
+ *  The subtlety (same as lib/ai.ts): on Vercel the token is an env var only at
+ *  BUILD time — at RUNTIME it arrives via the request context and `process.env`
+ *  is empty, so we must fall back to `getVercelOidcToken()`. Checking only the
+ *  env var wrongly reported "no token" at runtime and blocked the sandbox. */
+export async function isSandboxConfigured(): Promise<boolean> {
+  if (process.env.VERCEL_OIDC_TOKEN?.trim()) return true;
+  try {
+    const { getVercelOidcToken } = await import("@vercel/oidc");
+    return Boolean((await getVercelOidcToken())?.trim());
+  } catch {
+    // Not on Vercel, Secure Backend Access off, or no request context.
+    return false;
+  }
 }
 
 /** The user-facing kill switch. Sovereign-only, default off (see the setting
