@@ -150,6 +150,59 @@ export async function resolveAi(opts?: {
   return { client: new Anthropic({ apiKey }), model, provider };
 }
 
+/** Resolve the environment variables the Claude Code CLI needs to authenticate,
+ *  honoring the same provider choice as the rest of Chief. In gateway mode
+ *  (the sovereign default) Claude Code is pointed at the Vercel AI Gateway with
+ *  the deployment's OIDC token as a bearer — no raw Anthropic key needed; in
+ *  anthropic mode it gets the key directly. Returns `{ error }` when the chosen
+ *  provider has no usable credential. Used by the sandbox coding agent so
+ *  "gateway only" setups can run it. */
+export async function resolveSandboxAgentEnv(
+  settings?: AppSettings,
+): Promise<Record<string, string> | { error: string }> {
+  let s = settings;
+  if (!s) {
+    try {
+      s = await getAppSettings();
+    } catch {
+      s = undefined;
+    }
+  }
+  const provider = await resolveProvider(s);
+  let model = (s?.["chief.model"] ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+
+  if (provider === "gateway") {
+    const token = await resolveGatewayKey(s);
+    if (!token) {
+      return {
+        error:
+          "gateway mode has no credential — enable Vercel Settings → Security → Secure Backend Access so the OIDC token is issued, or set an AI Gateway key in Config.",
+      };
+    }
+    // Gateway model ids are provider-prefixed; a bare id is assumed Anthropic.
+    if (!model.includes("/")) model = `anthropic/${model}`;
+    // Point Claude Code at the gateway's Anthropic-compatible endpoint with the
+    // OIDC token as a bearer (ANTHROPIC_AUTH_TOKEN → `Authorization: Bearer`).
+    // Pin the small/fast model to the same gateway id so Claude Code's
+    // background calls don't hit an unprefixed default the gateway won't accept.
+    return {
+      ANTHROPIC_BASE_URL: AI_GATEWAY_BASE_URL,
+      ANTHROPIC_AUTH_TOKEN: token,
+      ANTHROPIC_MODEL: model,
+      ANTHROPIC_SMALL_FAST_MODEL: model,
+    };
+  }
+
+  const key = process.env.ANTHROPIC_API_KEY || s?.["ai.byok_anthropic_key"]?.trim();
+  if (!key) {
+    return { error: "anthropic mode is selected but no ANTHROPIC_API_KEY is set." };
+  }
+  const env: Record<string, string> = { ANTHROPIC_API_KEY: key };
+  // Direct Anthropic uses bare ids; only forward a non-prefixed one.
+  if (model && !model.includes("/")) env.ANTHROPIC_MODEL = model;
+  return env;
+}
+
 // ---------------------------------------------------------------------------
 // Model preflight (diagnostics)
 //
