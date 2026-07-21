@@ -132,11 +132,27 @@ export async function POST(req: Request) {
   }
 
   // Record the job (owned by the caller via RLS), then run it after responding.
-  const { data: job, error: jobErr } = await authed.supabase
-    .from("sandbox_jobs")
-    .insert({ task, status: "running" })
-    .select("id")
-    .single();
+  const startJob = () =>
+    authed.supabase
+      .from("sandbox_jobs")
+      .insert({ task, status: "running" })
+      .select("id")
+      .single();
+
+  let { data: job, error: jobErr } = await startJob();
+  if (jobErr) {
+    // The sandbox_jobs table may not exist yet — a deploy shipped this
+    // migration but it hasn't been applied to the DB. Apply pending migrations
+    // once (the owner is signed in, which is allowed) and retry, so Run works
+    // right after merge with no manual migrate step.
+    try {
+      const { runMigrations } = await import("@/lib/setup");
+      await runMigrations();
+    } catch {
+      /* fall through to the error below */
+    }
+    ({ data: job, error: jobErr } = await startJob());
+  }
   if (jobErr || !job) {
     return Response.json(
       { error: `Could not start the job: ${jobErr?.message ?? "unknown error"}` },
