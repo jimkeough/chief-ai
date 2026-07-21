@@ -34,7 +34,6 @@ import { getAuthed } from "@/lib/auth";
 import { getSetting } from "@/lib/settings";
 import { resolveSandboxAgentEnv } from "@/lib/ai";
 import { getDeployTarget } from "@/lib/deploy-target";
-import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getConnectedGithubToken,
   isSandboxConfigured,
@@ -42,6 +41,11 @@ import {
   resolveVercelOidcToken,
   runCodingAgent,
 } from "@/lib/sandbox";
+import {
+  completeSandboxJob,
+  createSandboxJob,
+  getSandboxJob,
+} from "@/lib/sandbox-jobs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -131,44 +135,27 @@ export async function POST(req: Request) {
     );
   }
 
-  // Record the job (owned by the caller via RLS), then run it after responding.
-  const startJob = () =>
-    authed.supabase
-      .from("sandbox_jobs")
-      .insert({ task, status: "running" })
-      .select("id")
-      .single();
-
-  let { data: job, error: jobErr } = await startJob();
-  if (jobErr) {
-    // The sandbox_jobs table may not exist yet — a deploy shipped this
-    // migration but it hasn't been applied to the DB. Apply pending migrations
-    // once (the owner is signed in, which is allowed) and retry, so Run works
-    // right after merge with no manual migrate step.
-    try {
-      const { runMigrations } = await import("@/lib/setup");
-      await runMigrations();
-    } catch {
-      /* fall through to the error below */
-    }
-    ({ data: job, error: jobErr } = await startJob());
-  }
-  if (jobErr || !job) {
+  // Record the job via direct SQL (createSandboxJob self-applies the migration
+  // on first use, avoiding the PostgREST schema-cache staleness that a REST
+  // insert hits right after the table is created), then run it after responding.
+  const userId = authed.userId;
+  let jobId: string;
+  try {
+    jobId = await createSandboxJob(userId, task);
+  } catch (e) {
     return Response.json(
-      { error: `Could not start the job: ${jobErr?.message ?? "unknown error"}` },
+      { error: `Could not start the job: ${e instanceof Error ? e.message : "unknown error"}` },
       { status: 500 },
     );
   }
-  const jobId = job.id as string;
-  const userId = authed.userId;
   const maxTurns = typeof body.maxTurns === "number" ? body.maxTurns : undefined;
   // Resolve the OIDC token now, in the request context, so the sandbox can
   // authenticate when the run executes post-response.
   const vercelOidcToken = await resolveVercelOidcToken();
 
-  // The long part runs after the response is sent. It updates the job row with
-  // the outcome; the client polls GET for it. Admin client because the request's
-  // session context is gone post-response — scoped manually by id + user_id.
+  // The long part runs after the response is sent. It records the outcome via
+  // direct SQL (completeSandboxJob), scoped by id + user_id — no session or
+  // schema-cache dependency post-response. The client polls GET for it.
   after(async () => {
     const result = await runCodingAgent({
       target,
@@ -179,16 +166,12 @@ export async function POST(req: Request) {
       maxTurns,
     });
     try {
-      await createAdminClient()
-        .from("sandbox_jobs")
-        .update({
-          status: result.ok ? "done" : "error",
-          pr_url: result.prUrl,
-          pr_number: result.prNumber,
-          error: result.error ?? null,
-        })
-        .eq("id", jobId)
-        .eq("user_id", userId);
+      await completeSandboxJob(userId, jobId, {
+        ok: result.ok,
+        prUrl: result.prUrl,
+        prNumber: result.prNumber,
+        error: result.error,
+      });
     } catch {
       /* the job row stays "running"; the UI surfaces that as "check GitHub" */
     }
@@ -201,40 +184,7 @@ export async function GET(req: Request) {
   const authed = await getAuthed();
   if (!authed) return new Response("Not signed in.", { status: 401 });
 
-  const jobId = new URL(req.url).searchParams.get("jobId");
-  const cols = "id, task, status, pr_url, pr_number, error, updated_at";
-  // RLS scopes both queries to the caller's own rows.
-  const query = jobId
-    ? authed.supabase.from("sandbox_jobs").select(cols).eq("id", jobId).limit(1)
-    : authed.supabase
-        .from("sandbox_jobs")
-        .select(cols)
-        .order("updated_at", { ascending: false })
-        .limit(1);
-
-  const { data } = await query;
-  const row = data?.[0] as
-    | {
-        id: string;
-        task: string;
-        status: string;
-        pr_url: string | null;
-        pr_number: number | null;
-        error: string | null;
-        updated_at: string;
-      }
-    | undefined;
-  if (!row) return Response.json({ job: null });
-
-  return Response.json({
-    job: {
-      id: row.id,
-      task: row.task,
-      status: row.status,
-      prUrl: row.pr_url,
-      prNumber: row.pr_number,
-      error: row.error,
-      updatedAt: row.updated_at,
-    },
-  });
+  const jobId = new URL(req.url).searchParams.get("jobId") ?? undefined;
+  const job = await getSandboxJob(authed.userId, jobId).catch(() => null);
+  return Response.json({ job });
 }
