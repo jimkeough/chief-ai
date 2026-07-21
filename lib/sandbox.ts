@@ -74,20 +74,26 @@ function clip(s: string): string {
     : t;
 }
 
-/** The Sandbox SDK authenticates with the deployment's Vercel OIDC token.
- *  The subtlety (same as lib/ai.ts): on Vercel the token is an env var only at
- *  BUILD time — at RUNTIME it arrives via the request context and `process.env`
- *  is empty, so we must fall back to `getVercelOidcToken()`. Checking only the
- *  env var wrongly reported "no token" at runtime and blocked the sandbox. */
-export async function isSandboxConfigured(): Promise<boolean> {
-  if (process.env.VERCEL_OIDC_TOKEN?.trim()) return true;
+/** The deployment's Vercel OIDC token. The subtlety (same as lib/ai.ts): on
+ *  Vercel it's an env var only at BUILD time — at RUNTIME it arrives via the
+ *  request context, so we fall back to `getVercelOidcToken()`. Returns null when
+ *  unavailable (not on Vercel / Secure Backend Access off / no request context). */
+export async function resolveVercelOidcToken(): Promise<string | null> {
+  if (process.env.VERCEL_OIDC_TOKEN?.trim()) {
+    return process.env.VERCEL_OIDC_TOKEN.trim();
+  }
   try {
     const { getVercelOidcToken } = await import("@vercel/oidc");
-    return Boolean((await getVercelOidcToken())?.trim());
+    return (await getVercelOidcToken())?.trim() || null;
   } catch {
-    // Not on Vercel, Secure Backend Access off, or no request context.
-    return false;
+    return null;
   }
+}
+
+/** Whether the Sandbox SDK can authenticate (an OIDC token is resolvable).
+ *  Check before offering the capability. */
+export async function isSandboxConfigured(): Promise<boolean> {
+  return Boolean(await resolveVercelOidcToken());
 }
 
 /** The user-facing kill switch. Sovereign-only, default off (see the setting
@@ -305,6 +311,10 @@ export async function runCodingAgent(opts: {
   task: string;
   githubToken: string;
   agentEnv: AgentEnv;
+  /** OIDC token resolved in the request context, so `Sandbox.create` can
+   *  authenticate even when this runs post-response (in `after()`), where the
+   *  request-context lookup may no longer work. */
+  vercelOidcToken?: string | null;
   maxTurns?: number;
   branchPrefix?: string;
 }): Promise<AgentRunResult> {
@@ -339,6 +349,14 @@ export async function runCodingAgent(opts: {
   const maxTurns = opts.maxTurns ?? AGENT_MAX_TURNS;
 
   const steps: SandboxStepResult[] = [];
+  // The SDK resolves the OIDC token from the env var first (then the request
+  // context). Since this can run in `after()` where the request context is gone,
+  // seed the env with the token resolved earlier, in-request. Same deployment
+  // token, so this is safe on a warm instance.
+  if (opts.vercelOidcToken && !process.env.VERCEL_OIDC_TOKEN) {
+    process.env.VERCEL_OIDC_TOKEN = opts.vercelOidcToken;
+  }
+
   let sandbox: Sandbox | undefined;
 
   // Local helper: run a command, record the step, and return the finished cmd.

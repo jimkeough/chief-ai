@@ -1,8 +1,11 @@
-// POST /api/dev/sandbox-agent — the Phase 2 orchestrator flow (SANDBOX-PLAN.md).
-// Owner-authed and gated behind `devmode.sandbox_enabled`. Given a task, it spins
-// up an ephemeral Vercel Sandbox, installs Claude Code, lets it edit the checkout
-// on a fresh branch, commits + pushes, and opens a DRAFT PR — then tears the VM
-// down. Returns the PR link (or a precise failure).
+// /api/dev/sandbox-agent — the orchestrator flow (SANDBOX-PLAN.md), backgrounded.
+// Owner-authed and gated behind `devmode.sandbox_enabled`.
+//
+// POST starts a job: it records a `sandbox_jobs` row, kicks off the real work
+// AFTER responding (spin up an ephemeral Vercel Sandbox → install Claude Code →
+// let it edit the checkout on a fresh branch → commit + push → open a DRAFT PR →
+// tear the VM down), and returns a jobId immediately. GET reports a job's status
+// so the UI can poll for the PR link instead of holding one long request open.
 //
 // This is the "Chief orchestrates, Claude Code engineers, you merge" loop. The
 // VM is a throwaway clone: the agent's edits are not production writes, and the
@@ -12,37 +15,40 @@
 // It can't be exercised from a dev container / CI (the Sandbox SDK needs the
 // Vercel runtime + OIDC token) — verify on a preview deploy.
 //
-// KNOWN LIMITATION (called out in the plan): a full run (install + agent turns +
-// build) can exceed a serverless function's max-duration. On Hobby (60s) this
-// will time out for non-trivial tasks; a durable version backgrounds the run and
-// reports the PR asynchronously. Kept synchronous here so Phase 2 is verifiable
-// end to end first.
+// DURATION: the background work still runs within the function's max-duration
+// ceiling (`after`), so very long runs need Fluid compute / a higher limit — but
+// the CLIENT no longer waits, so a run can outlive the page and the PR simply
+// appears on GitHub when it finishes.
 //
-// Body: {
+// POST body: {
 //   "task": "<what to change>",           // required
 //   "token": "<github token>",            // optional; else connected GitHub / env
 //   "anthropicKey": "<key>",              // optional override; else the app's
-//                                         //   AI provider is used (gateway OIDC
-//                                         //   or the configured Anthropic key)
+//                                         //   AI provider (gateway OIDC / key)
 //   "maxTurns": 30                        // optional
 // }
+// GET: ?jobId=<id> for one job, or no param for the caller's latest job.
 
+import { after } from "next/server";
 import { getAuthed } from "@/lib/auth";
 import { getSetting } from "@/lib/settings";
 import { resolveSandboxAgentEnv } from "@/lib/ai";
 import { getDeployTarget } from "@/lib/deploy-target";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getConnectedGithubToken,
   isSandboxConfigured,
   isSandboxEnabled,
+  resolveVercelOidcToken,
   runCodingAgent,
 } from "@/lib/sandbox";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Best-effort ceiling; the platform caps this to the plan's limit (60s on Hobby).
-// See the KNOWN LIMITATION note above — long runs need to be backgrounded.
-export const maxDuration = 300;
+// The background work (via `after`) runs up to this ceiling; the platform caps
+// it to the plan's limit. Long runs want Fluid compute. The client doesn't wait
+// on it regardless — it polls GET.
+export const maxDuration = 800;
 
 export async function POST(req: Request) {
   const authed = await getAuthed();
@@ -124,15 +130,94 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await runCodingAgent({
-    target,
-    task,
-    githubToken,
-    agentEnv,
-    maxTurns: typeof body.maxTurns === "number" ? body.maxTurns : undefined,
+  // Record the job (owned by the caller via RLS), then run it after responding.
+  const { data: job, error: jobErr } = await authed.supabase
+    .from("sandbox_jobs")
+    .insert({ task, status: "running" })
+    .select("id")
+    .single();
+  if (jobErr || !job) {
+    return Response.json(
+      { error: `Could not start the job: ${jobErr?.message ?? "unknown error"}` },
+      { status: 500 },
+    );
+  }
+  const jobId = job.id as string;
+  const userId = authed.userId;
+  const maxTurns = typeof body.maxTurns === "number" ? body.maxTurns : undefined;
+  // Resolve the OIDC token now, in the request context, so the sandbox can
+  // authenticate when the run executes post-response.
+  const vercelOidcToken = await resolveVercelOidcToken();
+
+  // The long part runs after the response is sent. It updates the job row with
+  // the outcome; the client polls GET for it. Admin client because the request's
+  // session context is gone post-response — scoped manually by id + user_id.
+  after(async () => {
+    const result = await runCodingAgent({
+      target,
+      task,
+      githubToken,
+      agentEnv,
+      vercelOidcToken,
+      maxTurns,
+    });
+    try {
+      await createAdminClient()
+        .from("sandbox_jobs")
+        .update({
+          status: result.ok ? "done" : "error",
+          pr_url: result.prUrl,
+          pr_number: result.prNumber,
+          error: result.error ?? null,
+        })
+        .eq("id", jobId)
+        .eq("user_id", userId);
+    } catch {
+      /* the job row stays "running"; the UI surfaces that as "check GitHub" */
+    }
   });
 
-  return Response.json({ repo: target.slug, ...result }, {
-    status: result.ok ? 200 : 422,
+  return Response.json({ jobId, status: "running", repo: target.slug });
+}
+
+export async function GET(req: Request) {
+  const authed = await getAuthed();
+  if (!authed) return new Response("Not signed in.", { status: 401 });
+
+  const jobId = new URL(req.url).searchParams.get("jobId");
+  const cols = "id, task, status, pr_url, pr_number, error, updated_at";
+  // RLS scopes both queries to the caller's own rows.
+  const query = jobId
+    ? authed.supabase.from("sandbox_jobs").select(cols).eq("id", jobId).limit(1)
+    : authed.supabase
+        .from("sandbox_jobs")
+        .select(cols)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+
+  const { data } = await query;
+  const row = data?.[0] as
+    | {
+        id: string;
+        task: string;
+        status: string;
+        pr_url: string | null;
+        pr_number: number | null;
+        error: string | null;
+        updated_at: string;
+      }
+    | undefined;
+  if (!row) return Response.json({ job: null });
+
+  return Response.json({
+    job: {
+      id: row.id,
+      task: row.task,
+      status: row.status,
+      prUrl: row.pr_url,
+      prNumber: row.pr_number,
+      error: row.error,
+      updatedAt: row.updated_at,
+    },
   });
 }

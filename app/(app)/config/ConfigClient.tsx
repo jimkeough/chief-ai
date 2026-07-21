@@ -281,6 +281,9 @@ export default function ConfigClient({
   const [sbTask, setSbTask] = useState("");
   const [sbBusy, setSbBusy] = useState<null | "test" | "run">(null);
   const [sbResult, setSbResult] = useState<string | null>(null);
+  // A Run is a background job: we hold its id and poll for the PR link, so the
+  // user can leave the screen and the run keeps going server-side.
+  const [sbJobId, setSbJobId] = useState<string | null>(null);
   const [instructions, setInstructions] = useState<KbDoc[]>([]);
   const [memory, setMemory] = useState<KbDoc[]>([]);
   const [newRule, setNewRule] = useState("");
@@ -376,10 +379,10 @@ export default function ConfigClient({
     }
   };
 
-  // Sandbox: "Test" boots a VM + clones the repo (cheap sanity check); "Run"
-  // hands a task to Claude Code in the VM and opens a PR. Both save settings
-  // first so the token/flag are persisted, then hit the guarded dev routes and
-  // render the result inline — no terminal, no tokens in the request.
+  // Sandbox: "Test" boots a VM + clones the repo (a quick, synchronous sanity
+  // check). "Run" starts a BACKGROUND job — Claude Code edits in the VM and
+  // opens a PR — and returns a job id we then poll (see the effect below), so
+  // the run survives leaving the screen. Both save settings first.
   const runSandbox = async (mode: "test" | "run") => {
     setSbResult(null);
     if (settings["devmode.sandbox_enabled"] !== "on") {
@@ -393,44 +396,130 @@ export default function ConfigClient({
     setSbBusy(mode);
     try {
       await saveSettings();
-      const url =
-        mode === "test" ? "/api/dev/sandbox-check" : "/api/dev/sandbox-agent";
-      const res = await fetch(url, {
+
+      if (mode === "test") {
+        const res = await fetch("/api/dev/sandbox-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          steps?: { label: string; exitCode: number }[];
+        };
+        if (data.error) setSbResult(`❌ ${data.error}`);
+        else if (data.ok) {
+          const head = data.steps?.find((s) => s.label.includes("HEAD"));
+          setSbResult(
+            `✅ Sandbox works — booted, cloned the repo${head ? " and read its HEAD" : ""}. You can Run a change now.`,
+          );
+        } else {
+          const last = data.steps?.[data.steps.length - 1];
+          setSbResult(
+            `⚠️ Finished but didn't pass.${last ? ` Last step exit: ${last.exitCode}.` : ""}`,
+          );
+        }
+        setSbBusy(null);
+        return;
+      }
+
+      // Run: start the background job, then let the polling effect track it.
+      const res = await fetch("/api/dev/sandbox-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(mode === "run" ? { task: sbTask.trim() } : {}),
+        body: JSON.stringify({ task: sbTask.trim() }),
       });
       const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
+        jobId?: string;
         error?: string;
-        prUrl?: string | null;
-        sandboxName?: string | null;
-        steps?: { label: string; exitCode: number }[];
       };
       if (data.error) {
         setSbResult(`❌ ${data.error}`);
-      } else if (mode === "run" && data.prUrl) {
-        setSbResult(`✅ Done — pull request: ${data.prUrl}`);
-      } else if (mode === "test" && data.ok) {
-        const head = data.steps?.find((s) => s.label.includes("HEAD"));
-        setSbResult(
-          `✅ Sandbox works — booted, cloned the repo${head ? " and read its HEAD" : ""}. You can Run a change now.`,
-        );
+        setSbBusy(null);
+      } else if (data.jobId) {
+        setSbJobId(data.jobId); // polling effect owns sbBusy from here
       } else {
-        setSbResult(
-          `⚠️ Finished but didn't ${mode === "run" ? "open a PR" : "pass"}. ${
-            data.steps?.length
-              ? `Last step exit: ${data.steps[data.steps.length - 1].exitCode}.`
-              : ""
-          }`.trim(),
-        );
+        setSbResult("⚠️ Couldn't start the run.");
+        setSbBusy(null);
       }
     } catch (e) {
       setSbResult(`❌ ${e instanceof Error ? e.message : "Request failed."}`);
-    } finally {
       setSbBusy(null);
     }
   };
+
+  // Poll a running sandbox job until it finishes, then show the PR link / error.
+  useEffect(() => {
+    if (!sbJobId) return;
+    let active = true;
+    let tries = 0;
+    const poll = async () => {
+      tries += 1;
+      try {
+        const res = await fetch(
+          `/api/dev/sandbox-agent?jobId=${encodeURIComponent(sbJobId)}`,
+        );
+        const { job } = (await res.json()) as {
+          job?: { status: string; prUrl?: string | null; error?: string | null };
+        };
+        if (!active) return;
+        if (job?.status === "done") {
+          setSbResult(
+            job.prUrl ? `✅ Done — pull request: ${job.prUrl}` : "✅ Done.",
+          );
+          setSbBusy(null);
+          setSbJobId(null);
+          return;
+        }
+        if (job?.status === "error") {
+          setSbResult(`❌ ${job.error ?? "Run failed."}`);
+          setSbBusy(null);
+          setSbJobId(null);
+          return;
+        }
+      } catch {
+        /* transient — keep polling */
+      }
+      if (!active) return;
+      if (tries > 200) {
+        setSbResult(
+          "⏳ Still running — you can leave; the PR will appear on GitHub when it's done.",
+        );
+        setSbBusy(null);
+        setSbJobId(null);
+        return;
+      }
+      setTimeout(poll, 4000);
+    };
+    poll();
+    return () => {
+      active = false;
+    };
+  }, [sbJobId]);
+
+  // On load, resume tracking a run that's still going (e.g. after navigating
+  // away and back) so the user sees it finish.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/dev/sandbox-agent");
+        const { job } = (await res.json()) as {
+          job?: { id: string; status: string };
+        };
+        if (active && job?.status === "running") {
+          setSbBusy("run");
+          setSbJobId(job.id);
+        }
+      } catch {
+        /* no session / no jobs — nothing to resume */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const addInstruction = async () => {
     const body = newRule.trim();
@@ -673,8 +762,9 @@ export default function ConfigClient({
               </div>
               {sbBusy === "run" && (
                 <div className="text-[12px] leading-snug text-ink-3">
-                  Working in the sandbox — this can take a few minutes. Keep this
-                  screen open.
+                  Working in the sandbox — this can take a few minutes. You can
+                  leave this screen; the PR will appear on GitHub (and here) when
+                  it&apos;s done.
                 </div>
               )}
               {sbResult && (
