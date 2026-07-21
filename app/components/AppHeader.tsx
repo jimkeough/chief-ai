@@ -70,7 +70,7 @@ function UploadIcon({ stroke }: IconProps) {
 }
 
 const NAV = [
-  { href: "/", label: "Home", Icon: HomeIcon },
+  { href: "/", label: "Good morning", Icon: HomeIcon },
   { href: "/inbox", label: "Inbox", Icon: InboxIcon },
   { href: "/projects", label: "Projects", Icon: ProjectsIcon },
   { href: "/tasks", label: "Tasks", Icon: TasksIcon },
