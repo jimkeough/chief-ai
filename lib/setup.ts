@@ -172,8 +172,23 @@ async function listMigrationFiles(): Promise<MigrationFile[]> {
     });
 }
 
+// Postgres SQLSTATEs for "object already exists" — used to detect a migration
+// that was applied out-of-band but is missing from the ledger, so we adopt it
+// instead of aborting the whole run.
+const DUPLICATE_OBJECT_CODES = new Set([
+  "42P07", // duplicate_table
+  "42P06", // duplicate_schema
+  "42710", // duplicate_object (trigger, policy, …)
+  "42723", // duplicate_function
+  "42701", // duplicate_column
+  "42P04", // duplicate_database
+]);
+
 /** Apply every migration not yet recorded, in filename order, one transaction
- *  per file. Returns the filenames applied (empty = already up to date). */
+ *  per file. Returns the filenames applied (empty = already up to date).
+ *  Drift-tolerant: a migration whose objects already exist (applied out-of-band,
+ *  missing from the ledger) is adopted into the ledger and skipped rather than
+ *  failing the run. */
 export async function runMigrations(): Promise<string[]> {
   const dbUrl = supabaseDbUrl();
   if (!dbUrl) {
@@ -201,6 +216,7 @@ export async function runMigrations(): Promise<string[]> {
     );
     const done = new Set(rows.map((r) => r.version));
 
+    const adopted: string[] = [];
     for (const m of files) {
       if (done.has(m.version)) continue;
       const sql = await fs.readFile(path.join(MIGRATIONS_DIR, m.file), "utf8");
@@ -215,11 +231,38 @@ export async function runMigrations(): Promise<string[]> {
         await client.query("commit");
       } catch (e) {
         await client.query("rollback").catch(() => {});
+        // Ledger drift: if the failure is "object already exists", this
+        // migration was applied out-of-band and is only missing from the
+        // ledger. Adopt it (record + move on) so old drift can't block every
+        // future migration. Migrations run in one transaction per file, so a
+        // fully-applied file has no un-applied statements to lose. Any OTHER
+        // error is a real failure and still aborts.
+        const code =
+          e && typeof e === "object" && "code" in e
+            ? String((e as { code?: unknown }).code)
+            : "";
+        if (DUPLICATE_OBJECT_CODES.has(code)) {
+          await client
+            .query(
+              `insert into supabase_migrations.schema_migrations (version, name)
+               values ($1, $2) on conflict (version) do nothing`,
+              [m.version, m.name],
+            )
+            .catch(() => {});
+          adopted.push(m.file);
+          continue;
+        }
         throw new Error(
           `Migration ${m.file} failed: ${e instanceof Error ? e.message : String(e)}`,
         );
       }
       applied.push(m.file);
+    }
+    if (adopted.length) {
+      console.warn(
+        `runMigrations: adopted ${adopted.length} already-applied migration(s) missing from the ledger:`,
+        adopted.join(", "),
+      );
     }
   } finally {
     await client.end().catch(() => {});
