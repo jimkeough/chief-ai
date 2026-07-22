@@ -184,10 +184,22 @@ export async function POST(req: Request) {
             { status: 400 },
           );
         }
-        let projectId = opt(safeArgs.project_id) ?? null;
+        // Every task must belong to a project — the product's single opinion on
+        // where work lives. Resolve the project (by id, or by name for a
+        // create_project earlier in the same batch) and refuse an unfiled task.
+        let project: Project | null = null;
+        const projectId = opt(safeArgs.project_id);
         const projectName = opt(safeArgs.project_name);
-        if (!projectId && projectName) {
-          const project = await getProjectByName(projectName);
+        if (projectId) {
+          project = await getProject(projectId);
+          if (!project) {
+            return Response.json(
+              { ok: false, error: "Project not found." },
+              { status: 404 },
+            );
+          }
+        } else if (projectName) {
+          project = await getProjectByName(projectName);
           if (!project) {
             return Response.json(
               {
@@ -197,7 +209,16 @@ export async function POST(req: Request) {
               { status: 409 },
             );
           }
-          projectId = project.id;
+        }
+        if (!project) {
+          return Response.json(
+            {
+              ok: false,
+              error:
+                "Every task must belong to a project. Choose an existing project or create one first.",
+            },
+            { status: 400 },
+          );
         }
         const task = await createTask({
           title,
@@ -205,7 +226,7 @@ export async function POST(req: Request) {
           status: opt(safeArgs.status) as TaskStatus | undefined,
           dueAt: opt(safeArgs.due_at) ?? null,
           waitingOn: opt(safeArgs.waiting_on) ?? null,
-          projectId,
+          projectId: project.id,
           source: "chief",
         });
         await journal("Added task", task.title);
@@ -218,6 +239,10 @@ export async function POST(req: Request) {
           ok: true,
           result: `Task added — ${task.title}`,
           undo,
+          links: [
+            { label: "Open task", href: `/tasks/${task.id}` },
+            { label: project.name, href: `/projects/${project.id}` },
+          ],
         });
       }
 
@@ -275,10 +300,19 @@ export async function POST(req: Request) {
           fields: prev,
           label: `Task restored: ${updated.title}`,
         };
+        const links: { label: string; href: string }[] = [
+          { label: "Open task", href: `/tasks/${updated.id}` },
+        ];
+        if (updated.project_id) {
+          const project = await getProject(updated.project_id);
+          if (project)
+            links.push({ label: project.name, href: `/projects/${project.id}` });
+        }
         return Response.json({
           ok: true,
           result: `Task updated — ${updated.title}`,
           undo,
+          links,
         });
       }
 
@@ -472,6 +506,7 @@ export async function POST(req: Request) {
           ok: true,
           result: `Project added — ${project.name}`,
           undo,
+          links: [{ label: "Open project", href: `/projects/${project.id}` }],
         });
       }
 
@@ -527,6 +562,7 @@ export async function POST(req: Request) {
           ok: true,
           result: `Project updated — ${updated.name}`,
           undo,
+          links: [{ label: "Open project", href: `/projects/${updated.id}` }],
         });
       }
 
@@ -593,6 +629,7 @@ export async function POST(req: Request) {
           ok: true,
           result: `Current state updated — ${project.name}`,
           undo,
+          links: [{ label: "Open project", href: `/projects/${projectId}` }],
         });
       }
 

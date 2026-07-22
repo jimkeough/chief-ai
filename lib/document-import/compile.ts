@@ -184,6 +184,14 @@ export function compileDocumentEntities(
     const identity = `${normalized(entity.projectName)}\u0000${normalized(entity.title)}`;
     const existing = tasksByIdentity.get(identity);
     if (!existing) {
+      // Every task must be filed under a project — a new task with no project
+      // reference can't be created, so flag it rather than emit a card that the
+      // executor will reject on approval.
+      if (!projectRef.project_id && !projectRef.project_name) {
+        throw new Error(
+          `Task "${entity.title}" has no project. Every task must belong to a project — add its project in the source and retry.`,
+        );
+      }
       taskChanges.push(
         proposal(
           "create_task",

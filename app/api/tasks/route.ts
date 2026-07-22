@@ -16,12 +16,24 @@ export async function POST(request: Request) {
   if (!title) {
     return NextResponse.json({ error: "Title is required." }, { status: 400 });
   }
+  // Every task must belong to a project — the product's single opinion on where
+  // work lives, enforced on both the manual and Chief-proposed create paths.
+  const projectId =
+    typeof body.projectId === "string" && body.projectId.trim()
+      ? body.projectId.trim()
+      : null;
+  if (!projectId) {
+    return NextResponse.json(
+      { error: "Every task must belong to a project." },
+      { status: 400 },
+    );
+  }
   const task = await createTask({
     title,
     notes: body.notes ?? null,
     status: body.status,
     dueAt: body.dueAt ?? null,
-    projectId: body.projectId ?? null,
+    projectId,
     waitingOn: body.waitingOn ?? null,
   });
   return NextResponse.json({ task }, { status: 201 });

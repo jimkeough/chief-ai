@@ -80,7 +80,12 @@ export default async function TasksPage({
         {open.length > 0 && <TasksChiefAction />}
       </div>
 
-      <AddTask />
+      <AddTask
+        projects={projects
+          .filter((p) => p.status === "active" || p.status === "paused")
+          .map((p) => ({ id: p.id, name: p.name }))}
+        defaultProjectId={selectedProject}
+      />
 
       <ProjectFilter projects={filterProjects} selected={selectedProject} />
 

@@ -12,7 +12,8 @@
 // ("N PROPOSALS · ALL REVERSIBLE") with per-row ✓/✕ plus Approve all.
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { ProposalItem, ProposalPlan } from "./ChiefProvider";
+import Link from "next/link";
+import { useChief, type ProposalItem, type ProposalPlan } from "./ChiefProvider";
 
 type Handlers = {
   onApprove: (uid: string, mergeTargetId?: string) => void | Promise<void>;
@@ -56,6 +57,34 @@ function CheckCircle() {
   );
 }
 
+// Deep links to the created/updated task and its project, shown on the receipt
+// so the user can jump straight there. Navigating closes the Chief overlay so
+// the destination page is actually visible behind it.
+function ReceiptLinks({
+  links,
+  compact = false,
+}: {
+  links: { label: string; href: string }[];
+  compact?: boolean;
+}) {
+  const { setOpen } = useChief();
+  if (!links.length) return null;
+  return (
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${compact ? "mt-0.5" : "mt-1"}`}>
+      {links.map((link) => (
+        <Link
+          key={link.href}
+          href={link.href}
+          onClick={() => setOpen(false)}
+          className="font-mono text-[11px] tracking-[0.06em] text-teal underline underline-offset-2"
+        >
+          {link.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 // --- Receipt / dismissed rows (shared by both tiers and batch rows) ---------
 
 function ReceiptRow({ item, onUndo }: { item: ProposalItem; onUndo: () => void }) {
@@ -92,6 +121,9 @@ function ReceiptRow({ item, onUndo }: { item: ProposalItem; onUndo: () => void }
           <div className="mt-0.5 text-[12px]" style={{ color: "var(--danger)" }}>
             {item.error}
           </div>
+        )}
+        {!undone && item.links && item.links.length > 0 && (
+          <ReceiptLinks links={item.links} />
         )}
       </div>
       {item.status === "done" && item.undo && (
@@ -473,6 +505,9 @@ function BatchRow({ item, handlers }: { item: ProposalItem; handlers: Handlers }
                 ? item.error
                 : firstLine}
         </div>
+        {item.status === "done" && item.links && item.links.length > 0 && (
+          <ReceiptLinks links={item.links} compact />
+        )}
       </div>
       {item.status === "proposed" || item.status === "error" ? (
         <>

@@ -65,6 +65,9 @@ export type ProposalItem = {
   error?: string;
   /** Inverse descriptor from the executor; powers the receipt's Undo. */
   undo?: UndoDescriptor | null;
+  /** Deep links returned by the executor (the created/updated task and its
+   *  project), rendered on the receipt so the user can jump straight to them. */
+  links?: { label: string; href: string }[];
 };
 
 export type ProposalPlan = {
@@ -1289,12 +1292,14 @@ export default function ChiefProvider({
           result?: string;
           error?: string;
           undo?: UndoDescriptor;
+          links?: { label: string; href: string }[];
         };
         if (res.ok && data.ok) {
           patchProposal(uid, {
             status: "done",
             result: data.result ?? "Done.",
             undo: data.undo ?? null,
+            links: Array.isArray(data.links) ? data.links : undefined,
           });
         } else {
           patchProposal(uid, {

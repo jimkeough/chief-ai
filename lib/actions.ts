@@ -180,7 +180,7 @@ export const WRITE_ACTIONS = [
     tier: "yellow",
     label: "Add task",
     description:
-      "Propose a NEW task on the user's task list — a lightweight personal to-do. This does NOT create it immediately — it shows the user an Approve/Dismiss card. Call this only when the user clearly wants to capture a new task, or when you're making a concrete recommendation to add one. Only the title is required; keep it minimal. Manual order is the priority — do not try to rank it. To delegate, set status to \"waiting\" and put the person in waiting_on.",
+      "Propose a NEW task on the user's task list — a lightweight personal to-do. This does NOT create it immediately — it shows the user an Approve/Dismiss card. Call this only when the user clearly wants to capture a new task, or when you're making a concrete recommendation to add one. EVERY task MUST be filed under a project: pass `project_id` for an existing project, or — when it belongs to a NEW project you're proposing in the same batch — put create_project first and pass its exact name as `project_name`. A task with no project is rejected, so if none fits, propose the project too. Manual order is the priority — do not try to rank it. To delegate, set status to \"waiting\" and put the person in waiting_on.",
     input_schema: {
       type: "object",
       properties: {
@@ -195,10 +195,10 @@ export const WRITE_ACTIONS = [
         ),
         due_at: str("Optional due date, ISO 8601 (e.g. 2026-07-12)."),
         project_id: str(
-          "Optional: the id of the project/workstream this task belongs to (from the CURRENT STATE: PROJECTS section). Set this when creating a task as a project's next action.",
+          "REQUIRED (unless project_name is set): the id of the project/workstream this task belongs to (from the CURRENT STATE: PROJECTS section). Every task must be filed under a project.",
         ),
         project_name: str(
-          "Use ONLY when the task belongs to a NEW project proposed in the SAME batch and no id exists yet. Pass the exact create_project name; put the create_project call before this task.",
+          "Use INSTEAD of project_id ONLY when the task belongs to a NEW project proposed in the SAME batch and no id exists yet. Pass the exact create_project name; put the create_project call before this task.",
         ),
       },
       required: ["title"],
