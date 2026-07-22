@@ -9,9 +9,11 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useChief } from "./ChiefProvider";
 import ChiefConversation from "./ChiefConversation";
+import SandboxUpdatePanel from "./SandboxUpdatePanel";
 
 export default function ChiefSheet() {
-  const { open, setOpen, page, newChat, streaming } = useChief();
+  const { open, setOpen, page, newChat, streaming, appUpdate, exitAppUpdate } =
+    useChief();
   const pathname = usePathname();
 
   // Lock the page scroll behind the sheet.
@@ -62,22 +64,27 @@ export default function ChiefSheet() {
             LOOKING AT
           </div>
           <div className="truncate text-[15px] font-semibold text-ink">
-            {label}
+            {appUpdate ? "Update this app" : label}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void newChat()}
-          disabled={streaming}
-          className="shrink-0 rounded-control bg-teal-fill px-3 py-2 font-mono text-[11px] font-medium tracking-[0.08em] text-teal-on-fill transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label="Start a new chat"
-        >
-          + NEW CHAT
-        </button>
+        {!appUpdate && (
+          <button
+            type="button"
+            onClick={() => void newChat()}
+            disabled={streaming}
+            className="shrink-0 rounded-control bg-teal-fill px-3 py-2 font-mono text-[11px] font-medium tracking-[0.08em] text-teal-on-fill transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Start a new chat"
+          >
+            + NEW CHAT
+          </button>
+        )}
         <button
           type="button"
           aria-label="Minimize chat"
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            exitAppUpdate();
+            setOpen(false);
+          }}
           className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border"
           style={{ borderColor: "var(--hairline)" }}
         >
@@ -94,7 +101,7 @@ export default function ChiefSheet() {
 
       <div className="h-px" style={{ background: "var(--hairline)" }} />
 
-      <ChiefConversation />
+      {appUpdate ? <SandboxUpdatePanel /> : <ChiefConversation />}
     </div>
   );
 }
