@@ -129,6 +129,13 @@ type ChiefContextValue = {
   runIntent: (intent: ChiefIntent) => Promise<void>;
   /** Open an "Update this app" (dev-mode) chat with no auto model turn. */
   startDevChat: () => Promise<void>;
+  /** Whether the sheet is showing the "Update this app" sandbox surface
+   *  (a focused, page-aware panel) instead of the normal conversation. */
+  appUpdate: boolean;
+  /** Open the sandbox "Update this app" surface over the current page. */
+  startAppUpdate: () => void;
+  /** Leave the sandbox surface, back to the normal conversation. */
+  exitAppUpdate: () => void;
   /** The current session's intent — drives the empty-state greeting. */
   sessionIntent: ChiefIntentId;
   uploadDocuments: (attachments: ChatAttachment[]) => Promise<void>;
@@ -299,6 +306,7 @@ export default function ChiefProvider({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [appUpdate, setAppUpdate] = useState(false);
   const [page, setPage] = useState<ChiefPageContext | null>(null);
   const [messages, setMessages] = useState<ChiefMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -612,6 +620,8 @@ export default function ChiefProvider({
       ) {
         return false;
       }
+      // Starting any real chat leaves the sandbox "Update this app" surface.
+      setAppUpdate(false);
       if (
         pendingProposalCount(messagesRef.current) > 0 &&
         !window.confirm(
@@ -1222,6 +1232,17 @@ export default function ChiefProvider({
     setOpen(true);
   }, [newChat]);
 
+  // Open / close the sandbox "Update this app" surface. It's a distinct sheet
+  // body (SandboxUpdatePanel), not a chat session, so it needs no newChat — just
+  // toggle the flag and show the sheet over the current page.
+  const startAppUpdate = useCallback((): void => {
+    setAppUpdate(true);
+    setOpen(true);
+  }, []);
+  const exitAppUpdate = useCallback((): void => {
+    setAppUpdate(false);
+  }, []);
+
   const uploadDocuments = useCallback(
     async (attachments: ChatAttachment[]): Promise<void> => {
       if (
@@ -1364,6 +1385,9 @@ export default function ChiefProvider({
       switchSession,
       runIntent,
       startDevChat,
+      appUpdate,
+      startAppUpdate,
+      exitAppUpdate,
       sessionIntent,
       uploadDocuments,
       send,
@@ -1376,6 +1400,9 @@ export default function ChiefProvider({
     }),
     [
       open,
+      appUpdate,
+      startAppUpdate,
+      exitAppUpdate,
       page,
       sessionId,
       recentSessions,
