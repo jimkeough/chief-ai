@@ -152,6 +152,11 @@ export async function POST(req: Request) {
   // Resolve the OIDC token now, in the request context, so the sandbox can
   // authenticate when the run executes post-response.
   const vercelOidcToken = await resolveVercelOidcToken();
+  // Optional prebuilt snapshot (Claude Code preinstalled) to skip the install.
+  // Blank = install each run; a stale id just falls back to installing.
+  const snapshotId =
+    (await getSetting("devmode.sandbox_snapshot_id").catch(() => "")).trim() ||
+    null;
 
   // The long part runs after the response is sent. It records the outcome via
   // direct SQL (completeSandboxJob), scoped by id + user_id — no session or
@@ -163,6 +168,7 @@ export async function POST(req: Request) {
       githubToken,
       agentEnv,
       vercelOidcToken,
+      snapshotId,
       maxTurns,
     });
     try {

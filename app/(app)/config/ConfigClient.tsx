@@ -284,6 +284,9 @@ export default function ConfigClient({
   // A Run is a background job: we hold its id and poll for the PR link, so the
   // user can leave the screen and the run keeps going server-side.
   const [sbJobId, setSbJobId] = useState<string | null>(null);
+  // "Prepare sandbox": build the preinstalled snapshot that speeds up runs.
+  const [sbPrepping, setSbPrepping] = useState(false);
+  const [sbPrepMsg, setSbPrepMsg] = useState<string | null>(null);
   const [instructions, setInstructions] = useState<KbDoc[]>([]);
   const [memory, setMemory] = useState<KbDoc[]>([]);
   const [newRule, setNewRule] = useState("");
@@ -446,6 +449,38 @@ export default function ConfigClient({
     } catch (e) {
       setSbResult(`❌ ${e instanceof Error ? e.message : "Request failed."}`);
       setSbBusy(null);
+    }
+  };
+
+  // Build the preinstalled snapshot once so future runs skip the CLI install.
+  const prepareSandbox = async () => {
+    setSbPrepMsg(null);
+    if (settings["devmode.sandbox_enabled"] !== "on") {
+      setSbPrepMsg("Turn the sandbox on above and Save first.");
+      return;
+    }
+    setSbPrepping(true);
+    try {
+      await saveSettings();
+      const res = await fetch("/api/dev/sandbox-snapshot", { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        snapshotId?: string;
+        error?: string;
+      };
+      if (data.ok && data.snapshotId) {
+        setSettings((s) => ({
+          ...s,
+          "devmode.sandbox_snapshot_id": data.snapshotId as string,
+        }));
+        setSbPrepMsg("✅ Sandbox prepared — future runs skip the install.");
+      } else {
+        setSbPrepMsg(`❌ ${data.error ?? "Couldn't prepare the sandbox."}`);
+      }
+    } catch (e) {
+      setSbPrepMsg(`❌ ${e instanceof Error ? e.message : "Request failed."}`);
+    } finally {
+      setSbPrepping(false);
     }
   };
 
@@ -780,6 +815,32 @@ export default function ConfigClient({
                   })()}
                 </div>
               )}
+              <div className="mt-1 flex items-center justify-between gap-2 border-t pt-2"
+                style={{ borderColor: "var(--hairline)" }}>
+                <div className="text-[12px] leading-snug text-ink-3">
+                  {settings["devmode.sandbox_snapshot_id"]
+                    ? "Faster runs are on (Claude Code is prebuilt)."
+                    : "Optional: prebuild Claude Code once so runs skip the ~30s install."}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void prepareSandbox()}
+                  disabled={sbPrepping || sbBusy !== null}
+                  className="shrink-0 rounded-control border px-3 py-2 text-[13px] font-medium text-ink disabled:opacity-50"
+                  style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
+                >
+                  {sbPrepping
+                    ? "Preparing…"
+                    : settings["devmode.sandbox_snapshot_id"]
+                      ? "Rebuild"
+                      : "Prepare sandbox"}
+                </button>
+              </div>
+              {sbPrepMsg && (
+                <div className="text-[12.5px] leading-snug text-ink">
+                  {sbPrepMsg}
+                </div>
+              )}
             </div>
           )}
           <div className="flex flex-col gap-1.5">
@@ -864,7 +925,8 @@ export default function ConfigClient({
                 d.key !== "mcp.tool_overrides" &&
                 d.key !== "devmode.repo" &&
                 d.key !== "devmode.sandbox_enabled" &&
-                d.key !== "devmode.github_token",
+                d.key !== "devmode.github_token" &&
+                d.key !== "devmode.sandbox_snapshot_id",
             )
             .map((d) => (
             <div key={d.key} className="flex flex-col gap-1.5">

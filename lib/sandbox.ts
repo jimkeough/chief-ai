@@ -329,6 +329,10 @@ export async function runCodingAgent(opts: {
    *  authenticate even when this runs post-response (in `after()`), where the
    *  request-context lookup may no longer work. */
   vercelOidcToken?: string | null;
+  /** A prebuilt snapshot (Claude Code preinstalled) to boot from, skipping the
+   *  install. Optional; any failure falls back to a fresh install, so this is a
+   *  pure optimization that can't break the run. */
+  snapshotId?: string | null;
   maxTurns?: number;
   branchPrefix?: string;
 }): Promise<AgentRunResult> {
@@ -393,29 +397,65 @@ export async function runCodingAgent(opts: {
   };
 
   try {
-    sandbox = await Sandbox.create({
-      source: {
-        type: "git",
-        url: `https://github.com/${slug}.git`,
-        username: "x-access-token",
-        password: token,
-        revision: base,
-        depth: 1,
-      },
-      resources: { vcpus: AGENT_VCPUS },
-      timeout: AGENT_SANDBOX_TIMEOUT_MS,
-      runtime: SANDBOX_RUNTIME,
-    });
+    // Fast path: boot from a prebuilt snapshot (Claude Code preinstalled) and
+    // clone with `git clone` (the VM's base is the snapshot, not a git source).
+    // Any failure discards it and falls through to the reliable git-source +
+    // install path — so the snapshot is a pure optimization, never a new way to
+    // break a run.
+    let claudeReady = false;
+    const snapshotId = opts.snapshotId?.trim();
+    if (snapshotId) {
+      try {
+        sandbox = await Sandbox.create({
+          source: { type: "snapshot", snapshotId },
+          resources: { vcpus: AGENT_VCPUS },
+          timeout: AGENT_SANDBOX_TIMEOUT_MS,
+        });
+        const cloned = await run("clone (from snapshot)", "git", [
+          "clone", "--depth", "1", "--branch", base, authUrl, ".",
+        ]);
+        if (cloned.exitCode !== 0) throw new Error("clone failed in snapshot VM");
+        claudeReady = true; // Claude Code is baked into the snapshot
+      } catch {
+        if (sandbox) {
+          try {
+            await sandbox.stop();
+          } catch {
+            /* best effort */
+          }
+          sandbox = undefined;
+        }
+      }
+    }
 
-    // Install the Claude Code CLI (global, needs root).
-    const install = await run(
-      "install claude code",
-      "npm",
-      ["install", "-g", "@anthropic-ai/claude-code"],
-      { sudo: true },
-    );
-    if (install.exitCode !== 0) {
-      return { ...empty, branch: null, steps, error: "Failed to install Claude Code in the sandbox." };
+    // Reliable path: clone via the git source, then install the CLI.
+    if (!sandbox) {
+      sandbox = await Sandbox.create({
+        source: {
+          type: "git",
+          url: `https://github.com/${slug}.git`,
+          username: "x-access-token",
+          password: token,
+          revision: base,
+          depth: 1,
+        },
+        resources: { vcpus: AGENT_VCPUS },
+        timeout: AGENT_SANDBOX_TIMEOUT_MS,
+        runtime: SANDBOX_RUNTIME,
+      });
+    }
+
+    if (!claudeReady) {
+      // Install the Claude Code CLI (global, needs root).
+      const install = await run(
+        "install claude code",
+        "npm",
+        ["install", "-g", "@anthropic-ai/claude-code"],
+        { sudo: true },
+      );
+      if (install.exitCode !== 0) {
+        return { ...empty, branch: null, steps, error: "Failed to install Claude Code in the sandbox." };
+      }
     }
 
     // Git identity + push auth + a fresh working branch.
@@ -515,5 +555,53 @@ export async function runCodingAgent(opts: {
         /* best-effort teardown */
       }
     }
+  }
+}
+
+/** Build a reusable base snapshot with the Claude Code CLI preinstalled, so
+ *  runs can boot from it and skip the ~30s install. Creates a fresh VM (no
+ *  repo), installs the CLI, snapshots it (which stops the VM), and returns the
+ *  snapshot id to persist. One-time / on-demand ("Prepare sandbox"); runs
+ *  degrade gracefully when no snapshot is set. */
+export async function buildSandboxSnapshot(opts?: {
+  vercelOidcToken?: string | null;
+}): Promise<{ snapshotId: string } | { error: string }> {
+  if (opts?.vercelOidcToken && !process.env.VERCEL_OIDC_TOKEN) {
+    process.env.VERCEL_OIDC_TOKEN = opts.vercelOidcToken;
+  }
+  let sandbox: Sandbox | undefined;
+  try {
+    sandbox = await Sandbox.create({
+      resources: { vcpus: AGENT_VCPUS },
+      timeout: SANDBOX_TIMEOUT_MS,
+      runtime: SANDBOX_RUNTIME,
+    });
+    const install = await sandbox.runCommand({
+      cmd: "npm",
+      args: ["install", "-g", "@anthropic-ai/claude-code"],
+      sudo: true,
+    });
+    if (install.exitCode !== 0) {
+      try {
+        await sandbox.stop();
+      } catch {
+        /* best effort */
+      }
+      return { error: "Failed to install Claude Code while building the snapshot." };
+    }
+    // snapshot() stops the sandbox as part of creating the snapshot; no expiry.
+    const snap = await sandbox.snapshot({ expiration: 0 });
+    return { snapshotId: snap.snapshotId };
+  } catch (error) {
+    if (sandbox) {
+      try {
+        await sandbox.stop();
+      } catch {
+        /* best effort */
+      }
+    }
+    return {
+      error: error instanceof Error ? error.message : "Snapshot build failed.",
+    };
   }
 }

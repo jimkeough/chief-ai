@@ -29,6 +29,7 @@ export type SettingKey =
   | "devmode.repo"
   | "devmode.sandbox_enabled"
   | "devmode.github_token"
+  | "devmode.sandbox_snapshot_id"
   | "updates.enabled";
 
 export type SettingDef = {
@@ -252,6 +253,18 @@ export const SETTING_DEFS: SettingDef[] = [
     default: "",
     singleLine: true,
     placeholder: "github_pat_… or ghp_…",
+  },
+  // A prebuilt Vercel Sandbox snapshot id (Claude Code preinstalled) so Runs
+  // skip the ~30s CLI install. Managed by the "Prepare sandbox" action; not a
+  // hand-edited field. Blank = Runs install the CLI each time.
+  {
+    key: "devmode.sandbox_snapshot_id",
+    label: "Developer — sandbox snapshot id",
+    description:
+      "Internal. The prebuilt sandbox snapshot (Claude Code preinstalled) used to speed up runs; set by \"Prepare sandbox\".",
+    default: "",
+    singleLine: true,
+    placeholder: "",
   },
   // Set once the user completes the one-tap "Enable auto-updates" step
   // (see lib/updater-workflow.ts). Gates the "Get this update" button so it
