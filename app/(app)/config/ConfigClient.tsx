@@ -76,7 +76,7 @@ const cardStyle = {
   background: "var(--surface)",
 } as const;
 const inputCls =
-  "w-full rounded-control border bg-transparent px-3 py-2.5 text-[14.5px] text-ink outline-none placeholder:text-ink-3";
+  "w-full rounded-control border bg-transparent px-3 py-2.5 text-[16px] text-ink outline-none placeholder:text-ink-2";
 
 function Section({
   label,
@@ -87,7 +87,7 @@ function Section({
 }) {
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="font-mono text-[11px] tracking-[0.12em] text-ink-3">{label}</div>
+      <div className="font-mono text-[13px] tracking-[0.12em] text-ink-2">{label}</div>
       {children}
     </div>
   );
@@ -184,15 +184,15 @@ function ModelCombobox({
           style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
         >
           {loading && (
-            <div className="px-3 py-2 text-[13px] text-ink-3">Loading models…</div>
+            <div className="px-3 py-2 text-[15px] text-ink-2">Loading models…</div>
           )}
           {!loading && models !== null && models.length === 0 && (
-            <div className="px-3 py-2 text-[12.5px] leading-snug text-ink-3">
+            <div className="px-3 py-2 text-[14.5px] leading-snug text-ink-2">
               No catalog available — type the model id by hand.
             </div>
           )}
           {!loading && matches.length === 0 && (models?.length ?? 0) > 0 && (
-            <div className="px-3 py-2 text-[13px] text-ink-3">
+            <div className="px-3 py-2 text-[15px] text-ink-2">
               No match — press Save to use “{value}” as typed.
             </div>
           )}
@@ -209,9 +209,9 @@ function ModelCombobox({
                 className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-[var(--teal-fill)]"
                 style={selected ? { background: "var(--teal-fill)" } : undefined}
               >
-                <span className="font-mono text-[12.5px] text-ink">{m.id}</span>
+                <span className="font-mono text-[14.5px] text-ink">{m.id}</span>
                 {m.name && m.name !== m.id && (
-                  <span className="text-[11.5px] text-ink-3">{m.name}</span>
+                  <span className="text-[13.5px] text-ink-2">{m.name}</span>
                 )}
               </button>
             );
@@ -246,7 +246,7 @@ function ConfigBackLink() {
   return (
     <Link
       href="/config"
-      className="-ml-1 flex items-center gap-1 self-start py-1 text-[15px] text-ink-2"
+      className="-ml-1 flex items-center gap-1 self-start py-1 text-[16.5px] text-ink-2"
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M14.5 5.5L8 12l6.5 6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -615,7 +615,7 @@ export default function ConfigClient({
       {section === "home" && status && !setupDone && (
         <button
           onClick={() => void runIntent({ id: "setup.interview" })}
-          className="flex h-12 items-center justify-center rounded-control text-[15px] font-semibold"
+          className="flex h-12 items-center justify-center rounded-control text-[16.5px] font-semibold"
           style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
         >
           Guided Setup
@@ -632,7 +632,7 @@ export default function ConfigClient({
               className="flex items-center justify-between rounded-card border px-4 py-4"
               style={cardStyle}
             >
-              <span className="text-[16.5px] text-ink">{p.label}</span>
+              <span className="text-[17.5px] text-ink">{p.label}</span>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M9.5 5.5L16 12l-6.5 6.5" stroke="var(--ink-3)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -648,14 +648,14 @@ export default function ConfigClient({
           <div className="flex items-center gap-3">
             <Dot ok={Boolean(status?.mail.connected)} />
             <div className="min-w-0 flex-1">
-              <div className="text-[14.5px] text-ink">Email</div>
-              <div className="truncate font-mono text-[11px] text-ink-3">
+              <div className="text-[16px] text-ink">Email</div>
+              <div className="truncate font-mono text-[13px] text-ink-2">
                 {status?.mail.connected
                   ? `${status.mail.provider === "imap" ? "IMAP" : "GMAIL OAUTH"} · ${status.mail.account ?? ""}`
                   : "NOT CONNECTED"}
               </div>
             </div>
-            <Link href="/inbox" className="text-[13px] font-semibold text-teal">
+            <Link href="/inbox" className="text-[15px] font-semibold text-teal">
               {status?.mail.connected ? "manage →" : "connect →"}
             </Link>
           </div>
@@ -682,7 +682,7 @@ export default function ConfigClient({
         <button
           type="button"
           onClick={() => void runIntent({ id: "setup.mcp" })}
-          className="flex h-12 items-center justify-center gap-2 rounded-control border text-[15px] font-semibold text-ink"
+          className="flex h-12 items-center justify-center gap-2 rounded-control border text-[16.5px] font-semibold text-ink"
           style={{ borderColor: "var(--teal-border)", background: "var(--surface)" }}
         >
           <span className="font-serif text-[17px] italic text-teal">C</span>
@@ -695,7 +695,7 @@ export default function ConfigClient({
       {section === "connections" && (
       <Section label="DEVELOPER">
         <div className={card} style={cardStyle}>
-          <div className="text-[12.5px] leading-snug text-ink-3">
+          <div className="text-[14.5px] leading-snug text-ink-2">
             Update this app. Chief edits its own code in an isolated sandbox and
             opens a pull request you review and merge — nothing deploys until you
             do. Turn it on below, describe the change, and tap Run. Connect{" "}
@@ -704,10 +704,10 @@ export default function ConfigClient({
             detected automatically.
           </div>
           <div className="flex flex-col gap-1.5">
-            <div className="text-[14px] font-medium text-ink">
+            <div className="text-[15.5px] font-medium text-ink">
               Update this app — sandbox
             </div>
-            <div className="text-[12.5px] leading-snug text-ink-3">
+            <div className="text-[14.5px] leading-snug text-ink-2">
               Off by default. When on, Chief spins up an ephemeral Vercel Sandbox
               to clone and build the app in an isolated VM, then opens a PR.
               Sovereign edition only; never touches production data or deploys on
@@ -724,21 +724,21 @@ export default function ConfigClient({
                     s["devmode.sandbox_enabled"] === "on" ? "off" : "on",
                 }))
               }
-              className="flex h-11 items-center justify-between rounded-control border px-4 text-[14.5px] font-medium text-ink"
+              className="flex h-11 items-center justify-between rounded-control border px-4 text-[16px] font-medium text-ink"
               style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
             >
               <span>
                 {settings["devmode.sandbox_enabled"] === "on" ? "On" : "Off"}
               </span>
-              <span className="text-[12.5px] text-ink-3">tap to toggle</span>
+              <span className="text-[14.5px] text-ink-2">tap to toggle</span>
             </button>
           </div>
           {settings["devmode.sandbox_enabled"] === "on" && (
             <div className="flex flex-col gap-1.5">
-              <div className="text-[14px] font-medium text-ink">
+              <div className="text-[15.5px] font-medium text-ink">
                 GitHub token (for the sandbox) — optional
               </div>
-              <div className="text-[12.5px] leading-snug text-ink-3">
+              <div className="text-[14.5px] leading-snug text-ink-2">
                 Leave blank to reuse the GitHub you already connected above. Only
                 paste a token here if you haven&apos;t connected GitHub, or want a
                 different one (fine-grained, this repo, Contents + Pull Requests:
@@ -771,7 +771,7 @@ export default function ConfigClient({
                   type="button"
                   onClick={() => void runSandbox("test")}
                   disabled={sbBusy !== null}
-                  className="flex h-11 flex-1 items-center justify-center rounded-control border text-[14px] font-semibold text-ink disabled:opacity-50"
+                  className="flex h-11 flex-1 items-center justify-center rounded-control border text-[15.5px] font-semibold text-ink disabled:opacity-50"
                   style={{ borderColor: "var(--teal-border)", background: "var(--surface)" }}
                 >
                   {sbBusy === "test" ? "Testing…" : "Test sandbox"}
@@ -780,21 +780,21 @@ export default function ConfigClient({
                   type="button"
                   onClick={() => void runSandbox("run")}
                   disabled={sbBusy !== null}
-                  className="flex h-11 flex-1 items-center justify-center rounded-control text-[14px] font-semibold disabled:opacity-50"
+                  className="flex h-11 flex-1 items-center justify-center rounded-control text-[15.5px] font-semibold disabled:opacity-50"
                   style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
                 >
                   {sbBusy === "run" ? "Running…" : "Run change"}
                 </button>
               </div>
               {sbBusy === "run" && (
-                <div className="text-[12px] leading-snug text-ink-3">
+                <div className="text-[14px] leading-snug text-ink-2">
                   Working in the sandbox — this can take a few minutes. You can
                   leave this screen; the PR will appear on GitHub (and here) when
                   it&apos;s done.
                 </div>
               )}
               {sbResult && (
-                <div className="text-[12.5px] leading-snug text-ink">
+                <div className="text-[14.5px] leading-snug text-ink">
                   {(() => {
                     const url = sbResult.match(/https?:\/\/\S+/)?.[0];
                     if (!url) return sbResult;
@@ -817,7 +817,7 @@ export default function ConfigClient({
               )}
               <div className="mt-1 flex items-center justify-between gap-2 border-t pt-2"
                 style={{ borderColor: "var(--hairline)" }}>
-                <div className="text-[12px] leading-snug text-ink-3">
+                <div className="text-[14px] leading-snug text-ink-2">
                   {settings["devmode.sandbox_snapshot_id"]
                     ? "Faster runs are on (Claude Code is prebuilt)."
                     : "Optional: prebuild Claude Code once so runs skip the ~30s install."}
@@ -826,7 +826,7 @@ export default function ConfigClient({
                   type="button"
                   onClick={() => void prepareSandbox()}
                   disabled={sbPrepping || sbBusy !== null}
-                  className="shrink-0 rounded-control border px-3 py-2 text-[13px] font-medium text-ink disabled:opacity-50"
+                  className="shrink-0 rounded-control border px-3 py-2 text-[15px] font-medium text-ink disabled:opacity-50"
                   style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
                 >
                   {sbPrepping
@@ -837,17 +837,17 @@ export default function ConfigClient({
                 </button>
               </div>
               {sbPrepMsg && (
-                <div className="text-[12.5px] leading-snug text-ink">
+                <div className="text-[14.5px] leading-snug text-ink">
                   {sbPrepMsg}
                 </div>
               )}
             </div>
           )}
           <div className="flex flex-col gap-1.5">
-            <div className="text-[14px] font-medium text-ink">
+            <div className="text-[15.5px] font-medium text-ink">
               Repo (owner/repo) — optional
             </div>
-            <div className="text-[12.5px] leading-snug text-ink-3">
+            <div className="text-[14.5px] leading-snug text-ink-2">
               Only for local or non-Vercel dev. On Vercel, Chief detects the repo
               automatically, so leave this blank.
             </div>
@@ -863,7 +863,7 @@ export default function ConfigClient({
             <button
               onClick={() => void saveSettings()}
               disabled={saving}
-              className="mt-1 flex h-11 items-center justify-center rounded-control text-[14.5px] font-semibold disabled:opacity-50"
+              className="mt-1 flex h-11 items-center justify-center rounded-control text-[16px] font-semibold disabled:opacity-50"
               style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
             >
               {saving ? "Saving…" : savedFlash ? "Saved" : "Save"}
@@ -876,7 +876,7 @@ export default function ConfigClient({
       {section === "chief" && (
       <Section label="SETUP CHIEF">
         <div className={card} style={cardStyle}>
-          <div className="text-[12.5px] leading-snug text-ink-3">
+          <div className="text-[14.5px] leading-snug text-ink-2">
             Chief&apos;s focused modes. <span className="text-ink">Update this
             app</span> (edit the app&apos;s own code) is a quick action inside any
             Chief chat. <span className="text-ink">Build a review plan</span> takes
@@ -888,7 +888,7 @@ export default function ConfigClient({
           <button
             type="button"
             onClick={() => reviewInputRef.current?.click()}
-            className="flex h-12 items-center justify-center gap-2 rounded-control border text-[15px] font-semibold text-ink"
+            className="flex h-12 items-center justify-center gap-2 rounded-control border text-[16.5px] font-semibold text-ink"
             style={{ borderColor: "var(--teal-border)", background: "var(--surface)" }}
           >
             <span className="font-serif text-[17px] italic text-teal">C</span>
@@ -906,7 +906,7 @@ export default function ConfigClient({
             }}
           />
           {reviewError && (
-            <div className="text-[12px] text-copper">{reviewError}</div>
+            <div className="text-[14px] text-copper">{reviewError}</div>
           )}
         </div>
       </Section>
@@ -930,8 +930,8 @@ export default function ConfigClient({
             )
             .map((d) => (
             <div key={d.key} className="flex flex-col gap-1.5">
-              <div className="text-[14px] font-medium text-ink">{d.label}</div>
-              <div className="text-[12.5px] leading-snug text-ink-3">
+              <div className="text-[15.5px] font-medium text-ink">{d.label}</div>
+              <div className="text-[14.5px] leading-snug text-ink-2">
                 {d.description}
               </div>
               {d.key === "chief.model" ? (
@@ -960,7 +960,7 @@ export default function ConfigClient({
                   onChange={(e) =>
                     setSettings((s) => ({ ...s, [d.key]: e.target.value }))
                   }
-                  className={`${inputCls} resize-y font-mono text-[12.5px]`}
+                  className={`${inputCls} resize-y font-mono text-[14.5px]`}
                   style={{ borderColor: "var(--hairline)" }}
                 />
               )}
@@ -969,7 +969,7 @@ export default function ConfigClient({
           <button
             onClick={() => void saveSettings()}
             disabled={saving}
-            className="mt-1 flex h-11 items-center justify-center rounded-control text-[14.5px] font-semibold disabled:opacity-50"
+            className="mt-1 flex h-11 items-center justify-center rounded-control text-[16px] font-semibold disabled:opacity-50"
             style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
           >
             {saving ? "Saving…" : savedFlash ? "Saved" : "Save settings"}
@@ -984,16 +984,16 @@ export default function ConfigClient({
       <Section label={`STANDING INSTRUCTIONS · ${instructions.length}`}>
         <div className={card} style={cardStyle}>
           {instructions.length === 0 && (
-            <p className="text-[13.5px] text-ink-3">
+            <p className="text-[15.5px] text-ink-2">
               Durable rules Chief applies to every conversation. None yet.
             </p>
           )}
           {instructions.map((doc) => (
             <div key={doc.id} className="flex items-center gap-3">
-              <div className="min-w-0 flex-1 text-[14.5px] text-ink">{doc.title}</div>
+              <div className="min-w-0 flex-1 text-[16px] text-ink">{doc.title}</div>
               <button
                 onClick={() => void deleteDoc(doc.id)}
-                className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-ink-3"
+                className="shrink-0 font-mono text-[13px] tracking-[0.06em] text-ink-2"
               >
                 REMOVE
               </button>
@@ -1011,7 +1011,7 @@ export default function ConfigClient({
             <button
               onClick={() => void addInstruction()}
               disabled={!newRule.trim()}
-              className="h-[42px] shrink-0 rounded-control px-3.5 text-[14px] font-semibold disabled:opacity-40"
+              className="h-[42px] shrink-0 rounded-control px-3.5 text-[15.5px] font-semibold disabled:opacity-40"
               style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
             >
               Add
@@ -1024,22 +1024,22 @@ export default function ConfigClient({
       <Section label={`MEMORY · ${status?.counts.memory ?? 0}`}>
         <div className={card} style={cardStyle}>
           {memory.length === 0 && (
-            <p className="text-[13.5px] text-ink-3">
+            <p className="text-[15.5px] text-ink-2">
               Durable facts Chief has saved (with your approval). None yet — they&apos;ll
               accumulate as you work.
             </p>
           )}
           {memory.map((doc) => (
             <div key={doc.id} className="flex items-center gap-3">
-              <div className="min-w-0 flex-1 truncate text-[14.5px] text-ink">
+              <div className="min-w-0 flex-1 truncate text-[16px] text-ink">
                 {doc.title}
               </div>
-              <div className="shrink-0 font-mono text-[10px] text-ink-3">
+              <div className="shrink-0 font-mono text-[12px] text-ink-2">
                 {doc.updated_at.slice(0, 10)}
               </div>
               <button
                 onClick={() => void deleteDoc(doc.id)}
-                className="shrink-0 font-mono text-[11px] tracking-[0.06em] text-ink-3"
+                className="shrink-0 font-mono text-[13px] tracking-[0.06em] text-ink-2"
               >
                 REMOVE
               </button>
@@ -1064,11 +1064,11 @@ export default function ConfigClient({
                 >
                   <div className="flex items-center gap-2">
                     <Dot ok={false} />
-                    <span className="text-[14px] font-medium text-ink">
+                    <span className="text-[15.5px] font-medium text-ink">
                       Credit running low (${creditBalance!.toFixed(2)})
                     </span>
                   </div>
-                  <p className="text-[12.5px] leading-relaxed text-ink-2">
+                  <p className="text-[14.5px] leading-relaxed text-ink-2">
                     When gateway credit runs out, premium models (like{" "}
                     <span className="text-ink">claude-sonnet-5</span>) get
                     restricted and Chief silently drops to a free fallback model.
@@ -1079,7 +1079,7 @@ export default function ConfigClient({
                     href="https://vercel.com/dashboard"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex h-10 items-center justify-center rounded-control px-4 text-[14px] font-medium"
+                    className="inline-flex h-10 items-center justify-center rounded-control px-4 text-[15.5px] font-medium"
                     style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
                   >
                     Buy credits / set up auto-recharge →
@@ -1087,23 +1087,23 @@ export default function ConfigClient({
                   <button
                     type="button"
                     onClick={() => void markAutoRefillEnabled()}
-                    className="w-fit text-left text-[11.5px] leading-relaxed text-ink-3 underline"
+                    className="w-fit text-left text-[13.5px] leading-relaxed text-ink-2 underline"
                   >
                     I&apos;ve turned on auto-recharge — stop warning me
                   </button>
                 </div>
               )}
               <div className="flex items-center justify-between">
-                <span className="text-[14px] text-ink-2">Credit balance</span>
-                <span className="font-mono text-[14px] text-ink">
+                <span className="text-[15.5px] text-ink-2">Credit balance</span>
+                <span className="font-mono text-[15.5px] text-ink">
                   {usage.balance != null
                     ? `$${Number(usage.balance).toFixed(2)}`
                     : "—"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[14px] text-ink-2">Spent to date</span>
-                <span className="font-mono text-[14px] text-ink">
+                <span className="text-[15.5px] text-ink-2">Spent to date</span>
+                <span className="font-mono text-[15.5px] text-ink">
                   {usage.totalUsed != null
                     ? `$${Number(usage.totalUsed).toFixed(2)}`
                     : "—"}
@@ -1113,13 +1113,13 @@ export default function ConfigClient({
                 href="https://vercel.com/dashboard"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-fit text-[13px] font-semibold text-teal"
+                className="w-fit text-[15px] font-semibold text-teal"
               >
                 Buy more credits →
               </a>
             </>
           ) : (
-            <p className="text-[13px] leading-relaxed text-ink-2">
+            <p className="text-[15px] leading-relaxed text-ink-2">
               {usage?.reason === "not-gateway"
                 ? "Direct Anthropic mode — usage and billing live in your Anthropic console."
                 : usage?.reason === "no-credential"
@@ -1141,7 +1141,7 @@ export default function ConfigClient({
               return (
                 <>
                   {missing.length > 0 && (
-                    <p className="text-[12.5px] leading-relaxed text-ink-2">
+                    <p className="text-[14.5px] leading-relaxed text-ink-2">
                       {missing.some((m) => m.role === "primary")
                         ? "Chief's configured model isn't served by the gateway — pick a different one in the model picker above."
                         : "A free-tier fallback model isn't served by the gateway. Chief still works, but that safety-net entry is dead."}
@@ -1150,10 +1150,10 @@ export default function ConfigClient({
                   {models.map((m) => (
                     <div key={m.id} className="flex items-center gap-2">
                       <Dot ok={m.ok} />
-                      <span className="font-mono text-[13px] text-ink">
+                      <span className="font-mono text-[15px] text-ink">
                         {m.id}
                       </span>
-                      <span className="text-[12px] text-ink-3">
+                      <span className="text-[14px] text-ink-2">
                         {m.role}
                         {m.ok ? "" : " · not on gateway"}
                       </span>
@@ -1169,7 +1169,7 @@ export default function ConfigClient({
       {/* Software updates */}
       <Section label="SOFTWARE UPDATES">
         <div className={card} style={cardStyle}>
-          <p className="text-[13.5px] leading-relaxed text-ink-2">
+          <p className="text-[15.5px] leading-relaxed text-ink-2">
             Chief improves over time. Updates arrive as pull requests in{" "}
             <span className="text-ink">your own</span> repo — you review and
             merge; merging deploys the new version. Nothing changes without your
@@ -1197,11 +1197,11 @@ export default function ConfigClient({
             >
               <div className="flex items-center gap-2">
                 <Dot ok={false} />
-                <span className="text-[14px] font-medium text-ink">
+                <span className="text-[15.5px] font-medium text-ink">
                   Make your repo public to receive updates
                 </span>
               </div>
-              <p className="text-[12.5px] leading-relaxed text-ink-2">
+              <p className="text-[14.5px] leading-relaxed text-ink-2">
                 On the free Vercel plan a <span className="text-ink">private</span>{" "}
                 repo won&apos;t deploy an update after you merge it. Your repo is
                 just a copy of the public Chief code and holds{" "}
@@ -1213,12 +1213,12 @@ export default function ConfigClient({
                 href={status.updates.settingsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex h-10 items-center justify-center rounded-control px-4 text-[14px] font-medium"
+                className="inline-flex h-10 items-center justify-center rounded-control px-4 text-[15.5px] font-medium"
                 style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
               >
                 Open repo settings →
               </a>
-              <span className="text-[11.5px] leading-relaxed text-ink-3">
+              <span className="text-[13.5px] leading-relaxed text-ink-2">
                 In Settings, scroll to <span className="text-ink-2">Danger
                 Zone</span> → <span className="text-ink-2">Change repository
                 visibility</span> → <span className="text-ink-2">Public</span>.
@@ -1234,11 +1234,11 @@ export default function ConfigClient({
               >
                 <div className="flex items-center gap-2">
                   <Dot ok={false} />
-                  <span className="text-[14px] font-medium text-ink">
+                  <span className="text-[15.5px] font-medium text-ink">
                     Update available — v{upd.latest}
                   </span>
                 </div>
-                <span className="text-[12.5px] text-ink-2">
+                <span className="text-[14.5px] text-ink-2">
                   You&apos;re on v{upd.current}.{" "}
                   <a
                     href="/changelog"
@@ -1255,12 +1255,12 @@ export default function ConfigClient({
                       href={status.updates.createPrUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex h-10 items-center justify-center rounded-control px-4 text-[14px] font-medium"
+                      className="inline-flex h-10 items-center justify-center rounded-control px-4 text-[15.5px] font-medium"
                       style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
                     >
                       Review &amp; merge →
                     </a>
-                    <span className="text-[11.5px] leading-relaxed text-ink-3">
+                    <span className="text-[13.5px] leading-relaxed text-ink-2">
                       Opens the update in your repo — review the diff, tap{" "}
                       <span className="text-ink-2">Create pull request</span>{" "}
                       (or open the one already waiting), then merge; merging
@@ -1281,7 +1281,7 @@ export default function ConfigClient({
                     </span>
                   </>
                 ) : (
-                  <span className="text-[11.5px] leading-relaxed text-ink-3">
+                  <span className="text-[13.5px] leading-relaxed text-ink-2">
                     Turn on auto-updates below first — a one-time step so GitHub
                     can open this update as a pull request.
                   </span>
@@ -1290,7 +1290,7 @@ export default function ConfigClient({
             ) : (
               <div className="flex items-center gap-2">
                 <Dot ok={true} />
-                <span className="text-[13px] text-ink-2">
+                <span className="text-[15px] text-ink-2">
                   Up to date{upd.current ? ` (v${upd.current})` : ""}.
                 </span>
               </div>
@@ -1301,9 +1301,9 @@ export default function ConfigClient({
               <>
                 <div className="flex items-center gap-2">
                   <Dot ok={true} />
-                  <span className="text-[13px] text-ink-2">
+                  <span className="text-[15px] text-ink-2">
                     Auto-updates enabled for{" "}
-                    <span className="font-mono text-[12px] text-ink">
+                    <span className="font-mono text-[14px] text-ink">
                       {status.updates.repoOwner}/{status.updates.repoSlug}
                     </span>
                     .{" "}
@@ -1317,7 +1317,7 @@ export default function ConfigClient({
                     </a>
                   </span>
                 </div>
-                <p className="text-[11.5px] leading-relaxed text-ink-3">
+                <p className="text-[13.5px] leading-relaxed text-ink-2">
                   The weekly check pauses if your repo sees no activity for 60
                   days (a GitHub rule). Chief still spots new versions on its
                   own; if a check hasn&apos;t run,{" "}
@@ -1338,10 +1338,10 @@ export default function ConfigClient({
               </>
             ) : (
               <>
-                <p className="text-[13.5px] leading-relaxed text-ink-2">
+                <p className="text-[15.5px] leading-relaxed text-ink-2">
                   Turn on auto-updates once: this commits the updater workflow
                   into{" "}
-                  <span className="font-mono text-[12px] text-ink">
+                  <span className="font-mono text-[14px] text-ink">
                     {status.updates.repoOwner}/{status.updates.repoSlug}
                   </span>{" "}
                   as you. (The one-click deploy can&apos;t include it — GitHub
@@ -1353,12 +1353,12 @@ export default function ConfigClient({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={markUpdatesEnabled}
-                  className="inline-flex h-11 items-center justify-center rounded-control px-4 text-[15px] font-medium"
+                  className="inline-flex h-11 items-center justify-center rounded-control px-4 text-[16.5px] font-medium"
                   style={{ background: "var(--teal-fill)", color: "var(--teal-on-fill)" }}
                 >
                   Enable auto-updates →
                 </a>
-                <p className="text-[12px] leading-relaxed text-ink-3">
+                <p className="text-[14px] leading-relaxed text-ink-2">
                   On the GitHub page, scroll down and tap{" "}
                   <span className="text-ink-2">Commit changes</span>. Then, one
                   time, under Settings → Actions → General → Workflow
@@ -1372,7 +1372,7 @@ export default function ConfigClient({
               </>
             )
           ) : (
-            <p className="text-[12px] leading-relaxed text-ink-3">
+            <p className="text-[14px] leading-relaxed text-ink-2">
               Auto-update setup is available on a Vercel + GitHub deployment.
               To update manually, merge upstream{" "}
               <span className="font-mono">{UPSTREAM_REPO}</span> into
