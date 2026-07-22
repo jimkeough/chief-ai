@@ -28,9 +28,11 @@ function toDateInput(iso: string | null): string {
 export default function TaskDetail({
   task,
   projectName,
+  projects,
 }: {
   task: Task;
   projectName: string | null;
+  projects: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -173,17 +175,45 @@ export default function TaskDetail({
         </div>
       )}
 
-      {task.project_id && projectName && (
-        <Link
-          href={`/projects/${task.project_id}`}
-          className="flex items-center gap-1.5 text-[13px] text-teal"
-        >
-          <span className="font-mono text-[10px] tracking-[0.1em] text-ink-3">
-            PROJECT
-          </span>
-          {projectName}
-        </Link>
-      )}
+      {/* Project — reassign or unassign; link jumps to the project when set */}
+      <div className="flex flex-col gap-2">
+        <div className="font-mono text-[10px] tracking-[0.1em] text-ink-3">
+          PROJECT
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={task.project_id ?? ""}
+            disabled={busy}
+            onChange={(e) => void patch({ projectId: e.target.value || null })}
+            aria-label="Project"
+            className="h-11 min-w-0 flex-1 rounded-control border border-hairline bg-surface px-3 text-[15px] text-ink disabled:opacity-50"
+          >
+            <option value="">No project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          {task.project_id && projectName && (
+            <Link
+              href={`/projects/${task.project_id}`}
+              aria-label="Open project"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control border border-hairline"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path
+                  d="M5 1.5h7.5V9M12.5 1.5L2 12"
+                  stroke="var(--teal)"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </Link>
+          )}
+        </div>
+      </div>
 
       {/* Status */}
       <div className="flex flex-col gap-2">
