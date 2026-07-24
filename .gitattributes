@@ -1,1 +1,9 @@
+# Normalize line endings to LF in the repo and on checkout. Without this,
+# Windows checkouts (git core.autocrlf=true) materialize CRLF, which makes
+# `npm run release:check` report a false "updater workflow out of sync":
+# lib/updater-workflow.ts embeds the workflow as an LF string, but the on-disk
+# .github/workflows/upstream-updates.yml would be CRLF, so the byte comparison
+# fails locally even though the stored blobs (what CI sees) are identical LF.
+* text=auto eol=lf
+
 .agents/skills/** whitespace=-trailing-space
